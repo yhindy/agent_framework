@@ -1,0 +1,13 @@
+# Agent Framework
+.agent-info
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
