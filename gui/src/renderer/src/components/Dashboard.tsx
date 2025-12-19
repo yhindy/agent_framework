@@ -106,7 +106,24 @@ function Dashboard({ project }: DashboardProps) {
     }
   }
 
+  const getUnassignedAgents = () => {
+    const assignedAgentIds = new Set(assignments.map((a) => a.agentId))
+    return availableAgents
+      .filter((agentId) => !assignedAgentIds.has(agentId))
+      .map((agentId) => ({
+        id: `unassigned-${agentId}`,
+        agentId,
+        branch: '',
+        feature: 'Unassigned',
+        status: 'unassigned',
+        specFile: '',
+        tool: '',
+        mode: 'idle'
+      }))
+  }
+
   const groupedAssignments = {
+    unassigned: getUnassignedAgents(),
     pending: assignments.filter((a) => a.status === 'pending'),
     in_progress: assignments.filter((a) => a.status === 'in_progress'),
     review: assignments.filter((a) => a.status === 'review'),
