@@ -347,9 +347,9 @@ function Dashboard({ project }: DashboardProps) {
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                     >
-                      <option value="haiku">Haiku (fastest)</option>
-                      <option value="sonnet">Sonnet (balanced)</option>
-                      <option value="opus">Opus (most capable)</option>
+                      <option value="haiku">Haiku</option>
+                      <option value="sonnet">Sonnet</option>
+                      <option value="opus">Opus</option>
                     </select>
                   </div>
                 )}
@@ -390,8 +390,8 @@ function Dashboard({ project }: DashboardProps) {
                       value={formData.mode}
                       onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'planning' | 'dev' })}
                     >
-                      <option value="planning">Planning (review plan first)</option>
-                      <option value="dev">Quick Dev (skip planning)</option>
+                      <option value="planning">Planning</option>
+                      <option value="dev">Dev</option>
                     </select>
                   </div>
                 )}
