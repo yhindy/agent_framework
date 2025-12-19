@@ -37,7 +37,8 @@ export class TerminalService {
     tool: string,
     mode: string,
     prompt?: string,
-    model?: string
+    model?: string,
+    yolo?: boolean
   ): Promise<void> {
     // Stop existing terminal if any
     this.stopAgent(agentId)
@@ -53,7 +54,7 @@ export class TerminalService {
     switch (tool) {
       case 'claude':
         command = 'claude'
-        args = this.getClaudeArgs(mode, agentId, prompt, model)
+        args = this.getClaudeArgs(mode, agentId, prompt, model, yolo)
         break
       case 'cursor-cli':
         command = 'cursor'
@@ -102,7 +103,7 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string): string[] {
+  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean): string[] {
     const args: string[] = []
 
     // Add model if specified
@@ -126,6 +127,11 @@ export class TerminalService {
       if (prompt) {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
+    }
+
+    // Add dangerously-skip-permissions flag if yolo mode enabled
+    if (yolo) {
+      args.push('--dangerously-skip-permissions')
     }
 
     return args

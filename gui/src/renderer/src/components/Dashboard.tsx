@@ -35,7 +35,8 @@ function Dashboard({ project }: DashboardProps) {
     tool: 'claude',
     model: 'opus',
     mode: 'planning' as 'planning' | 'dev',
-    status: 'pending'
+    status: 'pending',
+    yolo: false
   })
 
   useEffect(() => {
@@ -75,7 +76,8 @@ function Dashboard({ project }: DashboardProps) {
         model: formData.model,
         prompt: formData.prompt,
         mode: formData.mode,
-        status: 'in_progress'
+        status: 'in_progress',
+        yolo: formData.yolo
       })
 
       setShowCreateForm(false)
@@ -87,7 +89,8 @@ function Dashboard({ project }: DashboardProps) {
         tool: 'claude',
         model: 'opus',
         mode: 'planning',
-        status: 'pending'
+        status: 'pending',
+        yolo: false
       })
 
       // Wait a moment for worktree creation then refresh
@@ -385,6 +388,22 @@ function Dashboard({ project }: DashboardProps) {
                   </div>
                 )}
               </div>
+
+              {formData.tool === 'claude' && (
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.yolo}
+                      onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
+                    />
+                    <span className="checkbox-text">Yolo mode 🔥</span>
+                  </label>
+                  <div className="form-hint">
+                    Automatically approve edits and run commands without confirmation. Don't say I didn't warn you!
+                  </div>
+                </div>
+              )}
 
               <div className="form-actions">
                 <button type="button" onClick={() => setShowCreateForm(false)} disabled={isCreating}>
