@@ -167,11 +167,22 @@ function Dashboard({ project }: DashboardProps) {
     merging: assignments.filter((a) => a.status === 'merging')
   }
 
+  const handleNewAssignment = () => {
+    // Auto-populate with next available agent
+    const assignedAgentIds = new Set(assignments.map((a) => a.agentId))
+    const nextAgent = availableAgents.find((id) => !assignedAgentIds.has(id))
+    
+    if (nextAgent) {
+      setFormData({ ...formData, agentId: nextAgent })
+    }
+    setShowCreateForm(true)
+  }
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>Assignments Dashboard</h1>
-        <button onClick={() => setShowCreateForm(true)}>+ New Assignment</button>
+        <button onClick={handleNewAssignment}>+ New Assignment</button>
       </div>
 
       <div className="dashboard-content">
