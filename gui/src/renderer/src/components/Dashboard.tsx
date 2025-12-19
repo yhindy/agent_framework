@@ -161,7 +161,6 @@ function Dashboard({ project }: DashboardProps) {
 
   const groupedAssignments = {
     unassigned: getUnassignedAgents(),
-    pending: assignments.filter((a) => a.status === 'pending'),
     in_progress: assignments.filter((a) => a.status === 'in_progress'),
     review: assignments.filter((a) => a.status === 'review'),
     completed: assignments.filter((a) => a.status === 'completed'),
