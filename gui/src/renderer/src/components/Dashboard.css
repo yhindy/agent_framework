@@ -72,13 +72,17 @@
   border: 1px solid #3e3e42;
   border-radius: 6px;
   padding: 12px;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.assignment-card:hover {
+.assignment-card.clickable {
+  cursor: pointer;
+}
+
+.assignment-card.clickable:hover {
   border-color: #0e639c;
   box-shadow: 0 2px 8px rgba(14, 99, 156, 0.2);
+  transform: translateY(-1px);
 }
 
 .card-header {
@@ -309,4 +313,5 @@
 .form-actions button.primary:hover {
   background: #1177bb;
 }
+
 

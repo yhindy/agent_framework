@@ -294,11 +294,7 @@ function AgentView({}: AgentViewProps) {
         </div>
 
         <div className="agent-actions">
-          {currentTool === 'cursor' ? (
-            <button onClick={handleOpenCursor} className="primary">
-              Open in Cursor
-            </button>
-          ) : (
+          {currentTool !== 'cursor' && (
             <>
               {!isRunning && (
                 <button onClick={handleStartAgent} className="primary">
@@ -312,7 +308,7 @@ function AgentView({}: AgentViewProps) {
               )}
             </>
           )}
-          <button onClick={handleOpenCursor}>Open Folder</button>
+          <button onClick={handleOpenCursor}>Open in Cursor</button>
 
           {assignment && assignment.status !== 'completed' && assignment.status !== 'merging' && (
             <button onClick={handleMarkComplete} className="success">
