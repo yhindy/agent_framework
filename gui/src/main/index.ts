@@ -132,7 +132,7 @@ function setupIPC(): void {
     }, 1000)
     
     // Auto-start agent in planning mode if prompt is provided
-    if (assignment.prompt && (assignment.mode === 'planning' || assignment.mode === 'dev')) {
+    if (assignment.prompt && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
       setTimeout(async () => {
         try {
           await services!.terminal.startAgent(
@@ -140,7 +140,8 @@ function setupIPC(): void {
             assignment.agentId, 
             assignment.tool, 
             assignment.mode,
-            assignment.prompt
+            assignment.prompt,
+            assignment.model
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
@@ -178,7 +179,8 @@ function setupIPC(): void {
           mergeAssignment.agentId,
           mergeAssignment.tool,
           mergeAssignment.mode,
-          mergeAssignment.prompt
+          mergeAssignment.prompt,
+          mergeAssignment.model
         )
         mainWindow?.webContents.send('agents:updated')
       } catch (error) {

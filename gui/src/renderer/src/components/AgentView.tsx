@@ -279,14 +279,16 @@ function AgentView({}: AgentViewProps) {
             </div>
           )}
 
-          <div className="control-group">
-            <label>Mode:</label>
-            <select value={currentMode} onChange={(e) => handleModeChange(e.target.value)} disabled={isRunning}>
-              <option value="idle">Idle</option>
-              <option value="planning">Planning</option>
-              <option value="dev">Development</option>
-            </select>
-          </div>
+          {currentTool !== 'cursor-cli' && (
+            <div className="control-group">
+              <label>Mode:</label>
+              <select value={currentMode} onChange={(e) => handleModeChange(e.target.value)} disabled={isRunning}>
+                <option value="idle">Idle</option>
+                <option value="planning">Planning</option>
+                <option value="dev">Development</option>
+              </select>
+            </div>
+          )}
 
           {assignment && <div className="branch-info">Branch: {assignment.branch}</div>}
         </div>

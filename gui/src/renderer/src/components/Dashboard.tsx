@@ -362,16 +362,18 @@ function Dashboard({ project }: DashboardProps) {
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label>Mode</label>
-                  <select
-                    value={formData.mode}
-                    onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'planning' | 'dev' })}
-                  >
-                    <option value="planning">Planning (review plan first)</option>
-                    <option value="dev">Quick Dev (skip planning)</option>
-                  </select>
-                </div>
+                {formData.tool !== 'cursor-cli' && (
+                  <div className="form-group">
+                    <label>Mode</label>
+                    <select
+                      value={formData.mode}
+                      onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'planning' | 'dev' })}
+                    >
+                      <option value="planning">Planning (review plan first)</option>
+                      <option value="dev">Quick Dev (skip planning)</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="form-actions">
