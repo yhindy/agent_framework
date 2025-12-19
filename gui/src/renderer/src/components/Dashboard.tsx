@@ -25,6 +25,7 @@ function Dashboard({ project }: DashboardProps) {
   const [mergingAssignments, setMergingAssignments] = useState<Set<string>>(new Set())
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [selectedAssignmentForMerge, setSelectedAssignmentForMerge] = useState<Assignment | null>(null)
+  const [mergeTool, setMergeTool] = useState<'claude' | 'cursor' | 'cursor-cli'>('claude')
   const [formData, setFormData] = useState({
     agentId: '',
     shortName: '',
@@ -106,7 +107,7 @@ function Dashboard({ project }: DashboardProps) {
       setMergingAssignments(prev => new Set(prev).add(selectedAssignmentForMerge.id))
       setShowMergeConfirm(false)
 
-      await window.electronAPI.initiateMerge(selectedAssignmentForMerge.id)
+      await window.electronAPI.initiateMerge(selectedAssignmentForMerge.id, mergeTool)
     } catch (error: any) {
       alert(`Merge failed: ${error.message}`)
       setMergingAssignments(prev => {
@@ -323,6 +324,17 @@ function Dashboard({ project }: DashboardProps) {
               <div><strong>Agent:</strong> {selectedAssignmentForMerge.agentId}</div>
               <div><strong>Branch:</strong> {selectedAssignmentForMerge.branch}</div>
               <div><strong>Feature:</strong> {selectedAssignmentForMerge.feature}</div>
+            </div>
+            <div className="form-group">
+              <label>Tool for Merge Agent:</label>
+              <select
+                value={mergeTool}
+                onChange={(e) => setMergeTool(e.target.value as 'claude' | 'cursor' | 'cursor-cli')}
+              >
+                <option value="claude">Claude CLI</option>
+                <option value="cursor">Cursor IDE</option>
+                <option value="cursor-cli">Cursor CLI</option>
+              </select>
             </div>
             <p className="warning-text">
               The merge agent will review changes, handle conflicts, run tests,

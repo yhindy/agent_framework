@@ -285,7 +285,7 @@ export class AgentService {
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
   }
 
-  async initiateMerge(projectPath: string, assignmentId: string): Promise<void> {
+  async initiateMerge(projectPath: string, assignmentId: string, tool?: string): Promise<Assignment> {
     const data = this.getAssignments(projectPath)
     const assignment = data.assignments.find(a => a.id === assignmentId)
 
@@ -312,7 +312,7 @@ export class AgentService {
       feature: `MERGE: ${assignment.feature}`,
       status: 'in_progress',
       specFile: `docs/agents/assignments/${mergeAgentId}-merge-spec.md`,
-      tool: 'claude',
+      tool: tool || 'claude',
       mode: 'dev', // Merge agents run in dev mode
       prompt: this.buildMergePrompt(assignment),
       originalAssignmentId: assignmentId
@@ -348,6 +348,8 @@ export class AgentService {
       console.error('Failed to setup merge agent worktree:', error)
       throw new Error('Failed to create merge agent workspace')
     }
+
+    return mergeAssignment
   }
 
   private buildMergePrompt(originalAssignment: Assignment): string {
