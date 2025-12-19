@@ -1,7 +1,7 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 
 const execAsync = promisify(exec)
 
@@ -276,12 +276,193 @@ export class AgentService {
 
     // Remove assignment for this agent
     data.assignments = data.assignments.filter(a => a.agentId !== agentId)
-    
+
     // Add agent back to available pool if not already there
     if (!data.availableAgentIds.includes(agentId)) {
       data.availableAgentIds.push(agentId)
     }
-    
+
+    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+  }
+
+  async initiateMerge(projectPath: string, assignmentId: string): Promise<void> {
+    const data = this.getAssignments(projectPath)
+    const assignment = data.assignments.find(a => a.id === assignmentId)
+
+    if (!assignment) {
+      throw new Error('Assignment not found')
+    }
+
+    if (assignment.status !== 'completed') {
+      throw new Error('Only completed assignments can be merged')
+    }
+
+    // Find an available agent for the merge
+    if (data.availableAgentIds.length === 0) {
+      throw new Error('No available agents for merge. Please free up an agent first.')
+    }
+
+    const mergeAgentId = data.availableAgentIds[0]
+
+    // Create merge assignment
+    const mergeAssignment: Assignment = {
+      id: `${mergeAgentId}-merge-${Date.now()}`,
+      agentId: mergeAgentId,
+      branch: assignment.branch, // Use the same branch as the original assignment
+      feature: `MERGE: ${assignment.feature}`,
+      status: 'in_progress',
+      specFile: `docs/agents/assignments/${mergeAgentId}-merge-spec.md`,
+      tool: 'claude',
+      mode: 'dev', // Merge agents run in dev mode
+      prompt: this.buildMergePrompt(assignment),
+      originalAssignmentId: assignmentId
+    }
+
+    // Add merge assignment
+    data.assignments.push(mergeAssignment)
+
+    // Update original assignment status to 'merging'
+    const originalIndex = data.assignments.findIndex(a => a.id === assignmentId)
+    data.assignments[originalIndex].status = 'merging'
+
+    // Remove merge agent from available pool
+    data.availableAgentIds = data.availableAgentIds.filter(id => id !== mergeAgentId)
+
+    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+
+    // Create merge spec file
+    await this.createMergeSpec(projectPath, mergeAssignment, assignment)
+
+    // Setup worktree for merge agent using the ORIGINAL assignment's branch
+    // This is critical - we want to merge FROM that branch
+    const setupScript = join(projectPath, 'scripts', 'agents', 'setup.sh')
+    try {
+      const { stdout, stderr } = await execAsync(
+        `"${setupScript}" ${mergeAgentId} ${assignment.branch}`,
+        { cwd: projectPath }
+      )
+      console.log('Merge agent worktree setup:', stdout)
+      if (stderr) console.error('Setup warnings:', stderr)
+    } catch (error: any) {
+      console.error('Failed to setup merge agent worktree:', error)
+      throw new Error('Failed to create merge agent workspace')
+    }
+  }
+
+  private buildMergePrompt(originalAssignment: Assignment): string {
+    return `You are a merge agent. Your task is to merge the completed feature branch into master.
+
+BRANCH TO MERGE: ${originalAssignment.branch}
+ORIGINAL FEATURE: ${originalAssignment.feature}
+
+TASKS:
+1. Review all changes made in this branch vs master
+2. Run all tests to ensure they pass
+3. Check for merge conflicts with master
+   - If conflicts exist, analyze them and resolve intelligently
+   - Document any manual conflict resolutions needed
+4. Run any build/lint commands
+5. Create a clean merge commit to master
+6. Push to master
+
+When complete, output: ===SIGNAL:DEV_COMPLETED===
+
+If you encounter blockers (test failures, unresolvable conflicts), output: ===SIGNAL:BLOCKER===
+`
+  }
+
+  private async createMergeSpec(
+    projectPath: string,
+    mergeAssignment: Assignment,
+    originalAssignment: Assignment
+  ): Promise<void> {
+    const specDir = join(projectPath, 'docs', 'agents', 'assignments')
+    if (!existsSync(specDir)) {
+      mkdirSync(specDir, { recursive: true })
+    }
+
+    const specPath = join(projectPath, mergeAssignment.specFile)
+    const specContent = `# Merge Specification
+
+## Original Assignment
+- **Agent**: ${originalAssignment.agentId}
+- **Branch**: ${originalAssignment.branch}
+- **Feature**: ${originalAssignment.feature}
+
+## Merge Task
+This is an automated merge agent assignment. Merge the feature branch into master.
+
+## Steps
+1. Review changes: \`git diff master...${originalAssignment.branch}\`
+2. Check for conflicts: \`git merge-base master ${originalAssignment.branch}\`
+3. Run tests
+4. Merge to master: \`git merge --no-ff ${originalAssignment.branch}\`
+5. Push to master
+6. Signal completion with ===SIGNAL:DEV_COMPLETED===
+
+## Success Criteria
+- All tests pass
+- No merge conflicts (or conflicts resolved intelligently)
+- Clean merge commit created
+- Changes pushed to master
+`
+
+    writeFileSync(specPath, specContent, 'utf-8')
+  }
+
+  async completeMerge(projectPath: string, mergeAssignmentId: string, success: boolean): Promise<void> {
+    const data = this.getAssignments(projectPath)
+    const mergeAssignment = data.assignments.find(a => a.id === mergeAssignmentId)
+
+    if (!mergeAssignment) {
+      throw new Error('Merge assignment not found')
+    }
+
+    // Find the original assignment (the one being merged)
+    const originalAssignment = data.assignments.find(a =>
+      a.status === 'merging' &&
+      a.branch === mergeAssignment.branch &&
+      a.id !== mergeAssignmentId
+    )
+
+    if (success) {
+      // Archive the original assignment
+      if (originalAssignment) {
+        const originalIndex = data.assignments.findIndex(a => a.id === originalAssignment.id)
+        data.assignments[originalIndex].status = 'archived'
+
+        // Free up the original agent
+        if (!data.availableAgentIds.includes(originalAssignment.agentId)) {
+          data.availableAgentIds.push(originalAssignment.agentId)
+        }
+      }
+
+      // Archive the merge assignment
+      const mergeIndex = data.assignments.findIndex(a => a.id === mergeAssignmentId)
+      data.assignments[mergeIndex].status = 'archived'
+
+      // Free up the merge agent
+      if (!data.availableAgentIds.includes(mergeAssignment.agentId)) {
+        data.availableAgentIds.push(mergeAssignment.agentId)
+      }
+
+      // Teardown both worktrees
+      await this.teardownAgent(projectPath, originalAssignment.agentId, false)
+      await this.teardownAgent(projectPath, mergeAssignment.agentId, false)
+    } else {
+      // Merge failed - revert original assignment to review state
+      if (originalAssignment) {
+        const originalIndex = data.assignments.findIndex(a => a.id === originalAssignment.id)
+        data.assignments[originalIndex].status = 'review'
+      }
+
+      // Mark merge assignment as blocked
+      const mergeIndex = data.assignments.findIndex(a => a.id === mergeAssignmentId)
+      data.assignments[mergeIndex].status = 'blocked'
+    }
+
+    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
   }
 }

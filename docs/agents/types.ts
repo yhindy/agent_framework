@@ -5,7 +5,7 @@
 
 export type AgentTool = 'claude' | 'cursor' | 'cursor-cli';
 export type AgentMode = 'planning' | 'dev' | 'idle';
-export type AssignmentStatus = 'pending' | 'in_progress' | 'review' | 'completed';
+export type AssignmentStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'merging' | 'archived' | 'blocked';
 
 export interface Assignment {
   id: string;
@@ -18,6 +18,7 @@ export interface Assignment {
   model?: string;
   mode: AgentMode;
   prompt?: string;
+  originalAssignmentId?: string;
 }
 
 export interface AgentSession {

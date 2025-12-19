@@ -158,6 +158,16 @@ function setupIPC(): void {
     return services!.agent.updateAssignment(currentProject.path, assignmentId, updates)
   })
 
+  ipcMain.handle('assignments:merge', async (_event, assignmentId: string) => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) throw new Error('No project selected')
+
+    await services!.agent.initiateMerge(currentProject.path, assignmentId)
+
+    mainWindow?.webContents.send('assignments:updated')
+    mainWindow?.webContents.send('agents:updated')
+  })
+
   // Cleanup handlers
   ipcMain.handle('agents:teardown', async (_event, agentId: string, force: boolean) => {
     const currentProject = services!.project.getCurrentProject()
