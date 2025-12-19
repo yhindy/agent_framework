@@ -84,10 +84,10 @@ function setupIPC(): void {
     return services!.agent.listAgents(currentProject.path)
   })
 
-  ipcMain.handle('agents:start', async (_event, agentId: string, tool: string, mode: string, prompt?: string) => {
+  ipcMain.handle('agents:start', async (_event, agentId: string, tool: string, mode: string, prompt?: string, model?: string) => {
     const currentProject = services!.project.getCurrentProject()
     if (!currentProject) throw new Error('No project selected')
-    return services!.terminal.startAgent(currentProject.path, agentId, tool, mode, prompt)
+    return services!.terminal.startAgent(currentProject.path, agentId, tool, mode, prompt, model)
   })
 
   ipcMain.handle('agents:stop', async (_event, agentId: string) => {
