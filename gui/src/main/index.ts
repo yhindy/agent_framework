@@ -137,12 +137,13 @@ function setupIPC(): void {
       setTimeout(async () => {
         try {
           await services!.terminal.startAgent(
-            currentProject.path, 
-            assignment.agentId, 
-            assignment.tool, 
+            currentProject.path,
+            assignment.agentId,
+            assignment.tool,
             assignment.mode,
             assignment.prompt,
-            assignment.model
+            assignment.model,
+            assignment.yolo
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
