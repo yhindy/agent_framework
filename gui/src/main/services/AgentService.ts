@@ -365,15 +365,41 @@ export class AgentService {
 BRANCH TO MERGE: ${originalAssignment.branch}
 ORIGINAL FEATURE: ${originalAssignment.feature}
 
+CRITICAL: You must rebase the feature branch on master BEFORE merging to avoid losing code during merge conflicts.
+
 TASKS:
-1. Review all changes made in this branch vs master
-2. Run all tests to ensure they pass
-3. Check for merge conflicts with master
-   - If conflicts exist, analyze them and resolve intelligently
-   - Document any manual conflict resolutions needed
-4. Run any build/lint commands
-5. Create a clean merge commit to master
-6. Push to master
+1. First, fetch and update master:
+   \`\`\`
+   git fetch origin
+   git checkout master
+   git pull origin master
+   \`\`\`
+
+2. Rebase the feature branch on master (IMPORTANT - prevents losing code):
+   \`\`\`
+   git checkout ${originalAssignment.branch}
+   git rebase master
+   \`\`\`
+   - If rebase conflicts occur, resolve them carefully
+   - Make sure to keep ALL functionality from both branches
+   - After resolving each conflict: \`git add . && git rebase --continue\`
+
+3. Review all changes made in this branch vs master:
+   \`\`\`
+   git diff master...HEAD
+   \`\`\`
+
+4. Run all tests to ensure they pass
+
+5. Run any build/lint commands
+
+6. Merge to master with a clean merge commit:
+   \`\`\`
+   git checkout master
+   git merge --no-ff ${originalAssignment.branch} -m "Merge ${originalAssignment.branch}: ${originalAssignment.feature}"
+   \`\`\`
+
+7. Push to master (if appropriate)
 
 When complete, output: ===SIGNAL:DEV_COMPLETED===
 
@@ -402,17 +428,42 @@ If you encounter blockers (test failures, unresolvable conflicts), output: ===SI
 ## Merge Task
 This is an automated merge agent assignment. Merge the feature branch into master.
 
+**CRITICAL**: Rebase the feature branch on master BEFORE merging to avoid losing code during merge conflicts.
+
 ## Steps
-1. Review changes: \`git diff master...${originalAssignment.branch}\`
-2. Check for conflicts: \`git merge-base master ${originalAssignment.branch}\`
-3. Run tests
-4. Merge to master: \`git merge --no-ff ${originalAssignment.branch}\`
-5. Push to master
-6. Signal completion with ===SIGNAL:DEV_COMPLETED===
+1. Fetch and update master:
+   \`\`\`
+   git fetch origin
+   git checkout master
+   git pull origin master
+   \`\`\`
+
+2. Rebase the feature branch on master (IMPORTANT):
+   \`\`\`
+   git checkout ${originalAssignment.branch}
+   git rebase master
+   \`\`\`
+   - Resolve any rebase conflicts carefully, keeping ALL functionality from both branches
+   - After resolving: \`git add . && git rebase --continue\`
+
+3. Review changes: \`git diff master...HEAD\`
+
+4. Run tests
+
+5. Merge to master:
+   \`\`\`
+   git checkout master
+   git merge --no-ff ${originalAssignment.branch} -m "Merge ${originalAssignment.branch}: ${originalAssignment.feature}"
+   \`\`\`
+
+6. Push to master
+
+7. Signal completion with ===SIGNAL:DEV_COMPLETED===
 
 ## Success Criteria
+- Feature branch rebased on latest master
 - All tests pass
-- No merge conflicts (or conflicts resolved intelligently)
+- No merge conflicts (or conflicts resolved intelligently without losing code)
 - Clean merge commit created
 - Changes pushed to master
 `
