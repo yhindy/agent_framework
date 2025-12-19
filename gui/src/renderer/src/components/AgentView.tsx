@@ -137,8 +137,11 @@ function AgentView({}: AgentViewProps) {
 
   const handleToolChange = async (tool: string) => {
     setCurrentTool(tool)
+    // Set appropriate default model when switching tools
+    const defaultModel = tool === 'cursor-cli' ? 'auto' : 'opus'
+    setCurrentModel(defaultModel)
     if (assignment) {
-      await window.electronAPI.updateAssignment(assignment.id, { tool })
+      await window.electronAPI.updateAssignment(assignment.id, { tool, model: defaultModel })
     }
   }
 
@@ -246,6 +249,32 @@ function AgentView({}: AgentViewProps) {
                 <option value="haiku">Haiku</option>
                 <option value="sonnet">Sonnet</option>
                 <option value="opus">Opus</option>
+              </select>
+            </div>
+          )}
+
+          {currentTool === 'cursor-cli' && (
+            <div className="control-group">
+              <label>Model:</label>
+              <select value={currentModel} onChange={(e) => handleModelChange(e.target.value)} disabled={isRunning}>
+                <option value="composer-1">Composer 1</option>
+                <option value="auto">Auto</option>
+                <option value="sonnet-4.5">Sonnet 4.5</option>
+                <option value="sonnet-4.5-thinking">Sonnet 4.5 Thinking</option>
+                <option value="opus-4.5">Opus 4.5</option>
+                <option value="opus-4.5-thinking">Opus 4.5 Thinking</option>
+                <option value="opus-4.1">Opus 4.1</option>
+                <option value="gemini-3-pro">Gemini 3 Pro</option>
+                <option value="gemini-3-flash">Gemini 3 Flash</option>
+                <option value="gpt-5.2">GPT 5.2</option>
+                <option value="gpt-5.2-high">GPT 5.2 High</option>
+                <option value="gpt-5.1">GPT 5.1</option>
+                <option value="gpt-5.1-high">GPT 5.1 High</option>
+                <option value="gpt-5.1-codex">GPT 5.1 Codex</option>
+                <option value="gpt-5.1-codex-high">GPT 5.1 Codex High</option>
+                <option value="gpt-5.1-codex-max">GPT 5.1 Codex Max</option>
+                <option value="gpt-5.1-codex-max-high">GPT 5.1 Codex Max High</option>
+                <option value="grok">Grok</option>
               </select>
             </div>
           )}

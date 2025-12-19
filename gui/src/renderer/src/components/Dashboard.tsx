@@ -306,7 +306,12 @@ function Dashboard({ project }: DashboardProps) {
                   <label>Tool</label>
                   <select
                     value={formData.tool}
-                    onChange={(e) => setFormData({ ...formData, tool: e.target.value })}
+                    onChange={(e) => {
+                      const newTool = e.target.value
+                      // Set appropriate default model when switching tools
+                      const defaultModel = newTool === 'cursor-cli' ? 'auto' : 'opus'
+                      setFormData({ ...formData, tool: newTool, model: defaultModel })
+                    }}
                   >
                     <option value="claude">Claude</option>
                     <option value="cursor">Cursor</option>
@@ -324,6 +329,35 @@ function Dashboard({ project }: DashboardProps) {
                       <option value="haiku">Haiku (fastest)</option>
                       <option value="sonnet">Sonnet (balanced)</option>
                       <option value="opus">Opus (most capable)</option>
+                    </select>
+                  </div>
+                )}
+
+                {formData.tool === 'cursor-cli' && (
+                  <div className="form-group">
+                    <label>Model</label>
+                    <select
+                      value={formData.model}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    >
+                      <option value="composer-1">Composer 1</option>
+                      <option value="auto">Auto</option>
+                      <option value="sonnet-4.5">Sonnet 4.5</option>
+                      <option value="sonnet-4.5-thinking">Sonnet 4.5 Thinking</option>
+                      <option value="opus-4.5">Opus 4.5</option>
+                      <option value="opus-4.5-thinking">Opus 4.5 Thinking</option>
+                      <option value="opus-4.1">Opus 4.1</option>
+                      <option value="gemini-3-pro">Gemini 3 Pro</option>
+                      <option value="gemini-3-flash">Gemini 3 Flash</option>
+                      <option value="gpt-5.2">GPT 5.2</option>
+                      <option value="gpt-5.2-high">GPT 5.2 High</option>
+                      <option value="gpt-5.1">GPT 5.1</option>
+                      <option value="gpt-5.1-high">GPT 5.1 High</option>
+                      <option value="gpt-5.1-codex">GPT 5.1 Codex</option>
+                      <option value="gpt-5.1-codex-high">GPT 5.1 Codex High</option>
+                      <option value="gpt-5.1-codex-max">GPT 5.1 Codex Max</option>
+                      <option value="gpt-5.1-codex-max-high">GPT 5.1 Codex Max High</option>
+                      <option value="grok">Grok</option>
                     </select>
                   </div>
                 )}

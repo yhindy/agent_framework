@@ -57,7 +57,7 @@ export class TerminalService {
         break
       case 'cursor-cli':
         command = 'cursor'
-        args = ['--chat']
+        args = this.getCursorArgs(mode, agentId, prompt, model)
         break
       case 'cursor':
         // For regular cursor, we don't spawn a terminal
@@ -124,6 +124,28 @@ export class TerminalService {
       args.push('--permission-mode', 'acceptEdits')
 
       if (prompt) {
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+      }
+    }
+
+    return args
+  }
+
+  private getCursorArgs(mode: string, _agentId: string, prompt?: string, model?: string): string[] {
+    // Use 'cursor agent' subcommand
+    const args: string[] = ['agent']
+
+    // Add model if specified
+    if (model) {
+      args.push('--model', model)
+    }
+
+    // Add prompt if provided
+    if (prompt) {
+      if (mode === 'planning') {
+        const planPrompt = `Create a plan for: ${prompt}`
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+      } else {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
     }
