@@ -191,6 +191,17 @@ function AgentView({}: AgentViewProps) {
     }
   }
 
+  const handleMarkComplete = async () => {
+    if (!assignment) return
+
+    try {
+      await window.electronAPI.updateAssignment(assignment.id, { status: 'completed' })
+      loadAgentData()
+    } catch (error: any) {
+      alert(`Error marking complete: ${error.message}`)
+    }
+  }
+
   if (!agent) {
     return (
       <div className="agent-view">
@@ -251,7 +262,13 @@ function AgentView({}: AgentViewProps) {
             </>
           )}
           <button onClick={handleOpenCursor}>Open Folder</button>
-          
+
+          {assignment && assignment.status !== 'completed' && assignment.status !== 'merging' && (
+            <button onClick={handleMarkComplete} className="success">
+              Mark Complete
+            </button>
+          )}
+
           <div className="cleanup-dropdown">
             <button className="cleanup-button">Cleanup ▾</button>
             <div className="cleanup-menu">
