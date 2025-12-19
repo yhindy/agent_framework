@@ -1,0 +1,163 @@
+.sidebar {
+  width: 260px;
+  background: #252526;
+  border-right: 1px solid #3e3e42;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.sidebar-nav {
+  padding: 8px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #cccccc;
+}
+
+.nav-item:hover {
+  background: #2a2d2e;
+}
+
+.nav-item.active {
+  background: #094771;
+  color: #ffffff;
+}
+
+.nav-icon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.nav-label {
+  font-size: 14px;
+}
+
+.sidebar-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.section-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #858585;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.empty-state {
+  padding: 16px 12px;
+  text-align: center;
+  color: #858585;
+  font-size: 12px;
+}
+
+.agent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.agent-item:hover {
+  background: #2a2d2e;
+}
+
+.agent-item.active {
+  background: #094771;
+}
+
+.agent-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.agent-id {
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.agent-item.active .agent-id {
+  color: #ffffff;
+}
+
+.agent-status {
+  font-size: 8px;
+  color: #4ec9b0;
+}
+
+.agent-status.running {
+  color: #4ec9b0;
+}
+
+.unread-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0e639c;
+  flex-shrink: 0;
+}
+
+.agent-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(78, 201, 176, 0.3);
+  border-top-color: #4ec9b0;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+

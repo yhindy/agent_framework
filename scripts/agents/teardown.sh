@@ -75,3 +75,4 @@ fi
 echo ""
 echo -e "${GREEN}✅ Worktree removed successfully${NC}"
 echo ""
+

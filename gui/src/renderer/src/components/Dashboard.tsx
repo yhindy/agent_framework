@@ -1,0 +1,270 @@
+import { useState, useEffect } from 'react'
+import './Dashboard.css'
+
+interface DashboardProps {
+  project: any
+}
+
+interface Assignment {
+  id: string
+  agentId: string
+  branch: string
+  feature: string
+  status: string
+  specFile: string
+  tool: string
+  model?: string
+  mode: string
+}
+
+function Dashboard({ project }: DashboardProps) {
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [availableAgents, setAvailableAgents] = useState<string[]>([])
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [formData, setFormData] = useState({
+    agentId: '',
+    shortName: '',
+    prompt: '',
+    tool: 'claude',
+    mode: 'planning' as 'planning' | 'dev',
+    status: 'pending'
+  })
+
+  useEffect(() => {
+    loadAssignments()
+
+    // Listen for assignment updates
+    const unsubscribe = window.electronAPI.onAssignmentsUpdate(() => {
+      loadAssignments()
+    })
+
+    return () => unsubscribe()
+  }, [project])
+
+  const loadAssignments = async () => {
+    const data = await window.electronAPI.getAssignments()
+    setAssignments(data.assignments)
+    setAvailableAgents(data.availableAgentIds)
+  }
+
+  const generateBranchName = (agentId: string, shortName: string): string => {
+    return `feature/${agentId}/${shortName}`
+  }
+
+  const handleCreateAssignment = async () => {
+    try {
+      setIsCreating(true)
+      
+      // Generate branch name
+      const branch = generateBranchName(formData.agentId, formData.shortName)
+      
+      // Create assignment with prompt as the feature
+      await window.electronAPI.createAssignment({
+        agentId: formData.agentId,
+        branch,
+        feature: formData.prompt,
+        tool: formData.tool,
+        prompt: formData.prompt,
+        mode: formData.mode,
+        status: 'in_progress'
+      })
+      
+      setShowCreateForm(false)
+      setIsCreating(false)
+      setFormData({
+        agentId: '',
+        shortName: '',
+        prompt: '',
+        tool: 'claude',
+        mode: 'planning',
+        status: 'pending'
+      })
+      
+      // Wait a moment for worktree creation then refresh
+      setTimeout(() => {
+        loadAssignments()
+      }, 1500)
+    } catch (error: any) {
+      setIsCreating(false)
+      alert('Error creating assignment: ' + error.message)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return '#858585'
+      case 'in_progress':
+        return '#4ec9b0'
+      case 'review':
+        return '#dcdcaa'
+      case 'completed':
+        return '#4ec9b0'
+      default:
+        return '#858585'
+    }
+  }
+
+  const groupedAssignments = {
+    pending: assignments.filter((a) => a.status === 'pending'),
+    in_progress: assignments.filter((a) => a.status === 'in_progress'),
+    review: assignments.filter((a) => a.status === 'review'),
+    completed: assignments.filter((a) => a.status === 'completed')
+  }
+
+  return (
+    <div className="dashboard">
+      <div className="dashboard-header">
+        <h1>Assignments Dashboard</h1>
+        <button onClick={() => setShowCreateForm(true)}>+ New Assignment</button>
+      </div>
+
+      <div className="dashboard-content">
+        <div className="columns">
+          {Object.entries(groupedAssignments).map(([status, items]) => (
+            <div key={status} className="column">
+              <div className="column-header">
+                <span className="column-title">{status.replace('_', ' ')}</span>
+                <span className="column-count">{items.length}</span>
+              </div>
+              <div className="assignment-cards">
+                {items.map((assignment) => (
+                  <div key={assignment.id} className="assignment-card">
+                    <div className="card-header">
+                      <span className="agent-badge">{assignment.agentId}</span>
+                      <span
+                        className="status-dot"
+                        style={{ background: getStatusColor(assignment.status) }}
+                      />
+                    </div>
+                    <div className="card-title">{assignment.feature}</div>
+                    <div className="card-meta">
+                      <div className="meta-item">
+                        <span className="meta-label">Branch:</span>
+                        <span className="meta-value">{assignment.branch}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-label">Tool:</span>
+                        <span className="meta-value">{assignment.tool}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-label">Mode:</span>
+                        <span className="meta-value">{assignment.mode}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showCreateForm && (
+        <div className="modal-overlay" onClick={() => setShowCreateForm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Create New Assignment</h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleCreateAssignment()
+              }}
+            >
+              <div className="form-group">
+                <label>Agent ID</label>
+                <select
+                  value={formData.agentId}
+                  onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
+                  required
+                >
+                  <option value="">Select agent...</option>
+                  {availableAgents.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Branch Short Name</label>
+                <div className="branch-input-wrapper">
+                  <span className="branch-prefix">feature/{formData.agentId || 'agent-X'}/</span>
+                  <input
+                    type="text"
+                    value={formData.shortName}
+                    onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                    placeholder="user-auth"
+                    required
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>{formData.mode === 'planning' ? 'Planning Prompt' : 'Task Description'}</label>
+                <textarea
+                  value={formData.prompt}
+                  onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+                  placeholder={formData.mode === 'planning' 
+                    ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
+                    : "Implement a login form with email and password fields. Style it with Tailwind CSS."}
+                  rows={6}
+                  required
+                  style={{
+                    width: '100%',
+                    resize: 'vertical',
+                    fontFamily: 'inherit'
+                  }}
+                />
+                <div className="form-hint">
+                  {formData.mode === 'planning' 
+                    ? 'Agent will create a plan for you to review before implementing.'
+                    : 'Agent will implement directly without a planning phase.'}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Tool</label>
+                  <select
+                    value={formData.tool}
+                    onChange={(e) => setFormData({ ...formData, tool: e.target.value })}
+                  >
+                    <option value="claude">Claude</option>
+                    <option value="cursor">Cursor</option>
+                    <option value="cursor-cli">Cursor CLI</option>
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label>Mode</label>
+                  <select
+                    value={formData.mode}
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'planning' | 'dev' })}
+                  >
+                    <option value="planning">Planning (review plan first)</option>
+                    <option value="dev">Quick Dev (skip planning)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={() => setShowCreateForm(false)} disabled={isCreating}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={isCreating}>
+                  {isCreating ? 'Creating...' : 'Create Assignment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Dashboard
+

@@ -30,12 +30,19 @@ your-project/
 │   ├── setup.sh             # Create agent worktree
 │   ├── teardown.sh          # Remove agent worktree
 │   ├── list.sh              # List all agent worktrees
-│   └── preflight.sh         # Verify setup before running
+│   ├── preflight.sh         # Verify setup before running
+│   ├── migrate-assignments.js # Migrate ASSIGNMENTS.md to JSON
+│   └── test_signal.sh       # Test orchestrator signals
 ├── docs/agents/              # Agent documentation
 │   ├── README.md            # Main agent guide
-│   ├── ASSIGNMENTS.md       # Track active assignments
+│   ├── assignments.json     # Track active assignments
+│   ├── rules/
+│   │   └── orchestrator_signals.md # Signal protocol docs
 │   └── templates/
 │       └── FEATURE_SPEC.md  # Template for new features
+├── gui/                     # GUI Orchestrator (optional)
+│   ├── src/                 # Electron + React app
+│   └── README.md            # GUI documentation
 └── .cursor/rules/
     └── agent-rules.mdc      # Cursor IDE rules for agents
 ```
@@ -73,6 +80,24 @@ Edit `scripts/agents/config.sh` to customize:
 | Aider | `aider` |
 | Any AI tool | Just point it at the worktree |
 
+## GUI Orchestrator (Optional)
+
+A desktop app for managing agents with a visual interface:
+
+```bash
+cd gui
+npm install
+npm run dev
+```
+
+Features:
+- Dashboard view of all assignments
+- Live terminal integration for agents
+- iMessage-style sidebar with notifications
+- Signal detection for agent status updates
+
+See [`gui/README.md`](gui/README.md) for details.
+
 ## How It Works
 
 The framework uses **git worktrees** to give each agent an isolated copy of your codebase:
@@ -101,3 +126,4 @@ The framework uses **git worktrees** to give each agent an isolated copy of your
 ## License
 
 MIT - Use this however you want.
+

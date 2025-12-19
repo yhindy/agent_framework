@@ -109,3 +109,4 @@ echo "3. Start an AI agent in the worktree:"
 echo "   cd ../$PROJECT_NAME-agent-1"
 echo "   cursor ."
 echo ""
+
