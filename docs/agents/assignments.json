@@ -1,5 +1,18 @@
 {
-  "assignments": [],
+  "assignments": [
+    {
+      "id": "agent-2-1766131653942",
+      "agentId": "agent-2",
+      "branch": "feature/agent-2/styling",
+      "feature": "make it so that when you click on an in progress agent, it goes to the left side agent page",
+      "status": "in_progress",
+      "specFile": "docs/agents/assignments/agent-2-styling.md",
+      "tool": "cursor",
+      "model": "opus",
+      "mode": "planning",
+      "prompt": "make it so that when you click on an in progress agent, it goes to the left side agent page"
+    }
+  ],
   "availableAgentIds": [
     "agent-2",
     "agent-3",

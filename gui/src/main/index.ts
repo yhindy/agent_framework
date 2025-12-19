@@ -132,7 +132,8 @@ function setupIPC(): void {
     }, 1000)
     
     // Auto-start agent in planning mode if prompt is provided
-    if (assignment.prompt && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
+    // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
+    if (assignment.prompt && assignment.tool !== 'cursor' && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
       setTimeout(async () => {
         try {
           await services!.terminal.startAgent(
@@ -171,22 +172,25 @@ function setupIPC(): void {
     mainWindow?.webContents.send('agents:updated')
 
     // Auto-start the merge agent after worktree is set up
-    setTimeout(async () => {
-      try {
-        console.log('[merge] Starting agent with tool:', mergeAssignment.tool)
-        await services!.terminal.startAgent(
-          currentProject.path,
-          mergeAssignment.agentId,
-          mergeAssignment.tool,
-          mergeAssignment.mode,
-          mergeAssignment.prompt,
-          mergeAssignment.model
-        )
-        mainWindow?.webContents.send('agents:updated')
-      } catch (error) {
-        console.error('Failed to auto-start merge agent:', error)
-      }
-    }, 2000)
+    // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
+    if (mergeAssignment.tool !== 'cursor') {
+      setTimeout(async () => {
+        try {
+          console.log('[merge] Starting agent with tool:', mergeAssignment.tool)
+          await services!.terminal.startAgent(
+            currentProject.path,
+            mergeAssignment.agentId,
+            mergeAssignment.tool,
+            mergeAssignment.mode,
+            mergeAssignment.prompt,
+            mergeAssignment.model
+          )
+          mainWindow?.webContents.send('agents:updated')
+        } catch (error) {
+          console.error('Failed to auto-start merge agent:', error)
+        }
+      }, 2000)
+    }
   })
 
   // Cleanup handlers
