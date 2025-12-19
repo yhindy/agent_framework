@@ -22,6 +22,10 @@ function Dashboard({ project }: DashboardProps) {
   const [availableAgents, setAvailableAgents] = useState<string[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [mergingAssignments, setMergingAssignments] = useState<Set<string>>(new Set())
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [selectedAssignmentForMerge, setSelectedAssignmentForMerge] = useState<Assignment | null>(null)
+  const [mergeTool, setMergeTool] = useState<'claude' | 'cursor' | 'cursor-cli'>('claude')
   const [formData, setFormData] = useState({
     agentId: '',
     shortName: '',
@@ -56,10 +60,10 @@ function Dashboard({ project }: DashboardProps) {
   const handleCreateAssignment = async () => {
     try {
       setIsCreating(true)
-      
+
       // Generate branch name
       const branch = generateBranchName(formData.agentId, formData.shortName)
-      
+
       // Create assignment with prompt as the feature
       await window.electronAPI.createAssignment({
         agentId: formData.agentId,
@@ -71,7 +75,7 @@ function Dashboard({ project }: DashboardProps) {
         mode: formData.mode,
         status: 'in_progress'
       })
-      
+
       setShowCreateForm(false)
       setIsCreating(false)
       setFormData({
@@ -83,7 +87,7 @@ function Dashboard({ project }: DashboardProps) {
         mode: 'planning',
         status: 'pending'
       })
-      
+
       // Wait a moment for worktree creation then refresh
       setTimeout(() => {
         loadAssignments()
@@ -91,6 +95,32 @@ function Dashboard({ project }: DashboardProps) {
     } catch (error: any) {
       setIsCreating(false)
       alert('Error creating assignment: ' + error.message)
+    }
+  }
+
+  const handleMergeClick = (assignment: Assignment) => {
+    setSelectedAssignmentForMerge(assignment)
+    setShowMergeConfirm(true)
+  }
+
+  const handleConfirmMerge = async () => {
+    if (!selectedAssignmentForMerge) return
+
+    try {
+      setMergingAssignments(prev => new Set(prev).add(selectedAssignmentForMerge.id))
+      setShowMergeConfirm(false)
+
+      console.log('[Dashboard] Initiating merge with tool:', mergeTool)
+      await window.electronAPI.initiateMerge(selectedAssignmentForMerge.id, mergeTool)
+    } catch (error: any) {
+      alert(`Merge failed: ${error.message}`)
+      setMergingAssignments(prev => {
+        const updated = new Set(prev)
+        updated.delete(selectedAssignmentForMerge.id)
+        return updated
+      })
+    } finally {
+      setSelectedAssignmentForMerge(null)
     }
   }
 
@@ -104,6 +134,10 @@ function Dashboard({ project }: DashboardProps) {
         return '#dcdcaa'
       case 'completed':
         return '#4ec9b0'
+      case 'merging':
+        return '#c586c0'
+      case 'blocked':
+        return '#f48771'
       default:
         return '#858585'
     }
@@ -130,7 +164,8 @@ function Dashboard({ project }: DashboardProps) {
     pending: assignments.filter((a) => a.status === 'pending'),
     in_progress: assignments.filter((a) => a.status === 'in_progress'),
     review: assignments.filter((a) => a.status === 'review'),
-    completed: assignments.filter((a) => a.status === 'completed')
+    completed: assignments.filter((a) => a.status === 'completed'),
+    merging: assignments.filter((a) => a.status === 'merging')
   }
 
   return (
@@ -179,6 +214,22 @@ function Dashboard({ project }: DashboardProps) {
                         <span className="meta-value">{assignment.mode}</span>
                       </div>
                     </div>
+                    {assignment.status === 'completed' && (
+                      <div className="card-actions">
+                        <button
+                          className="merge-button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleMergeClick(assignment)
+                          }}
+                          disabled={mergingAssignments.has(assignment.id)}
+                        >
+                          {mergingAssignments.has(assignment.id)
+                            ? 'Merging...'
+                            : 'Mark as Done & Merge'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -233,7 +284,7 @@ function Dashboard({ project }: DashboardProps) {
                 <textarea
                   value={formData.prompt}
                   onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
-                  placeholder={formData.mode === 'planning' 
+                  placeholder={formData.mode === 'planning'
                     ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
                     : "Implement a login form with email and password fields. Style it with Tailwind CSS."}
                   rows={6}
@@ -245,7 +296,7 @@ function Dashboard({ project }: DashboardProps) {
                   }}
                 />
                 <div className="form-hint">
-                  {formData.mode === 'planning' 
+                  {formData.mode === 'planning'
                     ? 'Agent will create a plan for you to review before implementing.'
                     : 'Agent will implement directly without a planning phase.'}
                 </div>
@@ -299,6 +350,45 @@ function Dashboard({ project }: DashboardProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showMergeConfirm && selectedAssignmentForMerge && (
+        <div className="modal-overlay" onClick={() => setShowMergeConfirm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirm Merge</h2>
+            <p>
+              This will spawn a merge agent to intelligently merge the changes from:
+            </p>
+            <div className="merge-info">
+              <div><strong>Agent:</strong> {selectedAssignmentForMerge.agentId}</div>
+              <div><strong>Branch:</strong> {selectedAssignmentForMerge.branch}</div>
+              <div><strong>Feature:</strong> {selectedAssignmentForMerge.feature}</div>
+            </div>
+            <div className="form-group">
+              <label>Tool for Merge Agent:</label>
+              <select
+                value={mergeTool}
+                onChange={(e) => setMergeTool(e.target.value as 'claude' | 'cursor' | 'cursor-cli')}
+              >
+                <option value="claude">Claude CLI</option>
+                <option value="cursor">Cursor IDE</option>
+                <option value="cursor-cli">Cursor CLI</option>
+              </select>
+            </div>
+            <p className="warning-text">
+              The merge agent will review changes, handle conflicts, run tests,
+              and merge to master. You'll be able to monitor progress in the dashboard.
+            </p>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowMergeConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={handleConfirmMerge}>
+                Start Merge
+              </button>
+            </div>
           </div>
         </div>
       )}

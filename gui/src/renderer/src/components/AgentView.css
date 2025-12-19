@@ -89,6 +89,14 @@
   background: #e03e2d;
 }
 
+.agent-actions button.success {
+  background: #0dbc79;
+}
+
+.agent-actions button.success:hover {
+  background: #23d18b;
+}
+
 .signal-message {
   padding: 12px 24px;
   font-size: 14px;

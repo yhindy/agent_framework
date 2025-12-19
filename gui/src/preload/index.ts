@@ -33,6 +33,7 @@ const api = {
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
+  initiateMerge: (assignmentId: string, tool?: string) => ipcRenderer.invoke('assignments:merge', assignmentId, tool),
 
   // Event listeners
   onAgentSignal: (callback: (agentId: string, signal: string) => void) => {

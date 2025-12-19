@@ -244,3 +244,69 @@
   background: #4e4e52;
 }
 
+/* Merge-related styles */
+.card-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #3e3e42;
+}
+
+.merge-button {
+  width: 100%;
+  padding: 8px 12px;
+  background: #0e639c;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.merge-button:hover:not(:disabled) {
+  background: #1177bb;
+}
+
+.merge-button:disabled {
+  background: #3e3e42;
+  color: #858585;
+  cursor: not-allowed;
+}
+
+.merge-info {
+  background: #2d2d2d;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.merge-info div {
+  margin-bottom: 6px;
+  color: #d4d4d4;
+}
+
+.merge-info div:last-child {
+  margin-bottom: 0;
+}
+
+.warning-text {
+  font-size: 13px;
+  color: #dcdcaa;
+  background: rgba(220, 220, 170, 0.1);
+  padding: 10px;
+  border-radius: 4px;
+  border-left: 3px solid #dcdcaa;
+}
+
+.form-actions button.primary {
+  background: #0e639c;
+  color: #ffffff;
+}
+
+.form-actions button.primary:hover {
+  background: #1177bb;
+}
+
