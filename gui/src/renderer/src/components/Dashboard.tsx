@@ -107,6 +107,7 @@ function Dashboard({ project }: DashboardProps) {
       setMergingAssignments(prev => new Set(prev).add(selectedAssignmentForMerge.id))
       setShowMergeConfirm(false)
 
+      console.log('[Dashboard] Initiating merge with tool:', mergeTool)
       await window.electronAPI.initiateMerge(selectedAssignmentForMerge.id, mergeTool)
     } catch (error: any) {
       alert(`Merge failed: ${error.message}`)

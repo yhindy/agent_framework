@@ -305,6 +305,13 @@ export class AgentService {
     const mergeAgentId = data.availableAgentIds[0]
 
     // Create merge assignment
+    // For merge agents, convert 'cursor' to 'cursor-cli' since merge agents need to run in terminal
+    let selectedTool = tool || 'claude'
+    if (selectedTool === 'cursor') {
+      selectedTool = 'cursor-cli'
+      console.log('[AgentService] Converted cursor to cursor-cli for merge agent')
+    }
+    console.log('[AgentService] Creating merge assignment with tool:', selectedTool, 'received tool param:', tool)
     const mergeAssignment: Assignment = {
       id: `${mergeAgentId}-merge-${Date.now()}`,
       agentId: mergeAgentId,
@@ -312,7 +319,7 @@ export class AgentService {
       feature: `MERGE: ${assignment.feature}`,
       status: 'in_progress',
       specFile: `docs/agents/assignments/${mergeAgentId}-merge-spec.md`,
-      tool: tool || 'claude',
+      tool: selectedTool,
       mode: 'dev', // Merge agents run in dev mode
       prompt: this.buildMergePrompt(assignment),
       originalAssignmentId: assignmentId

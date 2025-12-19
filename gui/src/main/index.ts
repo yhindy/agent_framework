@@ -162,7 +162,9 @@ function setupIPC(): void {
     const currentProject = services!.project.getCurrentProject()
     if (!currentProject) throw new Error('No project selected')
 
+    console.log('[merge] Tool parameter received:', tool)
     const mergeAssignment = await services!.agent.initiateMerge(currentProject.path, assignmentId, tool)
+    console.log('[merge] Merge assignment created with tool:', mergeAssignment.tool)
 
     mainWindow?.webContents.send('assignments:updated')
     mainWindow?.webContents.send('agents:updated')
@@ -170,6 +172,7 @@ function setupIPC(): void {
     // Auto-start the merge agent after worktree is set up
     setTimeout(async () => {
       try {
+        console.log('[merge] Starting agent with tool:', mergeAssignment.tool)
         await services!.terminal.startAgent(
           currentProject.path,
           mergeAssignment.agentId,
