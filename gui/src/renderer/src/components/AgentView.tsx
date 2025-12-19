@@ -35,6 +35,7 @@ function AgentView({}: AgentViewProps) {
   const [agent, setAgent] = useState<AgentSession | null>(null)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [currentTool, setCurrentTool] = useState('claude')
+  const [currentModel, setCurrentModel] = useState('opus')
   const [currentMode, setCurrentMode] = useState('idle')
   const [signalMessage, setSignalMessage] = useState<string>('')
   const [showCleanupModal, setShowCleanupModal] = useState(false)
@@ -80,6 +81,7 @@ function AgentView({}: AgentViewProps) {
 
     if (assignmentData) {
       setCurrentTool(assignmentData.tool)
+      setCurrentModel(assignmentData.model || 'opus')
       setCurrentMode(assignmentData.mode)
     }
   }
@@ -105,7 +107,7 @@ function AgentView({}: AgentViewProps) {
     if (!agentId || currentTool === 'cursor') return
 
     try {
-      await window.electronAPI.startAgent(agentId, currentTool, currentMode)
+      await window.electronAPI.startAgent(agentId, currentTool, currentMode, currentModel)
       loadAgentData()
     } catch (error: any) {
       alert('Error starting agent: ' + error.message)
@@ -137,6 +139,13 @@ function AgentView({}: AgentViewProps) {
     setCurrentTool(tool)
     if (assignment) {
       await window.electronAPI.updateAssignment(assignment.id, { tool })
+    }
+  }
+
+  const handleModelChange = async (model: string) => {
+    setCurrentModel(model)
+    if (assignment) {
+      await window.electronAPI.updateAssignment(assignment.id, { model })
     }
   }
 
@@ -218,6 +227,17 @@ function AgentView({}: AgentViewProps) {
               <option value="cursor-cli">Cursor CLI</option>
             </select>
           </div>
+
+          {currentTool === 'claude' && (
+            <div className="control-group">
+              <label>Model:</label>
+              <select value={currentModel} onChange={(e) => handleModelChange(e.target.value)} disabled={isRunning}>
+                <option value="haiku">Haiku</option>
+                <option value="sonnet">Sonnet</option>
+                <option value="opus">Opus</option>
+              </select>
+            </div>
+          )}
 
           <div className="control-group">
             <label>Mode:</label>

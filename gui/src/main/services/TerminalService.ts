@@ -36,7 +36,8 @@ export class TerminalService {
     agentId: string,
     tool: string,
     mode: string,
-    prompt?: string
+    prompt?: string,
+    model?: string
   ): Promise<void> {
     // Stop existing terminal if any
     this.stopAgent(agentId)
@@ -52,7 +53,7 @@ export class TerminalService {
     switch (tool) {
       case 'claude':
         command = 'claude'
-        args = this.getClaudeArgs(mode, agentId, prompt)
+        args = this.getClaudeArgs(mode, agentId, prompt, model)
         break
       case 'cursor-cli':
         command = 'cursor'
@@ -101,13 +102,18 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string): string[] {
+  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string): string[] {
     const args: string[] = []
-    
+
+    // Add model if specified
+    if (model) {
+      args.push('--model', model)
+    }
+
     if (mode === 'planning') {
       // Use Claude's plan permission mode - shows plan before executing
       args.push('--permission-mode', 'plan')
-      
+
       if (prompt) {
         // Prefix with planning instructions
         const planPrompt = `Create a plan for: ${prompt}`
@@ -116,7 +122,7 @@ export class TerminalService {
     } else if (mode === 'dev') {
       // Use acceptEdits mode - auto-approves file changes for faster development
       args.push('--permission-mode', 'acceptEdits')
-      
+
       if (prompt) {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }

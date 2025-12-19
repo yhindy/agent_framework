@@ -27,6 +27,7 @@ function Dashboard({ project }: DashboardProps) {
     shortName: '',
     prompt: '',
     tool: 'claude',
+    model: 'opus',
     mode: 'planning' as 'planning' | 'dev',
     status: 'pending'
   })
@@ -65,6 +66,7 @@ function Dashboard({ project }: DashboardProps) {
         branch,
         feature: formData.prompt,
         tool: formData.tool,
+        model: formData.model,
         prompt: formData.prompt,
         mode: formData.mode,
         status: 'in_progress'
@@ -77,6 +79,7 @@ function Dashboard({ project }: DashboardProps) {
         shortName: '',
         prompt: '',
         tool: 'claude',
+        model: 'opus',
         mode: 'planning',
         status: 'pending'
       })
@@ -148,6 +151,12 @@ function Dashboard({ project }: DashboardProps) {
                         <span className="meta-label">Tool:</span>
                         <span className="meta-value">{assignment.tool}</span>
                       </div>
+                      {assignment.model && (
+                        <div className="meta-item">
+                          <span className="meta-label">Model:</span>
+                          <span className="meta-value">{assignment.model}</span>
+                        </div>
+                      )}
                       <div className="meta-item">
                         <span className="meta-label">Mode:</span>
                         <span className="meta-value">{assignment.mode}</span>
@@ -237,7 +246,21 @@ function Dashboard({ project }: DashboardProps) {
                     <option value="cursor-cli">Cursor CLI</option>
                   </select>
                 </div>
-                
+
+                {formData.tool === 'claude' && (
+                  <div className="form-group">
+                    <label>Model</label>
+                    <select
+                      value={formData.model}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    >
+                      <option value="haiku">Haiku (fastest)</option>
+                      <option value="sonnet">Sonnet (balanced)</option>
+                      <option value="opus">Opus (most capable)</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label>Mode</label>
                   <select
