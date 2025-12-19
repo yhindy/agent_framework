@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -17,8 +18,9 @@ interface AgentSession {
 }
 
 function Sidebar({ project, onNavigate }: SidebarProps) {
+  const location = useLocation()
   const [agents, setAgents] = useState<AgentSession[]>([])
-  const [currentPath, setCurrentPath] = useState('/workspace')
+  const currentPath = location.pathname
 
   useEffect(() => {
     loadAgents()
@@ -37,7 +39,6 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
   }
 
   const handleNavigate = (path: string) => {
-    setCurrentPath(path)
     onNavigate(path)
   }
 
@@ -46,6 +47,11 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
     handleNavigate(`/workspace/agent/${agentId}`)
     loadAgents() // Refresh to clear unread badge
   }
+
+  const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
+  const activeAgentId = currentPath.startsWith('/workspace/agent/')
+    ? currentPath.replace('/workspace/agent/', '')
+    : null
 
   return (
     <div className="sidebar">
@@ -57,7 +63,7 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
 
       <div className="sidebar-nav">
         <div
-          className={`nav-item ${currentPath === '/workspace' ? 'active' : ''}`}
+          className={`nav-item ${isHomeActive ? 'active' : ''}`}
           onClick={() => handleNavigate('/workspace')}
         >
           <span className="nav-icon">🏠</span>
@@ -73,10 +79,11 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
           )}
           {agents.map((agent) => {
             const isWorking = agent.mode && agent.mode !== 'idle'
+            const isActive = activeAgentId === agent.id
             return (
               <div
                 key={agent.id}
-                className={`agent-item ${currentPath.includes(agent.id) ? 'active' : ''}`}
+                className={`agent-item ${isActive ? 'active' : ''}`}
                 onClick={() => handleAgentClick(agent.id)}
               >
                 <div className="agent-info">
