@@ -61,3 +61,4 @@ echo ""
 echo "3. Create an agent worktree:"
 echo "   ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature"
 echo ""
+

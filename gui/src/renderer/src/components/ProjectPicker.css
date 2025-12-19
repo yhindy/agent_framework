@@ -1,0 +1,82 @@
+.project-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #1e1e1e;
+}
+
+.project-picker-container {
+  max-width: 600px;
+  width: 90%;
+  text-align: center;
+}
+
+.project-picker h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+  color: #ffffff;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: #858585;
+  margin-bottom: 32px;
+}
+
+.error {
+  background: #5a1d1d;
+  color: #f48771;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.select-button {
+  padding: 12px 24px;
+  font-size: 16px;
+  margin-bottom: 32px;
+}
+
+.recent-projects {
+  margin-top: 48px;
+}
+
+.recent-projects h2 {
+  font-size: 18px;
+  color: #d4d4d4;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-item {
+  background: #2d2d2d;
+  padding: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.project-item:hover {
+  background: #3e3e42;
+}
+
+.project-name {
+  font-size: 16px;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.project-path {
+  font-size: 12px;
+  color: #858585;
+  font-family: 'Courier New', Courier, monospace;
+}
+

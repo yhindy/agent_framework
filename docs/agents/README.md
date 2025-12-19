@@ -98,3 +98,4 @@ docs/agents/
 | `scripts/agents/list.sh` | List all agent worktrees |
 | `scripts/agents/preflight.sh` | Verify setup before running |
 | `scripts/agents/init.sh` | One-time framework setup |
+

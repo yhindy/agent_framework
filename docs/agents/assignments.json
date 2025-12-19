@@ -1,0 +1,33 @@
+{
+  "assignments": [
+    {
+      "id": "agent-1-1766125361883",
+      "agentId": "agent-1",
+      "branch": "feature/agent-1/model-switch",
+      "feature": "add a model switcher that allows for picking haiku/sonnet/opus when using claude in the GUI for kicking off new agents",
+      "status": "in_progress",
+      "specFile": "docs/agents/assignments/agent-1-model-switch.md",
+      "tool": "claude",
+      "mode": "dev",
+      "prompt": "add a model switcher that allows for picking haiku/sonnet/opus when using claude in the GUI for kicking off new agents"
+    },
+    {
+      "id": "agent-2-1766125397341",
+      "agentId": "agent-2",
+      "branch": "feature/agent-2/unassigned",
+      "feature": "add an unassigned column to the assignments dashboard in the gui so you can see all the agents that are not assigned",
+      "status": "in_progress",
+      "specFile": "docs/agents/assignments/agent-2-unassigned.md",
+      "tool": "claude",
+      "mode": "dev",
+      "prompt": "add an unassigned column to the assignments dashboard in the gui so you can see all the agents that are not assigned"
+    }
+  ],
+  "availableAgentIds": [
+    "agent-1",
+    "agent-2",
+    "agent-3",
+    "agent-4",
+    "agent-5"
+  ]
+}

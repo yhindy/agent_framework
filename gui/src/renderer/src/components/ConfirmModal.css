@@ -1,0 +1,89 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-body p {
+  margin: 0;
+  font-size: 14px;
+  color: #cccccc;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #3e3e42;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-footer button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-footer button.secondary {
+  background: #3e3e42;
+  color: #cccccc;
+}
+
+.modal-footer button.secondary:hover {
+  background: #4e4e52;
+}
+
+.modal-footer button.primary {
+  background: #0e639c;
+  color: #ffffff;
+}
+
+.modal-footer button.primary:hover {
+  background: #1177bb;
+}
+
+.modal-footer button.danger {
+  background: #c72e1d;
+  color: #ffffff;
+}
+
+.modal-footer button.danger:hover {
+  background: #e03e2d;
+}
+

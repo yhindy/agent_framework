@@ -1,0 +1,209 @@
+.agent-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1e1e1e;
+}
+
+.agent-view-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #858585;
+  font-size: 16px;
+}
+
+.agent-header {
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.agent-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-title h2 {
+  font-size: 18px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.feature-name {
+  font-size: 13px;
+  color: #858585;
+}
+
+.agent-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-group label {
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.control-group select {
+  min-width: 120px;
+}
+
+.branch-info {
+  font-size: 12px;
+  color: #858585;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.agent-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.agent-actions button.primary {
+  background: #0e639c;
+}
+
+.agent-actions button.primary:hover {
+  background: #1177bb;
+}
+
+.agent-actions button.danger {
+  background: #c72e1d;
+}
+
+.agent-actions button.danger:hover {
+  background: #e03e2d;
+}
+
+.signal-message {
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.signal-message.info {
+  background: rgba(14, 99, 156, 0.2);
+  color: #4fc3f7;
+  border-bottom: 1px solid #0e639c;
+}
+
+.signal-message.warning {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+  border-bottom: 1px solid #ff9800;
+}
+
+.agent-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #858585;
+}
+
+.placeholder-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.placeholder-text {
+  text-align: center;
+}
+
+.placeholder-text p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.cleanup-dropdown {
+  position: relative;
+}
+
+.cleanup-button {
+  padding: 8px 12px;
+  background: #3e3e42;
+  color: #cccccc;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cleanup-button:hover {
+  background: #4e4e52;
+}
+
+.cleanup-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 140px;
+  z-index: 100;
+  padding-top: 4px;
+}
+
+/* Bridge the gap between button and menu */
+.cleanup-menu::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.cleanup-dropdown:hover .cleanup-menu {
+  display: block;
+}
+
+.cleanup-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  color: #cccccc;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cleanup-menu button:hover {
+  background: #2a2d2e;
+}
+
+.cleanup-menu button.danger-text {
+  color: #f48771;
+}
+
+.cleanup-menu button.danger-text:hover {
+  background: rgba(199, 46, 29, 0.2);
+}
+

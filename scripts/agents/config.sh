@@ -8,10 +8,10 @@
 
 # Project name - used for worktree folder names
 # Worktrees will be created as: ../<PROJECT_NAME>-agent-1, etc.
-PROJECT_NAME="myproject"
+PROJECT_NAME="agent_framework"
 
 # Default base branch for new feature branches
-DEFAULT_BASE_BRANCH="main"
+DEFAULT_BASE_BRANCH="master"
 
 # ============================================================================
 # FILES TO COPY
@@ -54,3 +54,4 @@ PREFLIGHT_COMMANDS=(
     # "docker info > /dev/null 2>&1"
     # "node --version > /dev/null 2>&1"
 )
+

@@ -94,6 +94,19 @@ if [ -d "$ASSIGNMENTS_SRC" ]; then
     fi
 fi
 
+# Copy orchestrator signal rules
+echo -e "${BLUE}📋 Copying orchestrator integration rules...${NC}"
+RULES_SRC="$REPO_ROOT/docs/agents/rules"
+RULES_DST="$WORKTREE_PATH/docs/agents/rules"
+
+if [ -d "$RULES_SRC" ]; then
+    mkdir -p "$RULES_DST"
+    if [ -f "$RULES_SRC/orchestrator_signals.md" ]; then
+        cp "$RULES_SRC/orchestrator_signals.md" "$RULES_DST/"
+        echo "   Copied orchestrator_signals.md"
+    fi
+fi
+
 # Run post-setup commands
 if [ ${#POST_SETUP_COMMANDS[@]} -gt 0 ]; then
     echo -e "${BLUE}🔧 Running post-setup commands...${NC}"
@@ -128,3 +141,4 @@ echo "2. Or launch an AI agent:"
 echo "   cd $WORKTREE_PATH && cursor ."
 echo "   cd $WORKTREE_PATH && claude \"Read docs/agents/assignments/$AGENT_ID-*.md and implement\""
 echo ""
+

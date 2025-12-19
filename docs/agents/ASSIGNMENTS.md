@@ -46,3 +46,4 @@ This document tracks which features are being worked on by which agents.
 - Keep features small enough to complete in 1-2 hours
 - Coordinate before assigning work that touches shared code
 - Review agent work frequently to catch issues early
+

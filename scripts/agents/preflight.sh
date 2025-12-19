@@ -56,3 +56,4 @@ else
     echo -e "${RED}❌ Some checks failed. Fix the issues above and try again.${NC}"
     exit 1
 fi
+

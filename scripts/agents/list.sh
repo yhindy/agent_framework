@@ -48,3 +48,4 @@ git worktree list | while read -r line; do
 done
 
 echo ""
+
