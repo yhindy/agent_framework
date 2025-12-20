@@ -55,6 +55,45 @@ const api = {
     const subscription = () => callback()
     ipcRenderer.on('assignments:updated', subscription)
     return () => ipcRenderer.removeListener('assignments:updated', subscription)
+  },
+
+  // Test Environment APIs
+  getTestEnvConfig: () => ipcRenderer.invoke('testEnv:getConfig'),
+  getTestEnvCommands: (assignmentOverrides?: any[]) => ipcRenderer.invoke('testEnv:getCommands', assignmentOverrides),
+  startTestEnv: (agentId: string, commandId?: string) => ipcRenderer.invoke('testEnv:start', agentId, commandId),
+  stopTestEnv: (agentId: string, commandId?: string) => ipcRenderer.invoke('testEnv:stop', agentId, commandId),
+  getTestEnvStatus: (agentId: string) => ipcRenderer.invoke('testEnv:getStatus', agentId),
+  sendTestEnvInput: (agentId: string, commandId: string, data: string) => 
+    ipcRenderer.send('testEnv:input', agentId, commandId, data),
+  resizeTestEnv: (agentId: string, commandId: string, cols: number, rows: number) =>
+    ipcRenderer.send('testEnv:resize', agentId, commandId, cols, rows),
+  
+  onTestEnvOutput: (callback: (agentId: string, commandId: string, data: string) => void) => {
+    const subscription = (_event: any, agentId: string, commandId: string, data: string) => 
+      callback(agentId, commandId, data)
+    ipcRenderer.on('testEnv:output', subscription)
+    return () => ipcRenderer.removeListener('testEnv:output', subscription)
+  },
+  
+  onTestEnvStarted: (callback: (agentId: string, commandId: string) => void) => {
+    const subscription = (_event: any, agentId: string, commandId: string) => 
+      callback(agentId, commandId)
+    ipcRenderer.on('testEnv:started', subscription)
+    return () => ipcRenderer.removeListener('testEnv:started', subscription)
+  },
+  
+  onTestEnvStopped: (callback: (agentId: string, commandId: string) => void) => {
+    const subscription = (_event: any, agentId: string, commandId: string) => 
+      callback(agentId, commandId)
+    ipcRenderer.on('testEnv:stopped', subscription)
+    return () => ipcRenderer.removeListener('testEnv:stopped', subscription)
+  },
+  
+  onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => {
+    const subscription = (_event: any, agentId: string, commandId: string, exitCode: number) => 
+      callback(agentId, commandId, exitCode)
+    ipcRenderer.on('testEnv:exited', subscription)
+    return () => ipcRenderer.removeListener('testEnv:exited', subscription)
   }
 }
 

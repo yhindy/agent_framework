@@ -118,6 +118,8 @@
 .agent-content {
   flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .placeholder {
@@ -213,5 +215,97 @@
 
 .cleanup-menu button.danger-text:hover {
   background: rgba(199, 46, 29, 0.2);
+}
+
+/* Unified Tab Interface */
+.unified-tabs {
+  display: flex;
+  gap: 0;
+  background: #252526;
+  border-bottom: 1px solid #333;
+  overflow-x: auto;
+}
+
+.unified-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-right: 1px solid #333;
+  background: #2d2d2d;
+  transition: background 0.2s;
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+.unified-tab:hover {
+  background: #37373d;
+}
+
+.unified-tab.active {
+  background: #1e1e1e;
+  border-bottom: 2px solid #0e639c;
+}
+
+.unified-tab .tab-icon {
+  font-size: 14px;
+}
+
+.unified-tab .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.unified-tab .status-dot.running {
+  background: #0dbc79;
+  box-shadow: 0 0 4px #0dbc79;
+}
+
+.unified-tab .status-dot.stopped {
+  background: #858585;
+}
+
+.unified-tab .tab-name {
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.unified-tab .tab-port {
+  font-size: 12px;
+  color: #858585;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+}
+
+.unified-tab .tab-action {
+  margin-left: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.unified-tab .tab-action:hover {
+  opacity: 1;
+}
+
+.unified-tab .tab-action.start {
+  background: #0e639c;
+  color: white;
+}
+
+.unified-tab .tab-action.stop {
+  background: #c72e2e;
+  color: white;
+}
+
+.unified-terminal-container {
+  flex: 1;
+  overflow: hidden;
 }
 

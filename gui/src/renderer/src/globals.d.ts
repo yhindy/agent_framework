@@ -25,6 +25,22 @@ declare global {
       getAssignments: () => Promise<any>
       createAssignment: (assignment: any) => Promise<any>
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
+      createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
+      checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>
+      checkDependencies: () => Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }>
+
+      // Test Environment APIs
+      getTestEnvConfig: () => Promise<any>
+      getTestEnvCommands: (assignmentOverrides?: any[]) => Promise<any[]>
+      startTestEnv: (agentId: string, commandId?: string) => Promise<void>
+      stopTestEnv: (agentId: string, commandId?: string) => Promise<void>
+      getTestEnvStatus: (agentId: string) => Promise<any[]>
+      sendTestEnvInput: (agentId: string, commandId: string, data: string) => void
+      resizeTestEnv: (agentId: string, commandId: string, cols: number, rows: number) => void
+      onTestEnvOutput: (callback: (agentId: string, commandId: string, data: string) => void) => () => void
+      onTestEnvStarted: (callback: (agentId: string, commandId: string) => void) => () => void
+      onTestEnvStopped: (callback: (agentId: string, commandId: string) => void) => () => void
+      onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => () => void
 
       // Event listeners
       onAgentSignal: (callback: (agentId: string, signal: string) => void) => () => void
