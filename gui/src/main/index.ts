@@ -199,6 +199,13 @@ function setupIPC(): void {
     } catch (error) {
       // Ignore if not running
     }
+
+    // Stop test environments
+    try {
+      services!.testEnv.stopAll(agentId)
+    } catch (error) {
+      console.error('Failed to stop test environments:', error)
+    }
     
     await services!.agent.teardownAgent(currentProject.path, agentId, force)
     
