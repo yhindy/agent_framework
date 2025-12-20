@@ -155,37 +155,34 @@ function setupIPC(): void {
     return services!.agent.updateAssignment(currentProject.path, assignmentId, updates)
   })
 
-  ipcMain.handle('assignments:merge', async (_event, assignmentId: string, tool?: string) => {
+  ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
     const currentProject = services!.project.getCurrentProject()
     if (!currentProject) throw new Error('No project selected')
 
-    console.log('[merge] Tool parameter received:', tool)
-    const mergeAssignment = await services!.agent.initiateMerge(currentProject.path, assignmentId, tool)
-    console.log('[merge] Merge assignment created with tool:', mergeAssignment.tool)
+    console.log('[PR] Creating pull request for assignment:', assignmentId, 'autoCommit:', autoCommit)
+    const result = await services!.agent.createPullRequest(currentProject.path, assignmentId, autoCommit)
+    console.log('[PR] Pull request created:', result.url)
 
     mainWindow?.webContents.send('assignments:updated')
-    mainWindow?.webContents.send('agents:updated')
+    
+    return result
+  })
 
-    // Auto-start the merge agent after worktree is set up
-    // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
-    if (mergeAssignment.tool !== 'cursor') {
-      setTimeout(async () => {
-        try {
-          console.log('[merge] Starting agent with tool:', mergeAssignment.tool)
-          await services!.terminal.startAgent(
-            currentProject.path,
-            mergeAssignment.agentId,
-            mergeAssignment.tool,
-            mergeAssignment.mode,
-            mergeAssignment.prompt,
-            mergeAssignment.model
-          )
-          mainWindow?.webContents.send('agents:updated')
-        } catch (error) {
-          console.error('Failed to auto-start merge agent:', error)
-        }
-      }, 2000)
-    }
+  ipcMain.handle('assignments:checkPR', async (_event, assignmentId: string) => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) throw new Error('No project selected')
+
+    console.log('[PR] Checking PR status for assignment:', assignmentId)
+    const result = await services!.agent.checkPullRequestStatus(currentProject.path, assignmentId)
+    console.log('[PR] PR status:', result.status)
+
+    mainWindow?.webContents.send('assignments:updated')
+    
+    return result
+  })
+
+  ipcMain.handle('dependencies:check', async () => {
+    return services!.agent.checkDependencies()
   })
 
   // Cleanup handlers

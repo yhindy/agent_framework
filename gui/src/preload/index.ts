@@ -31,7 +31,11 @@ const api = {
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
-  initiateMerge: (assignmentId: string, tool?: string) => ipcRenderer.invoke('assignments:merge', assignmentId, tool),
+  createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),
+  checkPullRequestStatus: (assignmentId: string) => ipcRenderer.invoke('assignments:checkPR', assignmentId),
+  
+  // Dependency check
+  checkDependencies: () => ipcRenderer.invoke('dependencies:check'),
 
   // Event listeners
   onAgentSignal: (callback: (agentId: string, signal: string) => void) => {

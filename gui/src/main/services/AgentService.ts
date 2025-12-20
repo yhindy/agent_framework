@@ -1,7 +1,7 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 
 const execAsync = promisify(exec)
 
@@ -26,6 +26,8 @@ interface Assignment {
   model?: string
   mode: string
   prompt?: string
+  prUrl?: string
+  prStatus?: string
 }
 
 interface AssignmentsFile {
@@ -38,6 +40,31 @@ export class AgentService {
 
   constructor() {
     this.sessions = new Map()
+  }
+
+  async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {
+    try {
+      // Check if gh CLI is installed
+      await execAsync('gh --version')
+      
+      // Check if authenticated
+      try {
+        await execAsync('gh auth status')
+        return { ghInstalled: true, ghAuthenticated: true }
+      } catch (authError) {
+        return { 
+          ghInstalled: true, 
+          ghAuthenticated: false,
+          error: 'GitHub CLI not authenticated. Run: gh auth login'
+        }
+      }
+    } catch (error) {
+      return { 
+        ghInstalled: false, 
+        ghAuthenticated: false,
+        error: 'GitHub CLI not installed. Install with: brew install gh'
+      }
+    }
   }
 
   async listAgents(projectPath: string): Promise<AgentSession[]> {
@@ -285,7 +312,7 @@ export class AgentService {
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
   }
 
-  async initiateMerge(projectPath: string, assignmentId: string, tool?: string): Promise<Assignment> {
+  async createPullRequest(projectPath: string, assignmentId: string, autoCommit: boolean = false): Promise<{ url: string }> {
     const data = this.getAssignments(projectPath)
     const assignment = data.assignments.find(a => a.id === assignmentId)
 
@@ -294,236 +321,171 @@ export class AgentService {
     }
 
     if (assignment.status !== 'completed') {
-      throw new Error('Only completed assignments can be merged')
+      throw new Error('Only completed assignments can have PRs created')
     }
 
-    // Find an available agent for the merge
-    if (data.availableAgentIds.length === 0) {
-      throw new Error('No available agents for merge. Please free up an agent first.')
+    // Find the worktree for this agent
+    const agents = await this.listAgents(projectPath)
+    const agent = agents.find(a => a.id === assignment.agentId)
+    
+    if (!agent) {
+      throw new Error('Agent worktree not found')
     }
 
-    const mergeAgentId = data.availableAgentIds[0]
+    const worktreePath = agent.worktreePath
 
-    // Create merge assignment
-    // For merge agents, convert 'cursor' to 'cursor-cli' since merge agents need to run in terminal
-    let selectedTool = tool || 'claude'
-    if (selectedTool === 'cursor') {
-      selectedTool = 'cursor-cli'
-      console.log('[AgentService] Converted cursor to cursor-cli for merge agent')
-    }
-    console.log('[AgentService] Creating merge assignment with tool:', selectedTool, 'received tool param:', tool)
-    const mergeAssignment: Assignment = {
-      id: `${mergeAgentId}-merge-${Date.now()}`,
-      agentId: mergeAgentId,
-      branch: assignment.branch, // Use the same branch as the original assignment
-      feature: `MERGE: ${assignment.feature}`,
-      status: 'in_progress',
-      specFile: `docs/agents/assignments/${mergeAgentId}-merge-spec.md`,
-      tool: selectedTool,
-      mode: 'dev', // Merge agents run in dev mode
-      prompt: this.buildMergePrompt(assignment),
-      originalAssignmentId: assignmentId
-    }
-
-    // Add merge assignment
-    data.assignments.push(mergeAssignment)
-
-    // Update original assignment status to 'merging'
-    const originalIndex = data.assignments.findIndex(a => a.id === assignmentId)
-    data.assignments[originalIndex].status = 'merging'
-
-    // Remove merge agent from available pool
-    data.availableAgentIds = data.availableAgentIds.filter(id => id !== mergeAgentId)
-
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
-    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
-
-    // Create merge spec file
-    await this.createMergeSpec(projectPath, mergeAssignment, assignment)
-
-    // Setup worktree for merge agent using the ORIGINAL assignment's branch
-    // This is critical - we want to merge FROM that branch
-    const setupScript = join(projectPath, 'scripts', 'agents', 'setup.sh')
     try {
-      const { stdout, stderr } = await execAsync(
-        `"${setupScript}" ${mergeAgentId} ${assignment.branch}`,
-        { cwd: projectPath }
-      )
-      console.log('Merge agent worktree setup:', stdout)
-      if (stderr) console.error('Setup warnings:', stderr)
-    } catch (error: any) {
-      console.error('Failed to setup merge agent worktree:', error)
-      throw new Error('Failed to create merge agent workspace')
-    }
-
-    return mergeAssignment
-  }
-
-  private buildMergePrompt(originalAssignment: Assignment): string {
-    return `You are a merge agent. Your task is to merge the completed feature branch into master.
-
-BRANCH TO MERGE: ${originalAssignment.branch}
-ORIGINAL FEATURE: ${originalAssignment.feature}
-
-CRITICAL: You must rebase the feature branch on master BEFORE merging to avoid losing code during merge conflicts.
-
-TASKS:
-1. First, fetch and update master:
-   \`\`\`
-   git fetch origin
-   git checkout master
-   git pull origin master
-   \`\`\`
-
-2. Rebase the feature branch on master (IMPORTANT - prevents losing code):
-   \`\`\`
-   git checkout ${originalAssignment.branch}
-   git rebase master
-   \`\`\`
-   - If rebase conflicts occur, resolve them carefully
-   - Make sure to keep ALL functionality from both branches
-   - After resolving each conflict: \`git add . && git rebase --continue\`
-
-3. Review all changes made in this branch vs master:
-   \`\`\`
-   git diff master...HEAD
-   \`\`\`
-
-4. Run all tests to ensure they pass
-
-5. Run any build/lint commands
-
-6. Merge to master with a clean merge commit:
-   \`\`\`
-   git checkout master
-   git merge --no-ff ${originalAssignment.branch} -m "Merge ${originalAssignment.branch}: ${originalAssignment.feature}"
-   \`\`\`
-
-7. Push to master (if appropriate)
-
-When complete, output: ===SIGNAL:DEV_COMPLETED===
-
-If you encounter blockers (test failures, unresolvable conflicts), output: ===SIGNAL:BLOCKER===
-`
-  }
-
-  private async createMergeSpec(
-    projectPath: string,
-    mergeAssignment: Assignment,
-    originalAssignment: Assignment
-  ): Promise<void> {
-    const specDir = join(projectPath, 'docs', 'agents', 'assignments')
-    if (!existsSync(specDir)) {
-      mkdirSync(specDir, { recursive: true })
-    }
-
-    const specPath = join(projectPath, mergeAssignment.specFile)
-    const specContent = `# Merge Specification
-
-## Original Assignment
-- **Agent**: ${originalAssignment.agentId}
-- **Branch**: ${originalAssignment.branch}
-- **Feature**: ${originalAssignment.feature}
-
-## Merge Task
-This is an automated merge agent assignment. Merge the feature branch into master.
-
-**CRITICAL**: Rebase the feature branch on master BEFORE merging to avoid losing code during merge conflicts.
-
-## Steps
-1. Fetch and update master:
-   \`\`\`
-   git fetch origin
-   git checkout master
-   git pull origin master
-   \`\`\`
-
-2. Rebase the feature branch on master (IMPORTANT):
-   \`\`\`
-   git checkout ${originalAssignment.branch}
-   git rebase master
-   \`\`\`
-   - Resolve any rebase conflicts carefully, keeping ALL functionality from both branches
-   - After resolving: \`git add . && git rebase --continue\`
-
-3. Review changes: \`git diff master...HEAD\`
-
-4. Run tests
-
-5. Merge to master:
-   \`\`\`
-   git checkout master
-   git merge --no-ff ${originalAssignment.branch} -m "Merge ${originalAssignment.branch}: ${originalAssignment.feature}"
-   \`\`\`
-
-6. Push to master
-
-7. Signal completion with ===SIGNAL:DEV_COMPLETED===
-
-## Success Criteria
-- Feature branch rebased on latest master
-- All tests pass
-- No merge conflicts (or conflicts resolved intelligently without losing code)
-- Clean merge commit created
-- Changes pushed to master
-`
-
-    writeFileSync(specPath, specContent, 'utf-8')
-  }
-
-  async completeMerge(projectPath: string, mergeAssignmentId: string, success: boolean): Promise<void> {
-    const data = this.getAssignments(projectPath)
-    const mergeAssignment = data.assignments.find(a => a.id === mergeAssignmentId)
-
-    if (!mergeAssignment) {
-      throw new Error('Merge assignment not found')
-    }
-
-    // Find the original assignment (the one being merged)
-    const originalAssignment = data.assignments.find(a =>
-      a.status === 'merging' &&
-      a.branch === mergeAssignment.branch &&
-      a.id !== mergeAssignmentId
-    )
-
-    if (success) {
-      // Archive the original assignment
-      if (originalAssignment) {
-        const originalIndex = data.assignments.findIndex(a => a.id === originalAssignment.id)
-        data.assignments[originalIndex].status = 'archived'
-
-        // Free up the original agent
-        if (!data.availableAgentIds.includes(originalAssignment.agentId)) {
-          data.availableAgentIds.push(originalAssignment.agentId)
+      // Check for uncommitted changes
+      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
+      if (statusOutput.trim()) {
+        if (autoCommit) {
+          // Auto-commit changes
+          console.log('[AgentService] Auto-committing changes...')
+          await execAsync('git add -A', { cwd: worktreePath })
+          const commitMessage = `Complete: ${assignment.feature}`
+          await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
+          console.log('[AgentService] Changes committed')
+        } else {
+          throw new Error('Branch has uncommitted changes. Please commit all changes before creating a PR.')
         }
       }
 
-      // Archive the merge assignment
-      const mergeIndex = data.assignments.findIndex(a => a.id === mergeAssignmentId)
-      data.assignments[mergeIndex].status = 'archived'
-
-      // Free up the merge agent
-      if (!data.availableAgentIds.includes(mergeAssignment.agentId)) {
-        data.availableAgentIds.push(mergeAssignment.agentId)
+      // Check if there are commits on this branch
+      try {
+        const { stdout: commitCount } = await execAsync(`git rev-list --count master..${assignment.branch}`, { cwd: worktreePath })
+        if (parseInt(commitCount.trim()) === 0) {
+          throw new Error('No commits on this branch. Make sure changes are committed before creating a PR.')
+        }
+      } catch (error: any) {
+        if (error.message.includes('No commits')) {
+          throw error
+        }
+        // If the command fails for other reasons, continue - branch might not have master locally
       }
 
-      // Teardown both worktrees
-      await this.teardownAgent(projectPath, originalAssignment.agentId, false)
-      await this.teardownAgent(projectPath, mergeAssignment.agentId, false)
-    } else {
-      // Merge failed - revert original assignment to review state
-      if (originalAssignment) {
-        const originalIndex = data.assignments.findIndex(a => a.id === originalAssignment.id)
-        data.assignments[originalIndex].status = 'review'
+      // Push the branch to origin
+      console.log('[AgentService] Pushing branch to origin...')
+      try {
+        await execAsync(`git push -u origin ${assignment.branch}`, { cwd: worktreePath })
+      } catch (pushError: any) {
+        // Branch might already be pushed
+        if (!pushError.message.includes('up-to-date')) {
+          console.error('Push error:', pushError)
+        }
       }
 
-      // Mark merge assignment as blocked
-      const mergeIndex = data.assignments.findIndex(a => a.id === mergeAssignmentId)
-      data.assignments[mergeIndex].status = 'blocked'
+      // Read the spec file for PR body
+      let prBody = assignment.feature
+      const specPath = join(projectPath, assignment.specFile)
+      if (existsSync(specPath)) {
+        prBody = readFileSync(specPath, 'utf-8')
+      } else if (assignment.prompt) {
+        prBody = assignment.prompt
+      }
+
+      // Create PR title from feature
+      const prTitle = assignment.feature.length > 72 
+        ? assignment.feature.substring(0, 69) + '...'
+        : assignment.feature
+
+      // Try to create PR
+      console.log('[AgentService] Creating PR...')
+      try {
+        const { stdout } = await execAsync(
+          `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --base master`,
+          { cwd: worktreePath }
+        )
+        
+        // Extract PR URL from output
+        const urlMatch = stdout.match(/https:\/\/github\.com\/[^\s]+/)
+        const prUrl = urlMatch ? urlMatch[0] : stdout.trim()
+
+        // Update assignment with PR URL and status
+        const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
+        data.assignments[assignmentIndex].prUrl = prUrl
+        data.assignments[assignmentIndex].prStatus = 'OPEN'
+        data.assignments[assignmentIndex].status = 'pr_open'
+
+        const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+        writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+
+        console.log('[AgentService] PR created:', prUrl)
+        return { url: prUrl }
+      } catch (prError: any) {
+        // Check if PR already exists
+        if (prError.message.includes('already exists')) {
+          console.log('[AgentService] PR already exists, fetching URL...')
+          const { stdout } = await execAsync(
+            `gh pr list --head ${assignment.branch} --json url --jq '.[0].url'`,
+            { cwd: worktreePath }
+          )
+          const prUrl = stdout.trim()
+
+          // Update assignment
+          const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
+          data.assignments[assignmentIndex].prUrl = prUrl
+          data.assignments[assignmentIndex].prStatus = 'OPEN'
+          data.assignments[assignmentIndex].status = 'pr_open'
+
+          const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+          writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+
+          return { url: prUrl }
+        }
+        throw prError
+      }
+    } catch (error: any) {
+      console.error('[AgentService] Failed to create PR:', error)
+      throw new Error(`Failed to create pull request: ${error.message}`)
+    }
+  }
+
+  async checkPullRequestStatus(projectPath: string, assignmentId: string): Promise<{ status: string; mergedAt?: string }> {
+    const data = this.getAssignments(projectPath)
+    const assignment = data.assignments.find(a => a.id === assignmentId)
+
+    if (!assignment || !assignment.prUrl) {
+      throw new Error('Assignment or PR URL not found')
     }
 
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
-    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+    try {
+      // Extract PR number from URL
+      const prNumberMatch = assignment.prUrl.match(/\/pull\/(\d+)/)
+      if (!prNumberMatch) {
+        throw new Error('Could not extract PR number from URL')
+      }
+      const prNumber = prNumberMatch[1]
+
+      // Check PR status using gh CLI
+      const { stdout } = await execAsync(
+        `gh pr view ${prNumber} --json state,mergedAt`,
+        { cwd: projectPath }
+      )
+
+      const prData = JSON.parse(stdout)
+      const status = prData.state // OPEN, MERGED, CLOSED
+
+      // Update assignment status
+      const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
+      data.assignments[assignmentIndex].prStatus = status
+
+      if (status === 'MERGED') {
+        data.assignments[assignmentIndex].status = 'merged'
+      } else if (status === 'CLOSED') {
+        data.assignments[assignmentIndex].status = 'closed'
+      }
+
+      const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+      writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+
+      return {
+        status,
+        mergedAt: prData.mergedAt
+      }
+    } catch (error: any) {
+      console.error('[AgentService] Failed to check PR status:', error)
+      throw new Error(`Failed to check PR status: ${error.message}`)
+    }
   }
 }
 

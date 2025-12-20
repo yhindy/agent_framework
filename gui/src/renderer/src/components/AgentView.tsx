@@ -290,7 +290,7 @@ function AgentView({}: AgentViewProps) {
           )}
           <button onClick={handleOpenCursor}>Open in Cursor</button>
 
-          {assignment && assignment.status !== 'completed' && assignment.status !== 'merging' && (
+          {assignment && assignment.status !== 'completed' && assignment.status !== 'pr_open' && assignment.status !== 'merged' && (
             <button onClick={handleMarkComplete} className="success">
               Mark Complete
             </button>

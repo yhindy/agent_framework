@@ -16,6 +16,8 @@ interface Assignment {
   tool: string
   model?: string
   mode: string
+  prUrl?: string
+  prStatus?: string
 }
 
 function Dashboard({ project }: DashboardProps) {
@@ -24,10 +26,13 @@ function Dashboard({ project }: DashboardProps) {
   const [availableAgents, setAvailableAgents] = useState<string[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [mergingAssignments, setMergingAssignments] = useState<Set<string>>(new Set())
-  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
-  const [selectedAssignmentForMerge, setSelectedAssignmentForMerge] = useState<Assignment | null>(null)
-  const [mergeTool, setMergeTool] = useState<'claude' | 'cursor' | 'cursor-cli'>('claude')
+  const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
+  const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
+  const [showPRConfirm, setShowPRConfirm] = useState(false)
+  const [selectedAssignmentForPR, setSelectedAssignmentForPR] = useState<Assignment | null>(null)
+  const [autoCommit, setAutoCommit] = useState(true)
+  const [ghAvailable, setGhAvailable] = useState(true)
+  const [ghError, setGhError] = useState<string>('')
   const [formData, setFormData] = useState({
     agentId: '',
     shortName: '',
@@ -41,6 +46,7 @@ function Dashboard({ project }: DashboardProps) {
 
   useEffect(() => {
     loadAssignments()
+    checkDependencies()
 
     // Listen for assignment updates
     const unsubscribe = window.electronAPI.onAssignmentsUpdate(() => {
@@ -49,6 +55,17 @@ function Dashboard({ project }: DashboardProps) {
 
     return () => unsubscribe()
   }, [project])
+
+  const checkDependencies = async () => {
+    try {
+      const result = await window.electronAPI.checkDependencies()
+      setGhAvailable(result.ghInstalled && result.ghAuthenticated)
+      setGhError(result.error || '')
+    } catch (error) {
+      setGhAvailable(false)
+      setGhError('Failed to check dependencies')
+    }
+  }
 
   const loadAssignments = async () => {
     const data = await window.electronAPI.getAssignments()
@@ -103,29 +120,72 @@ function Dashboard({ project }: DashboardProps) {
     }
   }
 
-  const handleMergeClick = (assignment: Assignment) => {
-    setSelectedAssignmentForMerge(assignment)
-    setShowMergeConfirm(true)
+  const handleCreatePRClick = (assignment: Assignment) => {
+    setSelectedAssignmentForPR(assignment)
+    setAutoCommit(true) // Reset to default checked
+    setShowPRConfirm(true)
   }
 
-  const handleConfirmMerge = async () => {
-    if (!selectedAssignmentForMerge) return
+  const handleConfirmCreatePR = async () => {
+    if (!selectedAssignmentForPR) return
 
     try {
-      setMergingAssignments(prev => new Set(prev).add(selectedAssignmentForMerge.id))
-      setShowMergeConfirm(false)
+      setCreatingPRFor(prev => new Set(prev).add(selectedAssignmentForPR.id))
+      setShowPRConfirm(false)
 
-      console.log('[Dashboard] Initiating merge with tool:', mergeTool)
-      await window.electronAPI.initiateMerge(selectedAssignmentForMerge.id, mergeTool)
+      console.log('[Dashboard] Creating PR for:', selectedAssignmentForPR.id, 'autoCommit:', autoCommit)
+      const result = await window.electronAPI.createPullRequest(selectedAssignmentForPR.id, autoCommit)
+      
+      // Show success with link
+      alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
+      window.open(result.url, '_blank')
     } catch (error: any) {
-      alert(`Merge failed: ${error.message}`)
-      setMergingAssignments(prev => {
+      alert(`Failed to create PR: ${error.message}`)
+    } finally {
+      setCreatingPRFor(prev => {
         const updated = new Set(prev)
-        updated.delete(selectedAssignmentForMerge.id)
+        updated.delete(selectedAssignmentForPR.id)
         return updated
       })
+      setSelectedAssignmentForPR(null)
+    }
+  }
+
+  const handleCheckPRStatus = async (assignment: Assignment) => {
+    try {
+      setCheckingPRFor(prev => new Set(prev).add(assignment.id))
+      
+      console.log('[Dashboard] Checking PR status for:', assignment.id)
+      const result = await window.electronAPI.checkPullRequestStatus(assignment.id)
+      
+      if (result.status === 'MERGED') {
+        alert(`PR has been merged! 🎉\n\nYou can now archive this assignment.`)
+      } else if (result.status === 'CLOSED') {
+        alert('PR was closed without merging.')
+      } else {
+        alert('PR is still open.')
+      }
+    } catch (error: any) {
+      alert(`Failed to check PR status: ${error.message}`)
     } finally {
-      setSelectedAssignmentForMerge(null)
+      setCheckingPRFor(prev => {
+        const updated = new Set(prev)
+        updated.delete(assignment.id)
+        return updated
+      })
+    }
+  }
+
+  const handleArchive = async (assignment: Assignment) => {
+    if (!confirm(`Archive ${assignment.agentId} and remove worktree?\n\nThis will permanently delete the worktree.`)) {
+      return
+    }
+
+    try {
+      await window.electronAPI.teardownAgent(assignment.agentId, false)
+      alert('Assignment archived and worktree removed.')
+    } catch (error: any) {
+      alert(`Failed to archive: ${error.message}`)
     }
   }
 
@@ -139,8 +199,12 @@ function Dashboard({ project }: DashboardProps) {
         return '#dcdcaa'
       case 'completed':
         return '#4ec9b0'
-      case 'merging':
+      case 'pr_open':
         return '#c586c0'
+      case 'merged':
+        return '#569cd6'
+      case 'closed':
+        return '#858585'
       case 'blocked':
         return '#f48771'
       default:
@@ -169,7 +233,8 @@ function Dashboard({ project }: DashboardProps) {
     in_progress: assignments.filter((a) => a.status === 'in_progress'),
     review: assignments.filter((a) => a.status === 'review'),
     completed: assignments.filter((a) => a.status === 'completed'),
-    merging: assignments.filter((a) => a.status === 'merging')
+    pr_open: assignments.filter((a) => a.status === 'pr_open'),
+    merged: assignments.filter((a) => a.status === 'merged')
   }
 
   const handleNewAssignment = () => {
@@ -236,20 +301,93 @@ function Dashboard({ project }: DashboardProps) {
                         <span className="meta-label">Mode:</span>
                         <span className="meta-value">{assignment.mode}</span>
                       </div>
+                      {assignment.prUrl && (
+                        <div className="meta-item">
+                          <span className="meta-label">PR:</span>
+                          <a 
+                            href={assignment.prUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: '#4ec9b0', textDecoration: 'underline' }}
+                          >
+                            View on GitHub
+                          </a>
+                        </div>
+                      )}
                     </div>
                     {assignment.status === 'completed' && (
                       <div className="card-actions">
+                        {!ghAvailable && (
+                          <div style={{ fontSize: '12px', color: '#f48771', marginBottom: '8px' }}>
+                            ⚠️ {ghError}
+                          </div>
+                        )}
                         <button
                           className="merge-button"
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleMergeClick(assignment)
+                            handleCreatePRClick(assignment)
                           }}
-                          disabled={mergingAssignments.has(assignment.id)}
+                          disabled={creatingPRFor.has(assignment.id) || !ghAvailable}
                         >
-                          {mergingAssignments.has(assignment.id)
-                            ? 'Merging...'
-                            : 'Mark as Done & Merge'}
+                          {creatingPRFor.has(assignment.id)
+                            ? 'Creating PR...'
+                            : 'Create Pull Request'}
+                        </button>
+                      </div>
+                    )}
+                    {assignment.status === 'pr_open' && (
+                      <div className="card-actions">
+                        {assignment.prUrl && (
+                          <button
+                            className="merge-button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              window.open(assignment.prUrl, '_blank')
+                            }}
+                            style={{ marginBottom: '4px', background: '#569cd6' }}
+                          >
+                            Open PR on GitHub
+                          </button>
+                        )}
+                        <button
+                          className="merge-button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCheckPRStatus(assignment)
+                          }}
+                          disabled={checkingPRFor.has(assignment.id)}
+                        >
+                          {checkingPRFor.has(assignment.id)
+                            ? 'Checking...'
+                            : 'Check PR Status'}
+                        </button>
+                      </div>
+                    )}
+                    {assignment.status === 'merged' && (
+                      <div className="card-actions">
+                        {assignment.prUrl && (
+                          <button
+                            className="merge-button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              window.open(assignment.prUrl, '_blank')
+                            }}
+                            style={{ marginBottom: '4px', background: '#4ec9b0' }}
+                          >
+                            View Merged PR
+                          </button>
+                        )}
+                        <button
+                          className="merge-button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleArchive(assignment)
+                          }}
+                          style={{ background: '#569cd6' }}
+                        >
+                          Archive & Cleanup
                         </button>
                       </div>
                     )}
@@ -429,39 +567,41 @@ function Dashboard({ project }: DashboardProps) {
         </div>
       )}
 
-      {showMergeConfirm && selectedAssignmentForMerge && (
-        <div className="modal-overlay" onClick={() => setShowMergeConfirm(false)}>
+      {showPRConfirm && selectedAssignmentForPR && (
+        <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Confirm Merge</h2>
+            <h2>Create Pull Request</h2>
             <p>
-              This will spawn a merge agent to intelligently merge the changes from:
+              This will push the branch and create a PR on GitHub for:
             </p>
             <div className="merge-info">
-              <div><strong>Agent:</strong> {selectedAssignmentForMerge.agentId}</div>
-              <div><strong>Branch:</strong> {selectedAssignmentForMerge.branch}</div>
-              <div><strong>Feature:</strong> {selectedAssignmentForMerge.feature}</div>
+              <div><strong>Agent:</strong> {selectedAssignmentForPR.agentId}</div>
+              <div><strong>Branch:</strong> {selectedAssignmentForPR.branch}</div>
+              <div><strong>Feature:</strong> {selectedAssignmentForPR.feature}</div>
             </div>
-            <div className="form-group">
-              <label>Tool for Merge Agent:</label>
-              <select
-                value={mergeTool}
-                onChange={(e) => setMergeTool(e.target.value as 'claude' | 'cursor' | 'cursor-cli')}
-              >
-                <option value="claude">Claude CLI</option>
-                <option value="cursor">Cursor IDE</option>
-                <option value="cursor-cli">Cursor CLI</option>
-              </select>
+            <div className="form-group checkbox-group" style={{ marginTop: '16px' }}>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={autoCommit}
+                  onChange={(e) => setAutoCommit(e.target.checked)}
+                />
+                <span className="checkbox-text">Auto-commit uncommitted changes</span>
+              </label>
+              <div className="form-hint">
+                If checked, any uncommitted changes will be automatically committed before creating the PR.
+              </div>
             </div>
             <p className="warning-text">
-              The merge agent will review changes, handle conflicts, run tests,
-              and merge to master. You'll be able to monitor progress in the dashboard.
+              The branch will be pushed to origin and a pull request will be created
+              using the GitHub CLI. You can then review and merge it on GitHub.
             </p>
             <div className="form-actions">
-              <button type="button" onClick={() => setShowMergeConfirm(false)}>
+              <button type="button" onClick={() => setShowPRConfirm(false)}>
                 Cancel
               </button>
-              <button type="button" className="primary" onClick={handleConfirmMerge}>
-                Start Merge
+              <button type="button" className="primary" onClick={handleConfirmCreatePR}>
+                Create PR
               </button>
             </div>
           </div>
