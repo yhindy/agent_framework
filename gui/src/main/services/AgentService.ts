@@ -320,8 +320,9 @@ export class AgentService {
       throw new Error('Assignment not found')
     }
 
-    if (assignment.status !== 'completed') {
-      throw new Error('Only completed assignments can have PRs created')
+    // Allow PR creation from in_progress, review, or completed states
+    if (['pending', 'blocked', 'closed'].includes(assignment.status)) {
+      throw new Error(`Cannot create PR for assignment in '${assignment.status}' status`)
     }
 
     // Find the worktree for this agent

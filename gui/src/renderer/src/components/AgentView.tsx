@@ -46,6 +46,9 @@ function AgentView({}: AgentViewProps) {
   const [activeTab, setActiveTab] = useState<string>('agent')
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
+  const [showPRConfirm, setShowPRConfirm] = useState(false)
+  const [autoCommit, setAutoCommit] = useState(true)
+  const [isCreatingPR, setIsCreatingPR] = useState(false)
 
   useEffect(() => {
     if (!agentId) return
@@ -259,14 +262,31 @@ function AgentView({}: AgentViewProps) {
     }
   }
 
-  const handleMarkComplete = async () => {
+  const handleCreatePRClick = () => {
+    setAutoCommit(true)
+    setShowPRConfirm(true)
+  }
+
+  const handleConfirmCreatePR = async () => {
     if (!assignment) return
 
     try {
-      await window.electronAPI.updateAssignment(assignment.id, { status: 'completed' })
+      setIsCreatingPR(true)
+      setShowPRConfirm(false)
+
+      console.log('[AgentView] Creating PR for:', assignment.id, 'autoCommit:', autoCommit)
+      const result = await window.electronAPI.createPullRequest(assignment.id, autoCommit)
+      
+      // Show success with link
+      alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
+      window.open(result.url, '_blank')
+      
+      // Reload agent data to reflect new status
       loadAgentData()
     } catch (error: any) {
-      alert(`Error marking complete: ${error.message}`)
+      alert(`Failed to create PR: ${error.message}`)
+    } finally {
+      setIsCreatingPR(false)
     }
   }
 
@@ -354,9 +374,13 @@ function AgentView({}: AgentViewProps) {
           )}
           <button onClick={handleOpenCursor}>Open in Cursor</button>
 
-          {assignment && assignment.status !== 'completed' && assignment.status !== 'pr_open' && assignment.status !== 'merged' && (
-            <button onClick={handleMarkComplete} className="success">
-              Mark Complete
+          {assignment && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
+            <button 
+              onClick={handleCreatePRClick} 
+              className="success"
+              disabled={isCreatingPR}
+            >
+              {isCreatingPR ? 'Creating PR...' : 'Make PR'}
             </button>
           )}
 
@@ -492,6 +516,47 @@ function AgentView({}: AgentViewProps) {
         onConfirm={handleForceTeardown}
         onCancel={() => setShowForceModal(false)}
       />
+
+      {showPRConfirm && assignment && (
+        <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Create Pull Request</h2>
+            <p>
+              This will push the branch and create a PR on GitHub for:
+            </p>
+            <div className="merge-info">
+              <div><strong>Agent:</strong> {assignment.agentId}</div>
+              <div><strong>Branch:</strong> {assignment.branch}</div>
+              <div><strong>Feature:</strong> {assignment.feature}</div>
+            </div>
+            <div className="form-group checkbox-group" style={{ marginTop: '16px' }}>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={autoCommit}
+                  onChange={(e) => setAutoCommit(e.target.checked)}
+                />
+                <span className="checkbox-text">Auto-commit uncommitted changes</span>
+              </label>
+              <div className="form-hint">
+                If checked, any uncommitted changes will be automatically committed before creating the PR.
+              </div>
+            </div>
+            <p className="warning-text">
+              The branch will be pushed to origin and a pull request will be created
+              using the GitHub CLI. You can then review and merge it on GitHub.
+            </p>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowPRConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={handleConfirmCreatePR}>
+                Create PR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
