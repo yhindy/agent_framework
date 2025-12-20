@@ -103,17 +103,6 @@ function AgentView({}: AgentViewProps) {
     }
   }
 
-  const handleStartAgent = async () => {
-    if (!agentId || currentTool === 'cursor') return
-
-    try {
-      await window.electronAPI.startAgent(agentId, currentTool, currentMode, currentModel)
-      loadAgentData()
-    } catch (error: any) {
-      alert('Error starting agent: ' + error.message)
-    }
-  }
-
   const handleStopAgent = async () => {
     if (!agentId) return
 
@@ -294,19 +283,10 @@ function AgentView({}: AgentViewProps) {
         </div>
 
         <div className="agent-actions">
-          {currentTool !== 'cursor' && (
-            <>
-              {!isRunning && (
-                <button onClick={handleStartAgent} className="primary">
-                  Start
-                </button>
-              )}
-              {isRunning && (
-                <button onClick={handleStopAgent} className="danger">
-                  Stop
-                </button>
-              )}
-            </>
+          {currentTool !== 'cursor' && isRunning && (
+            <button onClick={handleStopAgent} className="danger">
+              Stop
+            </button>
           )}
           <button onClick={handleOpenCursor}>Open in Cursor</button>
 

@@ -10,7 +10,6 @@ declare global {
 
       // Agent APIs
       listAgents: () => Promise<any[]>
-      startAgent: (agentId: string, tool: string, mode: string, prompt?: string) => Promise<void>
       stopAgent: (agentId: string) => Promise<void>
       openInCursor: (agentId: string) => Promise<void>
       clearUnread: (agentId: string) => Promise<void>
