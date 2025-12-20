@@ -285,7 +285,6 @@ function AgentView({}: AgentViewProps) {
       <div className="agent-header">
         <div className="agent-title">
           <h2>{agentId}</h2>
-          {assignment && <span className="feature-name">{assignment.feature}</span>}
         </div>
 
         <div className="agent-controls">
@@ -345,8 +344,6 @@ function AgentView({}: AgentViewProps) {
               </select>
             </div>
           )}
-
-          {assignment && <div className="branch-info">Branch: {assignment.branch}</div>}
         </div>
 
         <div className="agent-actions">
@@ -374,6 +371,23 @@ function AgentView({}: AgentViewProps) {
           </div>
         </div>
       </div>
+
+      {assignment && (
+        <div className="agent-info-bar">
+          <div className="info-item">
+            <span className="info-label">Feature:</span>
+            <span className="info-value">{assignment.feature}</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Branch:</span>
+            <span className="info-value">{assignment.branch}</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Status:</span>
+            <span className="info-value">{assignment.status}</span>
+          </div>
+        </div>
+      )}
 
       {signalMessage && (
         <div className={`signal-message ${signalMessage.includes('⚠️') ? 'warning' : 'info'}`}>
