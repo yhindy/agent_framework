@@ -281,41 +281,45 @@ function Dashboard({ project }: DashboardProps) {
                         style={{ background: getStatusColor(assignment.status) }}
                       />
                     </div>
-                    <div className="card-title">{assignment.feature}</div>
-                    <div className="card-meta">
-                      <div className="meta-item">
-                        <span className="meta-label">Branch:</span>
-                        <span className="meta-value">{assignment.branch}</span>
-                      </div>
-                      <div className="meta-item">
-                        <span className="meta-label">Tool:</span>
-                        <span className="meta-value">{assignment.tool}</span>
-                      </div>
-                      {assignment.model && (
-                        <div className="meta-item">
-                          <span className="meta-label">Model:</span>
-                          <span className="meta-value">{assignment.model}</span>
+                    {assignment.status !== 'unassigned' && (
+                      <>
+                        <div className="card-title">{assignment.feature}</div>
+                        <div className="card-meta">
+                          <div className="meta-item">
+                            <span className="meta-label">Branch:</span>
+                            <span className="meta-value">{assignment.branch}</span>
+                          </div>
+                          <div className="meta-item">
+                            <span className="meta-label">Tool:</span>
+                            <span className="meta-value">{assignment.tool}</span>
+                          </div>
+                          {assignment.model && (
+                            <div className="meta-item">
+                              <span className="meta-label">Model:</span>
+                              <span className="meta-value">{assignment.model}</span>
+                            </div>
+                          )}
+                          <div className="meta-item">
+                            <span className="meta-label">Mode:</span>
+                            <span className="meta-value">{assignment.mode}</span>
+                          </div>
+                          {assignment.prUrl && (
+                            <div className="meta-item">
+                              <span className="meta-label">PR:</span>
+                              <a
+                                href={assignment.prUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ color: '#4ec9b0', textDecoration: 'underline' }}
+                              >
+                                View on GitHub
+                              </a>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <div className="meta-item">
-                        <span className="meta-label">Mode:</span>
-                        <span className="meta-value">{assignment.mode}</span>
-                      </div>
-                      {assignment.prUrl && (
-                        <div className="meta-item">
-                          <span className="meta-label">PR:</span>
-                          <a 
-                            href={assignment.prUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: '#4ec9b0', textDecoration: 'underline' }}
-                          >
-                            View on GitHub
-                          </a>
-                        </div>
-                      )}
-                    </div>
+                      </>
+                    )}
                     {assignment.status === 'completed' && (
                       <div className="card-actions">
                         {!ghAvailable && (
