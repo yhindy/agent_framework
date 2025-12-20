@@ -9,8 +9,6 @@ const api = {
 
   // Agent APIs
   listAgents: () => ipcRenderer.invoke('agents:list'),
-  startAgent: (agentId: string, tool: string, mode: string, prompt?: string, model?: string) =>
-    ipcRenderer.invoke('agents:start', agentId, tool, mode, prompt, model),
   stopAgent: (agentId: string) => ipcRenderer.invoke('agents:stop', agentId),
   openInCursor: (agentId: string) => ipcRenderer.invoke('agents:openCursor', agentId),
   clearUnread: (agentId: string) => ipcRenderer.invoke('agents:clearUnread', agentId),
