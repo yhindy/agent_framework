@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
+import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import './AgentView.css'
 
@@ -42,11 +43,16 @@ function AgentView({}: AgentViewProps) {
   const [cleanupAction, setCleanupAction] = useState<'teardown' | 'unassign'>('unassign')
   const [showForceModal, setShowForceModal] = useState(false)
   const [_teardownError, setTeardownError] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<string>('agent')
+  const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
+  const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
 
   useEffect(() => {
     if (!agentId) return
 
     loadAgentData()
+    loadTestEnvConfig()
+    loadTestEnvStatus()
 
     // Listen for signals
     const unsubscribeSignal = window.electronAPI.onAgentSignal((id, signal) => {
@@ -60,9 +66,25 @@ function AgentView({}: AgentViewProps) {
       loadAgentData()
     })
 
+    // Listen for test env lifecycle events
+    const unsubscribeStarted = window.electronAPI.onTestEnvStarted((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
+    const unsubscribeStopped = window.electronAPI.onTestEnvStopped((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
+    const unsubscribeExited = window.electronAPI.onTestEnvExited((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
     return () => {
       unsubscribeSignal()
       unsubscribeUpdate()
+      unsubscribeStarted()
+      unsubscribeStopped()
+      unsubscribeExited()
     }
   }, [agentId])
 
@@ -84,6 +106,51 @@ function AgentView({}: AgentViewProps) {
       setCurrentModel(assignmentData.model || 'opus')
       setCurrentMode(assignmentData.mode)
     }
+  }
+
+  const loadTestEnvConfig = async () => {
+    try {
+      const config = await window.electronAPI.getTestEnvConfig()
+      setTestEnvCommands(config.defaultCommands || [])
+    } catch (error) {
+      console.error('Error loading test env config:', error)
+    }
+  }
+
+  const loadTestEnvStatus = async () => {
+    if (!agentId) return
+    try {
+      const statuses = await window.electronAPI.getTestEnvStatus(agentId)
+      setTestEnvStatuses(statuses)
+    } catch (error) {
+      console.error('Error loading test env status:', error)
+    }
+  }
+
+  const handleStartTestEnv = async (commandId: string) => {
+    if (!agentId) return
+    try {
+      await window.electronAPI.startTestEnv(agentId, commandId)
+      await loadTestEnvStatus()
+      setActiveTab(commandId)
+    } catch (error: any) {
+      alert('Error starting test environment: ' + error.message)
+    }
+  }
+
+  const handleStopTestEnv = async (commandId: string) => {
+    if (!agentId) return
+    try {
+      await window.electronAPI.stopTestEnv(agentId, commandId)
+      await loadTestEnvStatus()
+    } catch (error: any) {
+      alert('Error stopping test environment: ' + error.message)
+    }
+  }
+
+  const getTestEnvStatus = (commandId: string): boolean => {
+    const status = testEnvStatuses.find(s => s.commandId === commandId)
+    return status?.isRunning || false
   }
 
   const handleSignal = (signal: string) => {
@@ -315,17 +382,76 @@ function AgentView({}: AgentViewProps) {
       )}
 
       <div className="agent-content">
-        {currentTool === 'cursor' && !isRunning ? (
-          <div className="placeholder">
-            <div className="placeholder-icon">💬</div>
-            <div className="placeholder-text">
-              <p>This agent uses Cursor IDE.</p>
-              <p>Click "Open in Cursor" to start working.</p>
-            </div>
+        <div className="unified-tabs">
+          {/* Agent Terminal Tab (or Cursor placeholder) */}
+          <div
+            className={`unified-tab ${activeTab === 'agent' ? 'active' : ''}`}
+            onClick={() => setActiveTab('agent')}
+          >
+            <span className="tab-icon">🤖</span>
+            <span className="tab-name">
+              {currentTool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Agent Terminal'}
+            </span>
           </div>
-        ) : (
-          agentId && <Terminal agentId={agentId} />
-        )}
+
+          {/* Test Environment Tabs */}
+          {testEnvCommands.map(cmd => {
+            const isRunning = getTestEnvStatus(cmd.id)
+            return (
+              <div
+                key={cmd.id}
+                className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(cmd.id)}
+              >
+                <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
+                <span className="tab-name">{cmd.name}</span>
+                {cmd.port && <span className="tab-port">:{cmd.port}</span>}
+                {isRunning ? (
+                  <button 
+                    className="tab-action stop"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStopTestEnv(cmd.id)
+                    }}
+                  >
+                    ⬛
+                  </button>
+                ) : (
+                  <button 
+                    className="tab-action start"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStartTestEnv(cmd.id)
+                    }}
+                  >
+                    ▶
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="unified-terminal-container">
+          {activeTab === 'agent' && (
+            currentTool === 'cursor' && !isRunning ? (
+              <div className="placeholder">
+                <div className="placeholder-icon">💬</div>
+                <div className="placeholder-text">
+                  <p>This agent uses Cursor IDE.</p>
+                  <p>Click "Open in Cursor" to start working.</p>
+                </div>
+              </div>
+            ) : (
+              agentId && <Terminal agentId={agentId} />
+            )
+          )}
+          {testEnvCommands.map(cmd => (
+            activeTab === cmd.id && agentId && (
+              <TestEnvTerminal key={cmd.id} agentId={agentId} commandId={cmd.id} />
+            )
+          ))}
+        </div>
       </div>
 
       <ConfirmModal

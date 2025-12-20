@@ -1,0 +1,12 @@
+{
+  "defaultCommands": [
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "command": "npm install; npx rebuild-electron; npm run dev",
+      "cwd": "gui/",
+      "port": 3000
+    }
+  ]
+}
+

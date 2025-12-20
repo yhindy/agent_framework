@@ -5,6 +5,7 @@ import { ProjectService } from './services/ProjectService'
 import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
+import { TestEnvService } from './services/TestEnvService'
 
 let mainWindow: BrowserWindow | null = null
 let services: {
@@ -12,6 +13,7 @@ let services: {
   agent: AgentService
   terminal: TerminalService
   fileWatcher: FileWatcherService
+  testEnv: TestEnvService
 } | null = null
 
 function createWindow(): void {
@@ -51,7 +53,8 @@ function initializeServices(): void {
     project: new ProjectService(),
     agent: new AgentService(),
     terminal: new TerminalService(mainWindow),
-    fileWatcher: new FileWatcherService(mainWindow)
+    fileWatcher: new FileWatcherService(mainWindow),
+    testEnv: new TestEnvService(mainWindow)
   }
 
   // Set up IPC handlers
@@ -214,6 +217,61 @@ function setupIPC(): void {
     mainWindow?.webContents.send('agents:updated')
     mainWindow?.webContents.send('assignments:updated')
   })
+
+  // Test Environment handlers
+  ipcMain.handle('testEnv:getConfig', async () => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) return { defaultCommands: [] }
+    return services!.testEnv.loadConfig(currentProject.path)
+  })
+
+  ipcMain.handle('testEnv:getCommands', async (_event, assignmentOverrides?: any[]) => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) return []
+    return services!.testEnv.getCommands(currentProject.path, assignmentOverrides)
+  })
+
+  ipcMain.handle('testEnv:start', async (_event, agentId: string, commandId?: string) => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) throw new Error('No project selected')
+    
+    // Get agent worktree path
+    const agents = await services!.agent.listAgents(currentProject.path)
+    const agent = agents.find(a => a.id === agentId)
+    if (!agent) throw new Error('Agent not found')
+
+    const commands = services!.testEnv.getCommands(currentProject.path)
+    
+    if (commandId) {
+      // Start specific command
+      const command = commands.find(c => c.id === commandId)
+      if (!command) throw new Error('Command not found')
+      await services!.testEnv.startCommand(currentProject.path, agentId, agent.worktreePath, command)
+    } else {
+      // Start all commands
+      await services!.testEnv.startAll(currentProject.path, agentId, agent.worktreePath, commands)
+    }
+  })
+
+  ipcMain.handle('testEnv:stop', async (_event, agentId: string, commandId?: string) => {
+    if (commandId) {
+      services!.testEnv.stopCommand(agentId, commandId)
+    } else {
+      services!.testEnv.stopAll(agentId)
+    }
+  })
+
+  ipcMain.handle('testEnv:getStatus', async (_event, agentId: string) => {
+    return services!.testEnv.getStatus(agentId)
+  })
+
+  ipcMain.on('testEnv:input', (_event, agentId: string, commandId: string, data: string) => {
+    services!.testEnv.sendInput(agentId, commandId, data)
+  })
+
+  ipcMain.on('testEnv:resize', (_event, agentId: string, commandId: string, cols: number, rows: number) => {
+    services!.testEnv.resize(agentId, commandId, cols, rows)
+  })
 }
 
 app.whenReady().then(() => {
@@ -234,6 +292,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (services) {
     services.terminal.cleanup()
+    services.testEnv.cleanup()
   }
   if (process.platform !== 'darwin') {
     app.quit()
