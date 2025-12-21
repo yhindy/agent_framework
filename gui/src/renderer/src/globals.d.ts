@@ -23,6 +23,13 @@ declare global {
       resizeTerminal: (agentId: string, cols: number, rows: number) => void
       onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => void
 
+      // Plain Terminal APIs
+      startPlainTerminal: (agentId: string, terminalId: string) => Promise<void>
+      stopPlainTerminal: (terminalId: string) => Promise<void>
+      sendPlainTerminalInput: (terminalId: string, data: string) => void
+      resizePlainTerminal: (terminalId: string, cols: number, rows: number) => void
+      onPlainTerminalOutput: (callback: (terminalId: string, data: string) => void) => () => void
+
       // Assignment APIs
       getAssignments: () => Promise<any>
       createAssignment: (assignment: any) => Promise<any>

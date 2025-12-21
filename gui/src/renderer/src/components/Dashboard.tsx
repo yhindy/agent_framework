@@ -27,9 +27,10 @@ function Dashboard({ project }: DashboardProps) {
   const [availableAgents, setAvailableAgents] = useState<string[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [isCreatingPR, setIsCreatingPR] = useState(false)
+  const [isTearingDown, setIsTearingDown] = useState(false)
 
   const loadingMessages = [
-    'Setting up minion workbench...',
     'Making sure Gru has visibility...',
     'Distributing bananas...',
     'Teaching minion language basics...',
@@ -40,6 +41,26 @@ function Dashboard({ project }: DashboardProps) {
     'Polishing the shrinking ray...',
     'Preparing the fart gun...',
     'Organizing a mandatory dance party...'
+  ]
+
+  const prMessages = [
+    'Stuffing code into a rocket...',
+    'Learning to speak Human for the PR description...',
+    'Bribing the CI/CD pipeline with bananas...',
+    'Checking for accidentally committed secret cookie recipes...',
+    'Pushing code to the moon...',
+    'Summoning the code review council (Kevin, Stuart, and Bob)...',
+    'Crossing fingers and toes...'
+  ]
+
+  const teardownMessages = [
+    'Returning minion to the break room...',
+    'Cleaning up banana peels from the workspace...',
+    'Shredding incriminating documents...',
+    'Wiping fingerprints from the keyboard...',
+    'Returning stolen shrink rays...',
+    'Escaping before Gru finds out...',
+    'Restocking the vending machine...'
   ]
   const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
   const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
@@ -95,7 +116,6 @@ function Dashboard({ project }: DashboardProps) {
   const handleCreateAssignment = async () => {
     try {
       setIsCreating(true)
-      const agentId = formData.agentId
 
       // Generate branch name
       const branch = generateBranchName(formData.agentId, formData.shortName)
@@ -113,6 +133,7 @@ function Dashboard({ project }: DashboardProps) {
         yolo: formData.yolo
       })
 
+      const agentId = formData.agentId
       setShowCreateForm(false)
       setIsCreating(false)
 
@@ -152,14 +173,18 @@ function Dashboard({ project }: DashboardProps) {
     try {
       setCreatingPRFor(prev => new Set(prev).add(selectedAssignmentForPR.id))
       setShowPRConfirm(false)
+      setIsCreatingPR(true)
 
       console.log('[Dashboard] Creating PR for:', selectedAssignmentForPR.id, 'autoCommit:', autoCommit)
       const result = await window.electronAPI.createPullRequest(selectedAssignmentForPR.id, autoCommit)
+      
+      setIsCreatingPR(false)
       
       // Show success with link
       alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
       window.open(result.url, '_blank')
     } catch (error: any) {
+      setIsCreatingPR(false)
       alert(`Failed to create PR: ${error.message}`)
     } finally {
       setCreatingPRFor(prev => {
@@ -202,9 +227,12 @@ function Dashboard({ project }: DashboardProps) {
     }
 
     try {
+      setIsTearingDown(true)
       await window.electronAPI.teardownAgent(assignment.agentId, false)
+      setIsTearingDown(false)
       alert('Mission archived and worktree removed.')
     } catch (error: any) {
+      setIsTearingDown(false)
       alert(`Failed to archive: ${error.message}`)
     }
   }
@@ -635,7 +663,19 @@ function Dashboard({ project }: DashboardProps) {
       <LoadingModal
         isOpen={isCreating}
         messages={loadingMessages}
-        title="Setting up minion's workbench..."
+        title="Deploying Minion..."
+      />
+
+      <LoadingModal
+        isOpen={isCreatingPR}
+        messages={prMessages}
+        title="Creating Pull Request..."
+      />
+
+      <LoadingModal
+        isOpen={isTearingDown}
+        messages={teardownMessages}
+        title="Archiving Mission..."
       />
     </div>
   )

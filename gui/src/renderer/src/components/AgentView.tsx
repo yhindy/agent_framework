@@ -4,6 +4,7 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
+import LoadingModal from './LoadingModal'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -50,8 +51,29 @@ function AgentView({}: AgentViewProps) {
   const [showPRConfirm, setShowPRConfirm] = useState(false)
   const [autoCommit, setAutoCommit] = useState(true)
   const [isCreatingPR, setIsCreatingPR] = useState(false)
+  const [isTearingDown, setIsTearingDown] = useState(false)
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
+
+  const prMessages = [
+    'Stuffing code into a rocket...',
+    'Learning to speak Human for the PR description...',
+    'Bribing the CI/CD pipeline with bananas...',
+    'Checking for accidentally committed secret cookie recipes...',
+    'Pushing code to the moon...',
+    'Summoning the code review council (Kevin, Stuart, and Bob)...',
+    'Crossing fingers and toes...'
+  ]
+
+  const teardownMessages = [
+    'Returning minion to the break room...',
+    'Cleaning up banana peels from the workspace...',
+    'Shredding incriminating documents...',
+    'Wiping fingerprints from the keyboard...',
+    'Returning stolen shrink rays...',
+    'Escaping before Gru finds out...',
+    'Restocking the vending machine...'
+  ]
 
   useEffect(() => {
     if (!agentId) return
@@ -230,16 +252,20 @@ function AgentView({}: AgentViewProps) {
     if (!agentId) return
 
     try {
+      setShowCleanupModal(false)
+      
       if (cleanupAction === 'teardown') {
+        setIsTearingDown(true)
         await window.electronAPI.teardownAgent(agentId, false)
+        setIsTearingDown(false)
       } else {
         await window.electronAPI.unassignAgent(agentId)
       }
-      setShowCleanupModal(false)
+      
       // Navigate back to home
       navigate('/workspace')
     } catch (error: any) {
-      setShowCleanupModal(false)
+      setIsTearingDown(false)
       
       // Check if error is due to uncommitted changes
       if (cleanupAction === 'teardown' && error.message.includes('uncommitted changes')) {
@@ -255,13 +281,16 @@ function AgentView({}: AgentViewProps) {
     if (!agentId) return
 
     try {
-      await window.electronAPI.teardownAgent(agentId, true)
       setShowForceModal(false)
+      setIsTearingDown(true)
+      await window.electronAPI.teardownAgent(agentId, true)
+      setIsTearingDown(false)
+      
       // Navigate back to home
       navigate('/workspace')
     } catch (error: any) {
+      setIsTearingDown(false)
       alert(`Error during force teardown: ${error.message}`)
-      setShowForceModal(false)
     }
   }
 
@@ -626,6 +655,18 @@ function AgentView({}: AgentViewProps) {
           </div>
         </div>
       )}
+
+      <LoadingModal
+        isOpen={isCreatingPR}
+        messages={prMessages}
+        title="Creating Pull Request..."
+      />
+
+      <LoadingModal
+        isOpen={isTearingDown}
+        messages={teardownMessages}
+        title="Archiving Mission..."
+      />
     </div>
   )
 }

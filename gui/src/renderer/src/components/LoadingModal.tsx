@@ -14,7 +14,9 @@ function LoadingModal({
   messages,
   rotationInterval = 3000
 }: LoadingModalProps) {
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(() => 
+    Math.floor(Math.random() * messages.length)
+  )
   const [isFading, setIsFading] = useState(false)
 
   useEffect(() => {
@@ -23,7 +25,14 @@ function LoadingModal({
     const interval = setInterval(() => {
       setIsFading(true)
       setTimeout(() => {
-        setCurrentMessageIndex((prev) => (prev + 1) % messages.length)
+        setCurrentMessageIndex((prev) => {
+          if (messages.length <= 1) return 0
+          let nextIndex = prev
+          while (nextIndex === prev) {
+            nextIndex = Math.floor(Math.random() * messages.length)
+          }
+          return nextIndex
+        })
         setIsFading(false)
       }, 500) // Half a second for fade out
     }, rotationInterval)
