@@ -16,7 +16,7 @@ The system supports multiple parallel minions, each working in isolated git work
 **1. Create a Minion Worktree**
 
 ```bash
-./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
 ```
 
 This creates an isolated copy of your codebase for the minion to work in.
@@ -28,7 +28,7 @@ Give the minion its mission file:
 ```bash
 # Using Claude Code
 cd ../yourproject-agent-1
-claude "Read docs/agents/assignments/agent-1-*.md and implement the feature"
+claude "Read minions/assignments/agent-1-*.md and implement the feature"
 
 # Using Cursor CLI
 cursor --folder ../yourproject-agent-1
@@ -40,15 +40,17 @@ cursor --folder ../yourproject-agent-1
 ## Directory Structure
 
 ```
-docs/agents/
+minions/
 ├── README.md                    # This file
-├── ASSIGNMENTS.md               # Current feature missions
+├── ASSIGNMENTS.md               # Current feature missions (human-readable)
+├── assignments.json             # Missions database (machine-readable)
 ├── templates/
 │   └── FEATURE_SPEC.md          # Template for new missions
-└── assignments/
-    ├── agent-1-feature.md       # Active mission for agent-1
-    ├── agent-2-bugfix.md        # Active mission for agent-2
-    └── ...
+├── assignments/
+│   ├── agent-1-feature.md       # Active mission for agent-1
+│   ├── agent-2-bugfix.md        # Active mission for agent-2
+│   └── ...
+└── bin/                         # Management scripts
 ```
 
 ## Creating Missions
@@ -56,20 +58,20 @@ docs/agents/
 1. Copy `templates/FEATURE_SPEC.md` to `assignments/agent-X-feature-name.md`
 2. Fill in the feature requirements
 3. Update `ASSIGNMENTS.md` with the mission
-4. Create the worktree: `./scripts/agents/setup.sh agent-X feature/agent-X/feature-name`
+4. Create the worktree: `./minions/bin/setup.sh agent-X feature/agent-X/feature-name`
 5. Point the AI minion at the mission file
 
 ## Managing Worktrees
 
 ```bash
 # List all minion worktrees
-./scripts/agents/list.sh
+./minions/bin/list.sh
 
 # Remove a worktree when done
-./scripts/agents/teardown.sh agent-1
+./minions/bin/teardown.sh agent-1
 
 # Force remove (discards uncommitted changes)
-./scripts/agents/teardown.sh agent-1 --force
+./minions/bin/teardown.sh agent-1 --force
 ```
 
 ## Best Practices
@@ -93,9 +95,9 @@ docs/agents/
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/agents/setup.sh` | Create new minion worktree |
-| `scripts/agents/teardown.sh` | Remove minion worktree |
-| `scripts/agents/list.sh` | List all minion worktrees |
-| `scripts/agents/preflight.sh` | Verify setup before running |
-| `scripts/agents/init.sh` | One-time framework setup |
-
+| `minions/bin/setup.sh` | Create new minion worktree |
+| `minions/bin/teardown.sh` | Remove minion worktree |
+| `minions/bin/list.sh` | List all minion worktrees |
+| `minions/bin/preflight.sh` | Verify setup before running |
+| `minions/bin/init.sh` | One-time framework setup |
+| `minions/bin/dashboard.sh` | Launch GUI dashboard |

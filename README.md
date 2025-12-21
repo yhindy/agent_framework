@@ -5,19 +5,20 @@ A lightweight framework for running multiple AI coding minions in parallel on an
 ## Quick Start
 
 ```bash
-# 1. Copy this framework into your project root
-cp -r agent_framework/* /path/to/your/project/
+# 1. Install the framework into your project
+./install.sh /path/to/your/project
 
-# 2. Initialize the framework
-./scripts/agents/init.sh
+# 2. Go to your project and initialize
+cd /path/to/your/project
+./minions/bin/init.sh
 
 # 3. Create your first minion worktree
-./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
 
 # 4. Start working (choose your AI tool)
 cd ../yourproject-agent-1
 cursor .                    # Cursor IDE
-claude "Read docs/agents/assignments/agent-1-*.md and implement the feature"  # Claude Code
+claude "Read minions/assignments/agent-test-*.md and implement"  # Claude Code
 aider                       # Aider
 ```
 
@@ -25,47 +26,55 @@ aider                       # Aider
 
 ```
 your-project/
-├── scripts/agents/           # Minion management scripts
-│   ├── init.sh              # One-time setup
-│   ├── setup.sh             # Create minion worktree
-│   ├── teardown.sh          # Remove minion worktree
-│   ├── list.sh              # List all minion worktrees
-│   ├── preflight.sh         # Verify setup before running
-│   ├── migrate-assignments.js # Migrate ASSIGNMENTS.md to JSON
-│   └── test_signal.sh       # Test orchestrator signals
-├── docs/agents/              # Minion documentation
-│   ├── README.md            # Main minion guide
+├── minions/                  # Minion Framework
+│   ├── bin/                 # Management scripts
+│   │   ├── init.sh          # One-time setup
+│   │   ├── setup.sh         # Create minion worktree
+│   │   ├── teardown.sh      # Remove minion worktree
+│   │   ├── list.sh          # List all minion worktrees
+│   │   ├── dashboard.sh     # Launch GUI dashboard
+│   │   └── ...
+│   ├── assignments/         # Minion mission files
+│   ├── rules/               # Orchestrator signals
+│   ├── templates/           # Spec templates
 │   ├── assignments.json     # Track active missions
-│   ├── rules/
-│   │   └── orchestrator_signals.md # Signal protocol docs
-│   └── templates/
-│       └── FEATURE_SPEC.md  # Template for new features
-├── gui/                     # GUI Orchestrator (optional)
-│   ├── src/                 # Electron + React app
-│   └── README.md            # GUI documentation
+│   └── README.md            # Minion guide
+├── gui/                     # GUI Orchestrator source (optional)
 └── .cursor/rules/
     └── agent-rules.mdc      # Cursor IDE rules for minions
+```
+
+## Installation & Removal
+
+### Install
+```bash
+./install.sh /path/to/your/project
+```
+
+### Uninstall
+```bash
+./uninstall.sh /path/to/your/project
 ```
 
 ## Creating Minion Missions
 
 1. Copy the template:
    ```bash
-   cp docs/agents/templates/FEATURE_SPEC.md docs/agents/assignments/agent-1-my-feature.md
+   cp minions/templates/FEATURE_SPEC.md minions/assignments/agent-1-my-feature.md
    ```
 
 2. Fill in the feature requirements
 
 3. Create the worktree:
    ```bash
-   ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
+   ./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
    ```
 
 4. Point your AI minion at the mission file
 
 ## Configuration
 
-Edit `scripts/agents/config.sh` to customize:
+Edit `minions/bin/config.sh` to customize:
 - Project name (used for worktree folder names)
 - Base branch (defaults to main)
 - Files to copy to worktrees (env files, secrets, etc.)
@@ -85,9 +94,8 @@ Edit `scripts/agents/config.sh` to customize:
 A desktop app for managing minions with a visual interface:
 
 ```bash
-cd gui
-npm install
-npm run dev
+# Launch from the framework root
+./minions/bin/dashboard.sh
 ```
 
 Features:
@@ -126,4 +134,3 @@ The framework uses **git worktrees** to give each minion an isolated copy of you
 ## License
 
 MIT - Use this however you want.
-
