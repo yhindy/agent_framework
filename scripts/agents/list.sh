@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Load config
 source "$SCRIPT_DIR/config.sh"
 
-echo -e "${BLUE}🤖 Agent Worktrees for $PROJECT_NAME${NC}"
+echo -e "${BLUE}🍌 Minion Worktrees for $PROJECT_NAME${NC}"
 echo "=================================="
 echo ""
 
@@ -31,7 +31,7 @@ if [ -z "$WORKTREES" ]; then
 fi
 
 # Parse and display worktrees
-printf "${CYAN}%-15s %-50s %-30s${NC}\n" "AGENT" "PATH" "BRANCH"
+printf "${CYAN}%-15s %-50s %-30s${NC}\n" "MINION" "PATH" "BRANCH"
 echo "--------------- -------------------------------------------------- ------------------------------"
 
 FOUND_AGENTS=0

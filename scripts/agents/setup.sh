@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/config.sh"
 BASE_BRANCH="${3:-$DEFAULT_BASE_BRANCH}"
 WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
 
-echo -e "${BLUE}🤖 Setting up worktree for $AGENT_ID${NC}"
+echo -e "${BLUE}🍌 Deploying minion worktree for $AGENT_ID${NC}"
 echo "   Project:    $PROJECT_NAME"
 echo "   Branch:     $BRANCH"
 echo "   Base:       $BASE_BRANCH"
@@ -73,8 +73,8 @@ if [ ${#FILES_TO_COPY[@]} -gt 0 ]; then
     done
 fi
 
-# Copy agent assignment files
-echo -e "${BLUE}📋 Copying agent assignment files...${NC}"
+# Copy minion mission files
+echo -e "${BLUE}📋 Copying minion mission files...${NC}"
 ASSIGNMENTS_SRC="$REPO_ROOT/docs/agents/assignments"
 ASSIGNMENTS_DST="$WORKTREE_PATH/docs/agents/assignments"
 
@@ -89,7 +89,7 @@ if [ -d "$ASSIGNMENTS_SRC" ]; then
         fi
     done
     if [ $FOUND -eq 0 ]; then
-        echo -e "${YELLOW}   No assignment files found for $AGENT_ID${NC}"
+        echo -e "${YELLOW}   No mission files found for $AGENT_ID${NC}"
         echo "   Create one: docs/agents/assignments/${AGENT_ID}-feature-name.md"
     fi
 fi
@@ -125,10 +125,10 @@ PROJECT=$PROJECT_NAME
 EOF
 
 echo ""
-echo -e "${GREEN}✅ Worktree setup complete!${NC}"
+echo -e "${GREEN}✅ Minion ready for service!${NC}"
 echo ""
-echo -e "${YELLOW}📋 Agent Configuration:${NC}"
-echo "   Agent ID:        $AGENT_ID"
+echo -e "${YELLOW}📋 Minion Configuration:${NC}"
+echo "   Minion ID:       $AGENT_ID"
 echo "   Worktree:        $WORKTREE_PATH"
 echo "   Branch:          $BRANCH"
 echo ""
@@ -137,7 +137,7 @@ echo ""
 echo "1. Start working in the worktree:"
 echo "   cd $WORKTREE_PATH"
 echo ""
-echo "2. Or launch an AI agent:"
+echo "2. Or launch an AI minion:"
 echo "   cd $WORKTREE_PATH && cursor ."
 echo "   cd $WORKTREE_PATH && claude \"Read docs/agents/assignments/$AGENT_ID-*.md and implement\""
 echo ""

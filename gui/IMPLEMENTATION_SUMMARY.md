@@ -1,4 +1,4 @@
-# Implementation Summary: Agent Orchestrator GUI
+# Implementation Summary: Minion Orchestrator GUI 🍌
 
 ## ✅ Completed Implementation
 
@@ -25,7 +25,7 @@ agent_framework/
 │   │   │   ├── index.ts
 │   │   │   └── services/
 │   │   │       ├── ProjectService.ts
-│   │   │       ├── AgentService.ts
+│   │   │       ├── MinionService.ts
 │   │   │       ├── TerminalService.ts
 │   │   │       └── FileWatcherService.ts
 │   │   ├── preload/            # IPC bridge
@@ -39,7 +39,7 @@ agent_framework/
 │   │               ├── Sidebar.tsx
 │   │               ├── MainLayout.tsx
 │   │               ├── Dashboard.tsx
-│   │               ├── AgentView.tsx
+│   │               ├── MinionView.tsx
 │   │               └── Terminal.tsx
 │   ├── package.json
 │   ├── electron.vite.config.ts
@@ -61,7 +61,7 @@ agent_framework/
 
 ### 2. Main Process Services ✅
 - **ProjectService**: Manages project selection and recent projects
-- **AgentService**: Discovers agents via git worktrees, manages assignments
+- **MinionService**: Discovers minions via git worktrees, manages missions
 - **TerminalService**: Spawns node-pty sessions, detects signals
 - **FileWatcherService**: Watches assignments.json and .agent-info files
 
@@ -94,11 +94,11 @@ agent_framework/
 
 #### Dashboard
 - Kanban-style columns (Pending, In Progress, Review, Completed)
-- Assignment cards with metadata
-- "New Assignment" modal
+- Mission cards with metadata
+- "New Mission" modal
 - Auto-refresh on assignments.json changes
 
-#### AgentView
+#### MinionView
 - Terminal integration
 - Tool/Mode selectors
 - Start/Stop controls

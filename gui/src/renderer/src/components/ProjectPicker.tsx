@@ -52,7 +52,7 @@ function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
   return (
     <div className="project-picker">
       <div className="project-picker-container">
-        <h1>Agent Orchestrator</h1>
+        <h1>Minion Laboratory</h1>
         <p className="subtitle">Select a project to manage AI agents</p>
 
         {error && <div className="error">{error}</div>}

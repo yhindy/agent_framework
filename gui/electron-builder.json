@@ -1,6 +1,6 @@
 {
-  "appId": "com.agent-orchestrator.app",
-  "productName": "Agent Orchestrator",
+  "appId": "com.minion-laboratory.app",
+  "productName": "Minion Laboratory",
   "directories": {
     "output": "dist"
   },

@@ -1,6 +1,6 @@
-# Testing Guide for Agent Orchestrator GUI
+# Testing Guide for Minion Orchestrator GUI
 
-This guide walks you through testing all the features of the Agent Orchestrator GUI.
+This guide walks you through testing all the features of the Minion Orchestrator GUI.
 
 ## Prerequisites
 
@@ -44,9 +44,9 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 ---
 
-## Test 2: Assignments Dashboard
+## Test 2: Missions Dashboard
 
-**Objective**: Verify assignment display and creation.
+**Objective**: Verify mission display and creation.
 
 ### Part A: View Assignments
 
@@ -54,19 +54,19 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 2. **Expected Result**:
    - Four columns: Pending, In Progress, Review, Completed
-   - Assignment cards show agent ID, feature name, branch, tool, mode
+   - Mission cards show minion ID, feature name, branch, tool, mode
 
-### Part B: Create Assignment
+### Part B: Create Mission
 
-1. Click "+ New Assignment" button.
+1. Click "+ New Mission" button.
 
 2. Fill in the form:
-   - Agent ID: `agent-1`
+   - Minion ID: `agent-1`
    - Feature: `Test Feature` (or any description)
    - Tool: `claude`
    - Note: Branch name is auto-generated
 
-3. Click "Create Assignment".
+3. Click "Create Mission".
 
 4. **Expected Result**:
    - Modal closes
@@ -74,13 +74,13 @@ This guide walks you through testing all the features of the Agent Orchestrator 
    - `assignments.json` file updated
    - (Optionally) `setup.sh` runs and creates worktree
 
-**✅ Pass Criteria**: Assignments display correctly, new assignments can be created.
+**✅ Pass Criteria**: Assignments display correctly, new missions can be created.
 
 ---
 
 ## Test 3: Sidebar and Navigation
 
-**Objective**: Verify sidebar navigation and agent list.
+**Objective**: Verify sidebar navigation and Minion list.
 
 1. Look at the sidebar.
 
@@ -96,8 +96,8 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 5. If you have an agent, click on it.
 
 6. **Expected Result**: 
-   - Agent View loads
-   - Sidebar highlights the active agent
+   - Minion View loads
+   - Sidebar highlights the active minion
 
 **✅ Pass Criteria**: Navigation works, sidebar updates correctly.
 
@@ -142,9 +142,9 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 ## Test 5: Signal Detection
 
-**Objective**: Verify the GUI detects agent signals.
+**Objective**: Verify the GUI detects Minion signals.
 
-1. Make sure you have an agent running in the terminal.
+1. Make sure you have an minion running in the terminal.
 
 2. In the terminal, type:
    ```bash
@@ -161,7 +161,7 @@ This guide walks you through testing all the features of the Agent Orchestrator 
    ```
 
 5. **Expected Result**:
-   - Orange/red banner: "⚠️ Agent is blocked..."
+   - Orange/red banner: "⚠️ Minion is blocked..."
    - Banner persists (doesn't auto-dismiss)
 
 **✅ Pass Criteria**: Signals are detected and displayed correctly.
@@ -198,13 +198,13 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 **Objective**: Verify Cursor integration.
 
-1. Click an agent in the sidebar.
+1. Click an minion in the sidebar.
 
 2. Click "Open Folder" or "Open in Cursor" button.
 
 3. **Expected Result**:
    - Cursor IDE opens (or comes to front)
-   - The agent's worktree folder is opened
+   - The minion's worktree folder is opened
 
 **✅ Pass Criteria**: External Cursor launch works.
 
@@ -214,7 +214,7 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 **Objective**: Run a complete simulated workflow.
 
-1. In GUI, create or select an agent.
+1. In GUI, create or select a minion.
 
 2. Set:
    - Tool: `cursor-cli` (or just run in external terminal)
@@ -235,9 +235,9 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 ---
 
-## Test 9: Stop Agent
+## Test 9: Stop Minion
 
-**Objective**: Verify agent can be stopped.
+**Objective**: Verify minion can be stopped.
 
 1. Start an agent with a long-running command:
    ```bash
@@ -274,7 +274,7 @@ This guide walks you through testing all the features of the Agent Orchestrator 
 
 ## Common Issues
 
-### "Agent not found" error
+### "Minion not found" error
 - Run `setup.sh` to create the worktree first
 - Check that `.agent-info` file exists in worktree
 

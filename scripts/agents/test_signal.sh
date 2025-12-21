@@ -5,13 +5,13 @@
 #
 # This script simulates an agent workflow with signals for testing the GUI
 
-echo "🤖 Starting test agent workflow..."
+echo "🍌 Starting test minion mission..."
 echo ""
 sleep 2
 
-echo "📋 Step 1: Reading assignment..."
+echo "📋 Step 1: Reading mission..."
 sleep 1
-echo "   ✓ Assignment loaded"
+echo "   ✓ Mission loaded"
 echo ""
 sleep 1
 
@@ -54,5 +54,5 @@ echo "===SIGNAL:DEV_COMPLETED==="
 echo ""
 sleep 2
 
-echo "🎉 Test workflow finished successfully!"
+echo "🎉 Test mission finished successfully!"
 

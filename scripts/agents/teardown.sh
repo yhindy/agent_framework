@@ -30,7 +30,7 @@ source "$SCRIPT_DIR/config.sh"
 
 WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
 
-echo -e "${BLUE}🗑️  Tearing down worktree for $AGENT_ID${NC}"
+echo -e "${BLUE}🗑️  Retiring minion $AGENT_ID${NC}"
 echo "   Path: $WORKTREE_PATH"
 echo ""
 
@@ -73,6 +73,6 @@ if [ -n "$BRANCH" ]; then
 fi
 
 echo ""
-echo -e "${GREEN}✅ Worktree removed successfully${NC}"
+echo -e "${GREEN}✅ Minion retired successfully${NC}"
 echo ""
 
