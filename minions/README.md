@@ -42,7 +42,6 @@ cursor --folder ../yourproject-agent-1
 ```
 minions/
 ├── README.md                    # This file
-├── ASSIGNMENTS.md               # Current feature missions (human-readable)
 ├── assignments.json             # Missions database (machine-readable)
 ├── templates/
 │   └── FEATURE_SPEC.md          # Template for new missions
@@ -57,9 +56,8 @@ minions/
 
 1. Copy `templates/FEATURE_SPEC.md` to `assignments/agent-X-feature-name.md`
 2. Fill in the feature requirements
-3. Update `ASSIGNMENTS.md` with the mission
-4. Create the worktree: `./minions/bin/setup.sh agent-X feature/agent-X/feature-name`
-5. Point the AI minion at the mission file
+3. Create the worktree: `./minions/bin/setup.sh agent-X feature/agent-X/feature-name`
+4. Point the AI minion at the mission file
 
 ## Managing Worktrees
 

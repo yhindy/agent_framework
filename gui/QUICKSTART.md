@@ -26,18 +26,7 @@ This will take 1-2 minutes.
 
 > **Note**: The `@electron/rebuild` step is important to ensure `node-pty` works with Electron's Node.js version.
 
-## Step 3: Prepare Your Project
-
-If you have an existing `ASSIGNMENTS.md`, migrate it:
-
-```bash
-cd ..  # Back to project root
-node minions/bin/migrate-assignments.js
-```
-
-Otherwise, the `assignments.json` file was already created.
-
-## Step 4: Start the App
+## Step 3: Start the App
 
 ```bash
 cd gui
@@ -46,13 +35,13 @@ npm run dev
 
 The app window will open automatically.
 
-## Step 5: Select Your Project
+## Step 4: Select Your Project
 
 1. Click "Select Project Folder"
 2. Navigate to your project root (the one with `minions/`)
 3. Click "Select"
 
-## Step 6: Create Your First Mission
+## Step 5: Create Your First Mission
 
 1. Click "+ New Mission"
 2. Fill in:
@@ -62,7 +51,7 @@ The app window will open automatically.
 3. The branch name is auto-generated from your feature description
 4. Click "Create Mission"
 
-## Step 7: Start Working
+## Step 6: Start Working
 
 ### Option A: Use Claude CLI
 

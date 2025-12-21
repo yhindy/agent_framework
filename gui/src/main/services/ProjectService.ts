@@ -123,7 +123,7 @@ export class ProjectService {
     if (app.isPackaged) {
       return join(process.resourcesPath, 'minions')
     } else {
-      return join(__dirname, '../../../../minions')
+      return join(__dirname, '../../../minions')
     }
   }
 }
