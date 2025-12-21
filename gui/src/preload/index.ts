@@ -4,8 +4,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 const api = {
   // Project APIs
   selectProject: (path: string) => ipcRenderer.invoke('project:select', path),
+  installFramework: (path: string) => ipcRenderer.invoke('project:install', path),
   getRecentProjects: () => ipcRenderer.invoke('project:getRecent'),
   getCurrentProject: () => ipcRenderer.invoke('project:getCurrent'),
+  clearCurrentProject: () => ipcRenderer.invoke('project:clear'),
 
   // Agent APIs
   listAgents: () => ipcRenderer.invoke('agents:list'),

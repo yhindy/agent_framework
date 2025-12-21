@@ -16,6 +16,24 @@ function App() {
     })
   }, [])
 
+  // Listen for project clear/change events from Sidebar or other components
+  // In a real app we might use a Context or Redux, but checking periodically or exposing a refresher works too
+  // Or simply, since Sidebar calls clearCurrentProject and then navigates to /, we should be fine IF App re-renders
+  // But App only checks on mount. We need a way to know when project state changes.
+  // Actually, MainLayout is rendered when currentProject is set. 
+  // When Sidebar navigates to '/', if currentProject is still set, it redirects back to /workspace.
+  // So we MUST update currentProject state here.
+  
+  // Quick fix: Expose a way for children to update project state
+  // const handleProjectCleared = () => {
+  //   setCurrentProject(null)
+  // }
+
+  // We can pass this down, but Sidebar is deep in MainLayout.
+  // Instead, let's poll or listen for an event.
+  // Or better: MainLayout can accept a prop 'onProjectCleared'
+
+
   if (loading) {
     return <div className="loading">Loading...</div>
   }
@@ -37,7 +55,7 @@ function App() {
           path="/workspace/*"
           element={
             currentProject ? (
-              <MainLayout project={currentProject} />
+              <MainLayout project={currentProject} onProjectCleared={() => setCurrentProject(null)} />
             ) : (
               <Navigate to="/" replace />
             )

@@ -67,9 +67,25 @@ function setupIPC(): void {
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
     const project = services!.project.selectProject(projectPath)
-    // Start watching the new project
+    // Start watching the new project ONLY if it doesn't need install
+    if (!project.needsInstall) {
+      services!.fileWatcher.watchProject(projectPath)
+    }
+    return project
+  })
+
+  ipcMain.handle('project:install', async (_event, projectPath: string) => {
+    await services!.project.installFramework(projectPath)
+    // Re-select to update state and start watching
+    const project = services!.project.selectProject(projectPath)
     services!.fileWatcher.watchProject(projectPath)
     return project
+  })
+
+  ipcMain.handle('project:clear', async () => {
+    services!.project.clearCurrentProject()
+    // Stop watching file changes? FileWatcherService doesn't have unwatch all, but it handles single project.
+    // We can assume selecting a new project will overwrite the watcher.
   })
 
   ipcMain.handle('project:getRecent', async () => {

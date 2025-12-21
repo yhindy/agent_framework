@@ -5,8 +5,10 @@ declare global {
     electronAPI: {
       // Project APIs
       selectProject: (path: string) => Promise<any>
+      installFramework: (path: string) => Promise<any>
       getRecentProjects: () => Promise<any[]>
       getCurrentProject: () => Promise<any>
+      clearCurrentProject: () => Promise<void>
 
       // Agent APIs
       listAgents: () => Promise<any[]>

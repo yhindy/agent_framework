@@ -55,6 +55,8 @@ echo -e "${BLUE}📋 Copying files...${NC}"
 
 # Everything in minions folder
 cp -R "$FRAMEWORK_DIR/minions/"* "$TARGET/minions/"
+# Remove dashboard.sh from the installed copy
+rm -f "$TARGET/minions/bin/dashboard.sh"
 chmod +x "$TARGET/minions/bin/"*.sh
 echo "   ✓ minions/"
 

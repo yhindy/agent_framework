@@ -7,6 +7,13 @@
   "files": [
     "out/**/*"
   ],
+  "extraResources": [
+    {
+      "from": "../minions",
+      "to": "minions",
+      "filter": ["!**/node_modules/**", "!**/.git/**"]
+    }
+  ],
   "mac": {
     "category": "public.app-category.developer-tools",
     "target": ["dmg"]

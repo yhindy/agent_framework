@@ -53,11 +53,23 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
     ? currentPath.replace('/workspace/agent/', '')
     : null
 
+  const handleSwitchProject = async () => {
+    await window.electronAPI.clearCurrentProject()
+    onNavigate('/')
+    // We also need to notify the parent app to reset its project state
+    // But since App.tsx listens to getCurrentProject on mount, we might need a way to force a refresh
+    // For now, onNavigate('/') will likely just change the route, but App.tsx holds the 'project' state
+    // The App component should probably listen for project changes or we need a callback in SidebarProps
+  }
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
         <div className="project-info">
           <div className="project-name">{project.name}</div>
+          <button className="switch-project-btn" onClick={handleSwitchProject} title="Switch Project">
+            ⇄
+          </button>
         </div>
       </div>
 

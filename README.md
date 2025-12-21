@@ -5,21 +5,12 @@ A lightweight framework for running multiple AI coding minions in parallel on an
 ## Quick Start
 
 ```bash
-# 1. Install the framework into your project
+# 1. Install the framework into your project (CLI)
 ./install.sh /path/to/your/project
 
-# 2. Go to your project and initialize
-cd /path/to/your/project
-./minions/bin/init.sh
-
-# 3. Create your first minion worktree
-./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
-
-# 4. Start working (choose your AI tool)
-cd ../yourproject-agent-1
-cursor .                    # Cursor IDE
-claude "Read minions/assignments/agent-test-*.md and implement"  # Claude Code
-aider                       # Aider
+# OR use the GUI App (recommended)
+./minions/bin/dashboard.sh
+# Then select any project folder, and it will offer to install the framework.
 ```
 
 ## What's Included
@@ -99,10 +90,11 @@ A desktop app for managing minions with a visual interface:
 ```
 
 Features:
-- Dashboard view of all missions
-- Live terminal integration for minions
-- iMessage-style sidebar with notifications
-- Signal detection for minion status updates
+- **Global Project Manager**: Manage multiple projects from one window
+- **Auto-Install**: Initialize the framework in new projects via the GUI
+- **Dashboard**: View all missions and agents
+- **Terminal Integration**: Live terminals for minions
+- **Signals**: iMessage-style notifications for agent status
 
 See [`gui/README.md`](gui/README.md) for details.
 
