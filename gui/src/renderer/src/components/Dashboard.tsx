@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import LoadingModal from './LoadingModal'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -26,6 +27,20 @@ function Dashboard({ project }: DashboardProps) {
   const [availableAgents, setAvailableAgents] = useState<string[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+
+  const loadingMessages = [
+    'Setting up minion workbench...',
+    'Making sure Gru has visibility...',
+    'Distributing bananas...',
+    'Teaching minion language basics...',
+    'Installing safety goggles...',
+    'Calibrating evil-o-meter...',
+    'Cloning the Git worktree...',
+    'Requesting backup from Kevin, Stuart, and Bob...',
+    'Polishing the shrinking ray...',
+    'Preparing the fart gun...',
+    'Organizing a mandatory dance party...'
+  ]
   const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
   const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
   const [showPRConfirm, setShowPRConfirm] = useState(false)
@@ -80,6 +95,7 @@ function Dashboard({ project }: DashboardProps) {
   const handleCreateAssignment = async () => {
     try {
       setIsCreating(true)
+      const agentId = formData.agentId
 
       // Generate branch name
       const branch = generateBranchName(formData.agentId, formData.shortName)
@@ -99,6 +115,10 @@ function Dashboard({ project }: DashboardProps) {
 
       setShowCreateForm(false)
       setIsCreating(false)
+
+      // Navigate to the new agent view
+      navigate(`/workspace/agent/${agentId}`)
+
       setFormData({
         agentId: '',
         shortName: '',
@@ -611,6 +631,12 @@ function Dashboard({ project }: DashboardProps) {
           </div>
         </div>
       )}
+
+      <LoadingModal
+        isOpen={isCreating}
+        messages={loadingMessages}
+        title="Setting up minion's workbench..."
+      />
     </div>
   )
 }

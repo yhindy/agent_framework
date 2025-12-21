@@ -312,6 +312,71 @@ export class AgentService {
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
   }
 
+  private async getProjectConfig(projectPath: string): Promise<Record<string, string>> {
+    const configPath = join(projectPath, 'minions', 'bin', 'config.sh')
+    const config: Record<string, string> = {}
+    
+    if (existsSync(configPath)) {
+      try {
+        const content = readFileSync(configPath, 'utf-8')
+        const lines = content.split('\n')
+        for (const line of lines) {
+          const match = line.match(/^([A-Z_]+)="?([^"]*)"?/)
+          if (match) {
+            config[match[1]] = match[2]
+          }
+        }
+      } catch (error) {
+        console.error('[AgentService] Error reading config.sh:', error)
+      }
+    }
+    
+    return config
+  }
+
+  private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {
+    // 1. Try to get from project config first
+    const config = await this.getProjectConfig(projectPath)
+    if (config.DEFAULT_BASE_BRANCH) {
+      console.log(`[AgentService] Using default branch from config: ${config.DEFAULT_BASE_BRANCH}`)
+      return config.DEFAULT_BASE_BRANCH
+    }
+
+    try {
+      // 2. Try to get default branch from gh CLI
+      const { stdout } = await execAsync('gh repo view --json defaultBranchRef --jq .defaultBranchRef.name', { cwd: worktreePath })
+      if (stdout.trim()) {
+        return stdout.trim()
+      }
+    } catch (error) {
+      console.log('[AgentService] Could not get default branch from gh, trying git...')
+    }
+
+    try {
+      // 3. Fallback: check if 'main' or 'master' exists locally
+      const { stdout: branches } = await execAsync('git branch -a', { cwd: worktreePath })
+      if (branches.includes('remotes/origin/main') || branches.includes(' main\n')) {
+        return 'main'
+      }
+    } catch (error) {
+      // Ignore
+    }
+    
+    return 'master'
+  }
+
+  private async getRemote(worktreePath: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync('git remote', { cwd: worktreePath })
+      const remotes = stdout.trim().split('\n').filter(r => r.trim())
+      if (remotes.includes('origin')) return 'origin'
+      if (remotes.length > 0) return remotes[0]
+    } catch (error) {
+      // Ignore
+    }
+    return 'origin'
+  }
+
   async createPullRequest(projectPath: string, assignmentId: string, autoCommit: boolean = false): Promise<{ url: string }> {
     const data = this.getAssignments(projectPath)
     const assignment = data.assignments.find(a => a.id === assignmentId)
@@ -344,34 +409,62 @@ export class AgentService {
           console.log('[AgentService] Auto-committing changes...')
           await execAsync('git add -A', { cwd: worktreePath })
           const commitMessage = `Complete: ${assignment.feature}`
-          await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
-          console.log('[AgentService] Changes committed')
+          
+          try {
+            await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
+            console.log('[AgentService] Changes committed')
+          } catch (commitError: any) {
+            // If identity is unknown, try to set a default one
+            if (commitError.message.includes('identity unknown')) {
+              console.log('[AgentService] Git identity unknown, setting default...')
+              await execAsync('git config user.email "agent@minions.ai"', { cwd: worktreePath })
+              await execAsync('git config user.name "Minion Agent"', { cwd: worktreePath })
+              await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
+              console.log('[AgentService] Changes committed with default identity')
+            } else if (commitError.stderr && (commitError.stderr.includes('pre-commit') || commitError.stdout.includes('pre-commit') || commitError.message.includes('hook failed'))) {
+              throw new Error(`Pre-commit hooks failed. Please fix the issues and try again.\n\n${commitError.stderr || commitError.stdout || commitError.message}`)
+            } else if (commitError.message.includes('nothing to commit')) {
+              console.log('[AgentService] Nothing to commit')
+            } else {
+              throw commitError
+            }
+          }
         } else {
           throw new Error('Branch has uncommitted changes. Please commit all changes before creating a PR.')
         }
       }
 
+      // Get default branch and remote
+      const baseBranch = await this.getDefaultBranch(projectPath, worktreePath)
+      const remote = await this.getRemote(worktreePath)
+      console.log(`[AgentService] Using base branch: ${baseBranch}, remote: ${remote}`)
+
       // Check if there are commits on this branch
       try {
-        const { stdout: commitCount } = await execAsync(`git rev-list --count master..${assignment.branch}`, { cwd: worktreePath })
+        const { stdout: commitCount } = await execAsync(`git rev-list --count ${baseBranch}..${assignment.branch}`, { cwd: worktreePath })
         if (parseInt(commitCount.trim()) === 0) {
-          throw new Error('No commits on this branch. Make sure changes are committed before creating a PR.')
+          throw new Error(`No commits on branch '${assignment.branch}' compared to '${baseBranch}'. Make sure changes are committed before creating a PR.`)
         }
       } catch (error: any) {
         if (error.message.includes('No commits')) {
           throw error
         }
-        // If the command fails for other reasons, continue - branch might not have master locally
+        // If the command fails for other reasons, continue - branch might not have base branch locally
       }
 
-      // Push the branch to origin
-      console.log('[AgentService] Pushing branch to origin...')
+      // Push the branch to remote
+      console.log(`[AgentService] Pushing branch to ${remote}...`)
       try {
-        await execAsync(`git push -u origin ${assignment.branch}`, { cwd: worktreePath })
+        await execAsync(`git push -u ${remote} ${assignment.branch}`, { cwd: worktreePath })
       } catch (pushError: any) {
-        // Branch might already be pushed
-        if (!pushError.message.includes('up-to-date')) {
-          console.error('Push error:', pushError)
+        // If it's already up to date, that's fine
+        if (pushError.stderr && (pushError.stderr.includes('Everything up-to-date') || pushError.stdout.includes('Everything up-to-date'))) {
+          console.log('[AgentService] Branch is already up to date')
+        } else if (pushError.stderr && (pushError.stderr.includes('pre-push') || pushError.stdout.includes('pre-push') || pushError.message.includes('hook failed'))) {
+          throw new Error(`Pre-push hooks failed. Please fix the issues and try again.\n\n${pushError.stderr || pushError.stdout || pushError.message}`)
+        } else {
+          console.error('Push error details:', pushError)
+          throw new Error(`Failed to push branch to ${remote}: ${pushError.message}`)
         }
       }
 
@@ -393,7 +486,7 @@ export class AgentService {
       console.log('[AgentService] Creating PR...')
       try {
         const { stdout } = await execAsync(
-          `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --base master`,
+          `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --base ${baseBranch} --head ${assignment.branch}`,
           { cwd: worktreePath }
         )
         
