@@ -1,5 +1,5 @@
 /**
- * Type definitions for the Agent Orchestrator system.
+ * Type definitions for the Minion Orchestrator system.
  * These types are shared between the shell scripts metadata and the GUI application.
  */
 

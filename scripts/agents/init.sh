@@ -15,7 +15,7 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-echo -e "${BLUE}🤖 Initializing Agent Framework${NC}"
+echo -e "${BLUE}🍌 Initializing Minion Framework${NC}"
 echo ""
 
 # Create directory structure if not exists
@@ -50,7 +50,7 @@ if [ -f "$GITIGNORE" ]; then
 fi
 
 echo ""
-echo -e "${GREEN}✅ Agent Framework initialized!${NC}"
+echo -e "${GREEN}✅ Minion Framework initialized!${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo ""
@@ -58,7 +58,7 @@ echo "1. Edit scripts/agents/config.sh to set your project name"
 echo ""
 echo "2. (Optional) Customize .cursor/rules/agent-rules.mdc for your project"
 echo ""
-echo "3. Create an agent worktree:"
+echo "3. Create a minion worktree:"
 echo "   ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature"
 echo ""
 

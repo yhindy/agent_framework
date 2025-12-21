@@ -1,14 +1,14 @@
-# Agent Orchestrator GUI
+# Minion Orchestrator GUI 🍌
 
-A desktop application for managing and orchestrating AI coding agents in your project.
+A desktop application for managing and orchestrating AI coding minions in your project.
 
 ## Features
 
-- **Project Management**: Select and manage multiple projects with agent frameworks
-- **Agent Dashboard**: Visual kanban-style view of all agent assignments
-- **Live Terminal Integration**: Interactive terminal sessions for Claude and Cursor CLI agents
-- **Signal Detection**: Agents can send special signals (PLAN_READY, DEV_COMPLETED, etc.) to update the UI
-- **iMessage-style Sidebar**: Quick navigation between agents with unread indicators
+- **Project Management**: Select and manage multiple projects with minion frameworks
+- **Missions Dashboard**: Visual kanban-style view of all minion missions
+- **Live Terminal Integration**: Interactive terminal sessions for Claude and Cursor CLI minions
+- **Signal Detection**: Minions can send special signals (PLAN_READY, DEV_COMPLETED, etc.) to update the UI
+- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators
 - **Multi-tool Support**: Works with Claude, Cursor IDE, and Cursor CLI
 
 ## Prerequisites

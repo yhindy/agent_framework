@@ -1,6 +1,6 @@
-# Agent Framework
+# Minion Framework 🍌
 
-A lightweight framework for running multiple AI coding agents in parallel on any codebase.
+A lightweight framework for running multiple AI coding minions in parallel on any codebase.
 
 ## Quick Start
 
@@ -11,7 +11,7 @@ cp -r agent_framework/* /path/to/your/project/
 # 2. Initialize the framework
 ./scripts/agents/init.sh
 
-# 3. Create your first agent worktree
+# 3. Create your first minion worktree
 ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
 
 # 4. Start working (choose your AI tool)
@@ -25,17 +25,17 @@ aider                       # Aider
 
 ```
 your-project/
-├── scripts/agents/           # Agent management scripts
+├── scripts/agents/           # Minion management scripts
 │   ├── init.sh              # One-time setup
-│   ├── setup.sh             # Create agent worktree
-│   ├── teardown.sh          # Remove agent worktree
-│   ├── list.sh              # List all agent worktrees
+│   ├── setup.sh             # Create minion worktree
+│   ├── teardown.sh          # Remove minion worktree
+│   ├── list.sh              # List all minion worktrees
 │   ├── preflight.sh         # Verify setup before running
 │   ├── migrate-assignments.js # Migrate ASSIGNMENTS.md to JSON
 │   └── test_signal.sh       # Test orchestrator signals
-├── docs/agents/              # Agent documentation
-│   ├── README.md            # Main agent guide
-│   ├── assignments.json     # Track active assignments
+├── docs/agents/              # Minion documentation
+│   ├── README.md            # Main minion guide
+│   ├── assignments.json     # Track active missions
 │   ├── rules/
 │   │   └── orchestrator_signals.md # Signal protocol docs
 │   └── templates/
@@ -44,10 +44,10 @@ your-project/
 │   ├── src/                 # Electron + React app
 │   └── README.md            # GUI documentation
 └── .cursor/rules/
-    └── agent-rules.mdc      # Cursor IDE rules for agents
+    └── agent-rules.mdc      # Cursor IDE rules for minions
 ```
 
-## Creating Agent Assignments
+## Creating Minion Missions
 
 1. Copy the template:
    ```bash
@@ -61,7 +61,7 @@ your-project/
    ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
    ```
 
-4. Point your AI agent at the assignment file
+4. Point your AI minion at the mission file
 
 ## Configuration
 
@@ -74,15 +74,15 @@ Edit `scripts/agents/config.sh` to customize:
 
 | Tool | Command |
 |------|---------|
-| Cursor IDE | Open worktree folder, start background agent |
+| Cursor IDE | Open worktree folder, start background minion |
 | Cursor CLI | `cursor --folder ../yourproject-agent-1` |
-| Claude Code | `claude "Read assignment and implement"` |
+| Claude Code | `claude "Read mission and implement"` |
 | Aider | `aider` |
 | Any AI tool | Just point it at the worktree |
 
 ## GUI Orchestrator (Optional)
 
-A desktop app for managing agents with a visual interface:
+A desktop app for managing minions with a visual interface:
 
 ```bash
 cd gui
@@ -91,34 +91,34 @@ npm run dev
 ```
 
 Features:
-- Dashboard view of all assignments
-- Live terminal integration for agents
+- Dashboard view of all missions
+- Live terminal integration for minions
 - iMessage-style sidebar with notifications
-- Signal detection for agent status updates
+- Signal detection for minion status updates
 
 See [`gui/README.md`](gui/README.md) for details.
 
 ## How It Works
 
-The framework uses **git worktrees** to give each agent an isolated copy of your codebase:
+The framework uses **git worktrees** to give each minion an isolated copy of your codebase:
 
-- Each agent works in its own folder (`../yourproject-agent-1`, etc.)
-- Agents share git history but have independent working directories
-- No conflicts between agents working on different features
+- Each minion works in its own folder (`../yourproject-agent-1`, etc.)
+- Minions share git history but have independent working directories
+- No conflicts between minions working on different features
 - Easy cleanup when done
 
 ## Best Practices
 
-### For Humans Coordinating Agents
+### For Humans Coordinating Minions
 
-1. **Assign non-overlapping work** - Each agent should touch different files
-2. **Keep assignments small** - Features completable in 1-2 hours work best
-3. **Review frequently** - Check agent progress and course-correct early
+1. **Assign non-overlapping work** - Each minion should touch different files
+2. **Keep missions small** - Features completable in 1-2 hours work best
+3. **Review frequently** - Check minion progress and course-correct early
 4. **Merge often** - Don't let branches diverge too far
 
-### For AI Agents
+### For AI Minions
 
-1. **Read your assignment first** - The spec file has requirements and boundaries
+1. **Read your mission first** - The spec file has requirements and boundaries
 2. **Stay in your lane** - Only modify files in your allowlist
 3. **Test before committing** - Run tests before every commit
 4. **Commit frequently** - Small, focused commits are easier to review

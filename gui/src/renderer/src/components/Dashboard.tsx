@@ -183,7 +183,7 @@ function Dashboard({ project }: DashboardProps) {
 
     try {
       await window.electronAPI.teardownAgent(assignment.agentId, false)
-      alert('Assignment archived and worktree removed.')
+      alert('Mission archived and worktree removed.')
     } catch (error: any) {
       alert(`Failed to archive: ${error.message}`)
     }
@@ -251,8 +251,8 @@ function Dashboard({ project }: DashboardProps) {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Assignments Dashboard</h1>
-        <button onClick={handleNewAssignment}>+ New Assignment</button>
+        <h1>Minion Missions 🍌</h1>
+        <button onClick={handleNewAssignment}>+ New Mission</button>
       </div>
 
       <div className="dashboard-content">
@@ -406,7 +406,7 @@ function Dashboard({ project }: DashboardProps) {
       {showCreateForm && (
         <div className="modal-overlay" onClick={() => setShowCreateForm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Create New Assignment</h2>
+            <h2>Create New Mission</h2>
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -414,13 +414,13 @@ function Dashboard({ project }: DashboardProps) {
               }}
             >
               <div className="form-group">
-                <label>Agent ID</label>
+                <label>Minion ID</label>
                 <select
                   value={formData.agentId}
                   onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
                   required
                 >
-                  <option value="">Select agent...</option>
+                  <option value="">Select minion...</option>
                   {availableAgents.map((id) => (
                     <option key={id} value={id}>
                       {id}
@@ -462,8 +462,8 @@ function Dashboard({ project }: DashboardProps) {
                 />
                 <div className="form-hint">
                   {formData.mode === 'planning'
-                    ? 'Agent will create a plan for you to review before implementing.'
-                    : 'Agent will implement directly without a planning phase.'}
+                    ? 'Minion will create a plan for you to review before implementing.'
+                    : 'Minion will implement directly without a planning phase.'}
                 </div>
               </div>
 
@@ -563,7 +563,7 @@ function Dashboard({ project }: DashboardProps) {
                   Cancel
                 </button>
                 <button type="submit" disabled={isCreating}>
-                  {isCreating ? 'Creating...' : 'Create Assignment'}
+                  {isCreating ? 'Creating...' : 'Create Mission'}
                 </button>
               </div>
             </form>
@@ -579,7 +579,7 @@ function Dashboard({ project }: DashboardProps) {
               This will push the branch and create a PR on GitHub for:
             </p>
             <div className="merge-info">
-              <div><strong>Agent:</strong> {selectedAssignmentForPR.agentId}</div>
+              <div><strong>Minion:</strong> {selectedAssignmentForPR.agentId}</div>
               <div><strong>Branch:</strong> {selectedAssignmentForPR.branch}</div>
               <div><strong>Feature:</strong> {selectedAssignmentForPR.feature}</div>
             </div>

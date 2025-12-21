@@ -157,9 +157,9 @@ function AgentView({}: AgentViewProps) {
     const messages: Record<string, string> = {
       PLAN_READY: '✓ Plan is ready for review',
       DEV_COMPLETED: '✓ Development completed',
-      BLOCKER: '⚠️ Agent is blocked and needs attention',
-      QUESTION: '? Agent has a question',
-      WORKING: '⟳ Agent is working...'
+      BLOCKER: '⚠️ Minion is blocked and needs attention',
+      QUESTION: '? Minion has a question',
+      WORKING: '⟳ Minion is working...'
     }
 
     setSignalMessage(messages[signal] || signal)
@@ -402,9 +402,9 @@ function AgentView({}: AgentViewProps) {
             className={`unified-tab ${activeTab === 'agent' ? 'active' : ''}`}
             onClick={() => setActiveTab('agent')}
           >
-            <span className="tab-icon">🤖</span>
+            <span className="tab-icon">🍌</span>
             <span className="tab-name">
-              {currentTool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Agent Terminal'}
+              {currentTool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Minion Terminal'}
             </span>
           </div>
 
@@ -450,9 +450,9 @@ function AgentView({}: AgentViewProps) {
           {activeTab === 'agent' && (
             currentTool === 'cursor' && !isRunning ? (
               <div className="placeholder">
-                <div className="placeholder-icon">💬</div>
+                <div className="placeholder-icon">🍌</div>
                 <div className="placeholder-text">
-                  <p>This agent uses Cursor IDE.</p>
+                  <p>This minion uses Cursor IDE.</p>
                   <p>Click "Open in Cursor" to start working.</p>
                 </div>
               </div>
@@ -470,11 +470,11 @@ function AgentView({}: AgentViewProps) {
 
       <ConfirmModal
         isOpen={showCleanupModal}
-        title={cleanupAction === 'teardown' ? 'Teardown Agent?' : 'Unassign Agent?'}
+        title={cleanupAction === 'teardown' ? 'Teardown Minion?' : 'Unassign Minion?'}
         message={
           cleanupAction === 'teardown'
             ? `This will remove the worktree for ${agentId}. Any uncommitted changes will be lost. This action cannot be undone.`
-            : `This will unassign ${agentId} and make it available for new tasks. The worktree will be kept.`
+            : `This will unassign ${agentId} and make it available for new missions. The worktree will be kept.`
         }
         confirmText={cleanupAction === 'teardown' ? 'Teardown' : 'Unassign'}
         confirmVariant={cleanupAction === 'teardown' ? 'danger' : 'primary'}

@@ -72,10 +72,10 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
       </div>
 
       <div className="sidebar-section">
-        <div className="section-header">Agents</div>
+        <div className="section-header">Minions 🍌</div>
         <div className="agent-list">
           {agents.length === 0 && (
-            <div className="empty-state">No agents running</div>
+            <div className="empty-state">No minions working</div>
           )}
           {agents.map((agent) => {
             const isWorking = agent.mode && agent.mode !== 'idle'

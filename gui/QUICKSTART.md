@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get the Agent Orchestrator GUI up and running in 5 minutes.
+Get the Minion Orchestrator GUI up and running in 5 minutes. 🍌
 
 ## Step 1: Prerequisites
 
@@ -52,15 +52,15 @@ The app window will open automatically.
 2. Navigate to your project root (the one with `docs/agents/`)
 3. Click "Select"
 
-## Step 6: Create Your First Assignment
+## Step 6: Create Your First Mission
 
-1. Click "+ New Assignment"
+1. Click "+ New Mission"
 2. Fill in:
-   - **Agent ID**: `agent-1`
+   - **Minion ID**: `agent-1`
    - **Feature**: Describe what you want built (e.g., "Create a user authentication system")
    - **Tool**: `claude` (or `cursor`)
 3. The branch name is auto-generated from your feature description
-4. Click "Create Assignment"
+4. Click "Create Mission"
 
 ## Step 7: Start Working
 
@@ -99,7 +99,7 @@ The app window will open automatically.
 ### "Project path does not exist"
 Make sure you're selecting the actual project root, not a subdirectory.
 
-### "Not a valid agent framework project"
+### "Not a valid minion framework project"
 Your project needs a `docs/agents/` directory. Run `../scripts/agents/init.sh` first.
 
 ### Terminal shows nothing
@@ -126,5 +126,5 @@ The app will be in the `dist/` folder.
 
 ---
 
-**Happy orchestrating! 🎉**
+**Happy minion-ing! 🍌**
 
