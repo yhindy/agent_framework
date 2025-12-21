@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
+import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import './AgentView.css'
@@ -49,6 +50,8 @@ function AgentView({}: AgentViewProps) {
   const [showPRConfirm, setShowPRConfirm] = useState(false)
   const [autoCommit, setAutoCommit] = useState(true)
   const [isCreatingPR, setIsCreatingPR] = useState(false)
+  const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
+  const [terminalCounter, setTerminalCounter] = useState(1)
 
   useEffect(() => {
     if (!agentId) return
@@ -290,6 +293,37 @@ function AgentView({}: AgentViewProps) {
     }
   }
 
+  const handleAddTerminal = () => {
+    const newCounter = terminalCounter + 1
+    const newTerminalId = `terminal-${newCounter}`
+    setPlainTerminals([...plainTerminals, newTerminalId])
+    setTerminalCounter(newCounter)
+    setActiveTab(newTerminalId)
+  }
+
+  const handleCloseTerminal = (terminalId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    // Don't close if it's the last terminal
+    if (plainTerminals.length === 1) return
+    
+    // Remove from list
+    const newTerminals = plainTerminals.filter(id => id !== terminalId)
+    setPlainTerminals(newTerminals)
+    
+    // If we're closing the active tab, switch to another
+    if (activeTab === terminalId) {
+      const index = plainTerminals.indexOf(terminalId)
+      const newActiveIndex = index > 0 ? index - 1 : 0
+      setActiveTab(newTerminals[newActiveIndex] || 'agent')
+    }
+    
+    // Stop the backend terminal
+    if (agentId) {
+      window.electronAPI.stopPlainTerminal(`${agentId}-${terminalId}`)
+    }
+  }
+
   if (!agent) {
     return (
       <div className="agent-view">
@@ -432,6 +466,27 @@ function AgentView({}: AgentViewProps) {
             </span>
           </div>
 
+          {/* Plain Terminal Tabs */}
+          {plainTerminals.map((terminalId, index) => (
+            <div
+              key={terminalId}
+              className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
+              onClick={() => setActiveTab(terminalId)}
+            >
+              <span className="tab-icon">⌨️</span>
+              <span className="tab-name">Terminal {index + 1}</span>
+              {plainTerminals.length > 1 && (
+                <button 
+                  className="tab-action close"
+                  onClick={(e) => handleCloseTerminal(terminalId, e)}
+                  title="Close terminal"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+
           {/* Test Environment Tabs */}
           {testEnvCommands.map(cmd => {
             const isRunning = getTestEnvStatus(cmd.id)
@@ -468,6 +523,15 @@ function AgentView({}: AgentViewProps) {
               </div>
             )
           })}
+
+          {/* Add Terminal Button */}
+          <div
+            className="unified-tab add-tab"
+            onClick={handleAddTerminal}
+            title="Add new terminal"
+          >
+            <span className="tab-icon">➕</span>
+          </div>
         </div>
 
         <div className="unified-terminal-container">
@@ -484,6 +548,11 @@ function AgentView({}: AgentViewProps) {
               agentId && <Terminal agentId={agentId} />
             )
           )}
+          {plainTerminals.map(terminalId => (
+            activeTab === terminalId && agentId && (
+              <PlainTerminal key={terminalId} agentId={agentId} terminalId={terminalId} />
+            )
+          ))}
           {testEnvCommands.map(cmd => (
             activeTab === cmd.id && agentId && (
               <TestEnvTerminal key={cmd.id} agentId={agentId} commandId={cmd.id} />

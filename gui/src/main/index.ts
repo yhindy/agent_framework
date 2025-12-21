@@ -126,6 +126,25 @@ function setupIPC(): void {
     services!.terminal.resize(agentId, cols, rows)
   })
 
+  // Plain terminal handlers
+  ipcMain.handle('plainTerminal:start', async (_event, agentId: string, terminalId: string) => {
+    const currentProject = services!.project.getCurrentProject()
+    if (!currentProject) throw new Error('No project selected')
+    return services!.terminal.startPlainTerminal(currentProject.path, agentId, terminalId)
+  })
+
+  ipcMain.on('plainTerminal:input', (_event, terminalId: string, data: string) => {
+    services!.terminal.sendPlainInput(terminalId, data)
+  })
+
+  ipcMain.on('plainTerminal:resize', (_event, terminalId: string, cols: number, rows: number) => {
+    services!.terminal.resizePlain(terminalId, cols, rows)
+  })
+
+  ipcMain.handle('plainTerminal:stop', async (_event, terminalId: string) => {
+    return services!.terminal.stopPlainTerminal(terminalId)
+  })
+
   // Assignment handlers
   ipcMain.handle('assignments:get', async () => {
     const currentProject = services!.project.getCurrentProject()

@@ -28,6 +28,19 @@ const api = {
     return () => ipcRenderer.removeListener('terminal:output', subscription)
   },
 
+  // Plain Terminal APIs
+  startPlainTerminal: (agentId: string, terminalId: string) => ipcRenderer.invoke('plainTerminal:start', agentId, terminalId),
+  stopPlainTerminal: (terminalId: string) => ipcRenderer.invoke('plainTerminal:stop', terminalId),
+  sendPlainTerminalInput: (terminalId: string, data: string) =>
+    ipcRenderer.send('plainTerminal:input', terminalId, data),
+  resizePlainTerminal: (terminalId: string, cols: number, rows: number) =>
+    ipcRenderer.send('plainTerminal:resize', terminalId, cols, rows),
+  onPlainTerminalOutput: (callback: (terminalId: string, data: string) => void) => {
+    const subscription = (_event: any, terminalId: string, data: string) => callback(terminalId, data)
+    ipcRenderer.on('plainTerminal:output', subscription)
+    return () => ipcRenderer.removeListener('plainTerminal:output', subscription)
+  },
+
   // Assignment APIs
   getAssignments: () => ipcRenderer.invoke('assignments:get'),
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),

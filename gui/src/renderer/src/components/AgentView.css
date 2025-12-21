@@ -320,6 +320,34 @@
   color: white;
 }
 
+.unified-tab .tab-action.close {
+  background: #858585;
+  color: white;
+  font-size: 11px;
+  padding: 2px 5px;
+}
+
+.unified-tab .tab-action.close:hover {
+  background: #c72e2e;
+}
+
+.unified-tab.add-tab {
+  background: #2d2d2d;
+  cursor: pointer;
+  border-right: 1px solid #333;
+  padding: 10px 12px;
+  min-width: auto;
+}
+
+.unified-tab.add-tab:hover {
+  background: #37373d;
+}
+
+.unified-tab.add-tab .tab-icon {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
 .unified-terminal-container {
   flex: 1;
   overflow: hidden;

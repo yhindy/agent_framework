@@ -14,6 +14,11 @@ interface TerminalSession {
   mode: string
 }
 
+interface PlainTerminalSession {
+  pty: pty.IPty
+  terminalId: string
+}
+
 const SIGNAL_PATTERNS = [
   { pattern: '===SIGNAL:PLAN_READY===', signal: 'PLAN_READY' },
   { pattern: '===SIGNAL:DEV_COMPLETED===', signal: 'DEV_COMPLETED' },
@@ -24,10 +29,12 @@ const SIGNAL_PATTERNS = [
 
 export class TerminalService {
   private terminals: Map<string, TerminalSession>
+  private plainTerminals: Map<string, PlainTerminalSession>
   private mainWindow: BrowserWindow
 
   constructor(mainWindow: BrowserWindow) {
     this.terminals = new Map()
+    this.plainTerminals = new Map()
     this.mainWindow = mainWindow
   }
 
@@ -199,6 +206,73 @@ export class TerminalService {
   cleanup(): void {
     for (const [agentId, _session] of this.terminals) {
       this.stopAgent(agentId)
+    }
+    for (const [terminalId, _session] of this.plainTerminals) {
+      this.stopPlainTerminal(terminalId)
+    }
+  }
+
+  // Plain terminal methods (for user shells, not agent tools)
+  async startPlainTerminal(projectPath: string, agentId: string, terminalId: string): Promise<void> {
+    const fullTerminalId = `${agentId}-${terminalId}`
+    
+    // Check if terminal already exists
+    if (this.plainTerminals.has(fullTerminalId)) {
+      return
+    }
+
+    // Determine worktree path
+    const projectName = projectPath.split('/').pop() || 'project'
+    const worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+
+    // Spawn PTY with a plain shell
+    const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
+    
+    const terminal = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 30,
+      cwd: worktreePath,
+      env: process.env as any
+    })
+
+    // Store terminal session
+    const session: PlainTerminalSession = {
+      pty: terminal,
+      terminalId: fullTerminalId
+    }
+    this.plainTerminals.set(fullTerminalId, session)
+
+    // Handle output
+    terminal.onData((data) => {
+      this.mainWindow.webContents.send('plainTerminal:output', fullTerminalId, data)
+    })
+
+    // Handle exit
+    terminal.onExit(() => {
+      this.plainTerminals.delete(fullTerminalId)
+    })
+  }
+
+  stopPlainTerminal(terminalId: string): void {
+    const session = this.plainTerminals.get(terminalId)
+    if (session) {
+      session.pty.kill()
+      this.plainTerminals.delete(terminalId)
+    }
+  }
+
+  sendPlainInput(terminalId: string, data: string): void {
+    const session = this.plainTerminals.get(terminalId)
+    if (session) {
+      session.pty.write(data)
+    }
+  }
+
+  resizePlain(terminalId: string, cols: number, rows: number): void {
+    const session = this.plainTerminals.get(terminalId)
+    if (session) {
+      session.pty.resize(cols, rows)
     }
   }
 }
