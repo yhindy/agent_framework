@@ -11,7 +11,7 @@
 PROJECT_NAME="myproject"
 
 # Default base branch for new feature branches
-DEFAULT_BASE_BRANCH="master"
+DEFAULT_BASE_BRANCH="main"
 
 # ============================================================================
 # FILES TO COPY
