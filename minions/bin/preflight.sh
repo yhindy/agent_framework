@@ -2,7 +2,7 @@
 # Pre-flight Checks
 # Verifies everything is set up correctly before running
 #
-# Usage: ./scripts/agents/preflight.sh [agent-id]
+# Usage: ./minions/bin/preflight.sh [agent-id]
 
 # Colors
 RED='\033[0;31m'

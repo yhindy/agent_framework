@@ -1,7 +1,7 @@
 #!/bin/bash
 # Test script for orchestrator signals
 # 
-# Usage: ./scripts/agents/test_signal.sh
+# Usage: ./minions/bin/test_signal.sh
 #
 # This script simulates an agent workflow with signals for testing the GUI
 

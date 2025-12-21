@@ -2,11 +2,11 @@
 # Teardown Agent Worktree
 # Removes an agent worktree and cleans up resources
 #
-# Usage: ./scripts/agents/teardown.sh <agent-id> [--force]
+# Usage: ./minions/bin/teardown.sh <agent-id> [--force]
 #
 # Example:
-#   ./scripts/agents/teardown.sh agent-1
-#   ./scripts/agents/teardown.sh agent-2 --force
+#   ./minions/bin/teardown.sh agent-1
+#   ./minions/bin/teardown.sh agent-2 --force
 
 set -e
 

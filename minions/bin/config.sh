@@ -8,7 +8,7 @@
 
 # Project name - used for worktree folder names
 # Worktrees will be created as: ../<PROJECT_NAME>-agent-1, etc.
-PROJECT_NAME="agent_framework"
+PROJECT_NAME="myproject"
 
 # Default base branch for new feature branches
 DEFAULT_BASE_BRANCH="master"

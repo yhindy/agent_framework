@@ -36,7 +36,7 @@ export class TestEnvService {
    * Load test environment configuration from docs/agents/
    */
   loadConfig(projectPath: string): TestEnvConfig {
-    const configPath = join(projectPath, 'docs', 'agents', 'test-env.config.json')
+    const configPath = join(projectPath, 'minions', 'test-env.config.json')
     
     console.log('[TestEnvService] Loading config from:', configPath)
     

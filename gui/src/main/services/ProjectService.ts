@@ -32,9 +32,9 @@ export class ProjectService {
     }
 
     // Check if it has the agent framework
-    const agentsPath = join(projectPath, 'docs', 'agents')
+    const agentsPath = join(projectPath, 'minions')
     if (!existsSync(agentsPath)) {
-      throw new Error('Not a valid agent framework project. Missing docs/agents directory.')
+      throw new Error('Not a valid agent framework project. Missing minions/ directory.')
     }
 
     const project: ProjectState = {

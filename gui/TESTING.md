@@ -13,7 +13,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 2. Create test data:
    ```bash
    # From project root
-   node scripts/agents/migrate-assignments.js
+   node minions/bin/migrate-assignments.js
    ```
 
 ## Test 1: Project Selection
@@ -112,7 +112,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 1. Create a test worktree manually:
    ```bash
    # From project root
-   ./scripts/agents/setup.sh agent-test feature/agent-test/terminal-test
+   ./minions/bin/setup.sh agent-test feature/agent-test/terminal-test
    ```
 
 2. In the GUI, the agent should appear in the sidebar after a moment (file watcher).
@@ -174,7 +174,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 1. Keep the GUI open with a project loaded.
 
-2. In a terminal, edit `docs/agents/assignments.json`:
+2. In a terminal, edit `minions/assignments.json`:
    - Change a feature name
    - Change a status
 
@@ -222,7 +222,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 3. In the agent's worktree directory, run:
    ```bash
-   ../../scripts/agents/test_signal.sh
+   ../../minions/bin/test_signal.sh
    ```
 
 4. **Expected Result**:
@@ -289,7 +289,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 - Verify TerminalService is running (check console logs)
 
 ### File watcher not updating
-- Check file permissions on `docs/agents/`
+- Check file permissions on `minions/`
 - Try manually triggering: touch `assignments.json`
 
 ---

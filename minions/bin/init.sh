@@ -2,7 +2,7 @@
 # Initialize Agent Framework
 # Run this once after copying the framework into your project
 #
-# Usage: ./scripts/agents/init.sh
+# Usage: ./minions/bin/init.sh
 
 set -e
 
@@ -20,8 +20,8 @@ echo ""
 
 # Create directory structure if not exists
 echo -e "${BLUE}📁 Creating directory structure...${NC}"
-mkdir -p "$REPO_ROOT/docs/agents/assignments"
-mkdir -p "$REPO_ROOT/docs/agents/templates"
+mkdir -p "$REPO_ROOT/minions/assignments"
+mkdir -p "$REPO_ROOT/minions/templates"
 mkdir -p "$REPO_ROOT/.cursor/rules"
 
 # Check if config needs to be updated
@@ -29,7 +29,7 @@ CONFIG_FILE="$SCRIPT_DIR/config.sh"
 if grep -q 'PROJECT_NAME="myproject"' "$CONFIG_FILE"; then
     # Try to auto-detect project name from folder
     DETECTED_NAME=$(basename "$REPO_ROOT")
-    echo -e "${YELLOW}⚠️  Please update PROJECT_NAME in scripts/agents/config.sh${NC}"
+    echo -e "${YELLOW}⚠️  Please update PROJECT_NAME in minions/bin/config.sh${NC}"
     echo "   Detected project name: $DETECTED_NAME"
     echo ""
 fi
@@ -54,11 +54,11 @@ echo -e "${GREEN}✅ Minion Framework initialized!${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo ""
-echo "1. Edit scripts/agents/config.sh to set your project name"
+echo "1. Edit minions/bin/config.sh to set your project name"
 echo ""
 echo "2. (Optional) Customize .cursor/rules/agent-rules.mdc for your project"
 echo ""
 echo "3. Create a minion worktree:"
-echo "   ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature"
+echo "   ./minions/bin/setup.sh agent-1 feature/agent-1/my-feature"
 echo ""
 

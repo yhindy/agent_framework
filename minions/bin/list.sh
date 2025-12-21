@@ -2,7 +2,7 @@
 # List Agent Worktrees
 # Shows all active agent worktrees and their status
 #
-# Usage: ./scripts/agents/list.sh
+# Usage: ./minions/bin/list.sh
 
 # Colors
 GREEN='\033[0;32m'

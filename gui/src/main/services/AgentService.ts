@@ -159,7 +159,7 @@ export class AgentService {
   }
 
   getAssignments(projectPath: string): AssignmentsFile {
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     
     if (!existsSync(assignmentsPath)) {
       return { assignments: [], availableAgentIds: [] }
@@ -175,7 +175,7 @@ export class AgentService {
   }
 
   async createAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<Assignment> {
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     const data = this.getAssignments(projectPath)
 
     const newAssignment: Assignment = {
@@ -184,7 +184,7 @@ export class AgentService {
       branch: assignment.branch!,
       feature: assignment.feature!,
       status: assignment.status || 'pending',
-      specFile: assignment.specFile || `docs/agents/assignments/${assignment.agentId}-${assignment.branch?.split('/').pop()}.md`,
+      specFile: assignment.specFile || `minions/assignments/${assignment.agentId}-${assignment.branch?.split('/').pop()}.md`,
       tool: assignment.tool || 'claude',
       model: assignment.model,
       mode: assignment.mode || 'idle',
@@ -195,7 +195,7 @@ export class AgentService {
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
 
     // Run setup.sh to create the agent worktree
-    const setupScript = join(projectPath, 'scripts', 'agents', 'setup.sh')
+    const setupScript = join(projectPath, 'minions', 'bin', 'setup.sh')
     try {
       const { stdout, stderr } = await execAsync(
         `"${setupScript}" ${newAssignment.agentId} ${newAssignment.branch}`,
@@ -213,7 +213,7 @@ export class AgentService {
   }
 
   async updateAssignment(projectPath: string, assignmentId: string, updates: Partial<Assignment>): Promise<void> {
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     const data = this.getAssignments(projectPath)
 
     const index = data.assignments.findIndex(a => a.id === assignmentId)
@@ -257,7 +257,7 @@ export class AgentService {
   }
 
   async teardownAgent(projectPath: string, agentId: string, force: boolean = false): Promise<void> {
-    const teardownScript = join(projectPath, 'scripts', 'agents', 'teardown.sh')
+    const teardownScript = join(projectPath, 'minions', 'bin', 'teardown.sh')
     
     try {
       const forceFlag = force ? '--force' : ''
@@ -298,7 +298,7 @@ export class AgentService {
   }
 
   private async removeAssignment(projectPath: string, agentId: string): Promise<void> {
-    const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     const data = this.getAssignments(projectPath)
 
     // Remove assignment for this agent
@@ -407,7 +407,7 @@ export class AgentService {
         data.assignments[assignmentIndex].prStatus = 'OPEN'
         data.assignments[assignmentIndex].status = 'pr_open'
 
-        const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+        const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
         writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
 
         console.log('[AgentService] PR created:', prUrl)
@@ -428,7 +428,7 @@ export class AgentService {
           data.assignments[assignmentIndex].prStatus = 'OPEN'
           data.assignments[assignmentIndex].status = 'pr_open'
 
-          const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+          const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
           writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
 
           return { url: prUrl }
@@ -476,7 +476,7 @@ export class AgentService {
         data.assignments[assignmentIndex].status = 'closed'
       }
 
-      const assignmentsPath = join(projectPath, 'docs', 'agents', 'assignments.json')
+      const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
       writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
 
       return {

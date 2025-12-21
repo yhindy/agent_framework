@@ -2,15 +2,15 @@
 /**
  * Migration script to convert ASSIGNMENTS.md to assignments.json
  * 
- * Usage: node scripts/agents/migrate-assignments.js
+ * Usage: node minions/bin/migrate-assignments.js
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '../..');
-const ASSIGNMENTS_MD = path.join(REPO_ROOT, 'docs/agents/ASSIGNMENTS.md');
-const ASSIGNMENTS_JSON = path.join(REPO_ROOT, 'docs/agents/assignments.json');
+const ASSIGNMENTS_MD = path.join(REPO_ROOT, 'minions/ASSIGNMENTS.md');
+const ASSIGNMENTS_JSON = path.join(REPO_ROOT, 'minions/assignments.json');
 
 function parseMarkdownTable(content) {
   const lines = content.split('\n');
@@ -57,7 +57,7 @@ function parseMarkdownTable(content) {
             branch: branch || `feature/${agent}/unknown`,
             feature: feature || 'Unknown Feature',
             status: status.toLowerCase().replace(/\s+/g, '_') || 'pending',
-            specFile: specFile || `docs/agents/assignments/${agent}-feature.md`,
+            specFile: specFile || `minions/assignments/${agent}-feature.md`,
             tool: 'claude',
             mode: 'idle'
           });

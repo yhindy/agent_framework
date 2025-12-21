@@ -9,7 +9,7 @@ Get the Minion Orchestrator GUI up and running in 5 minutes. 🍌
 node --version
 
 # Verify you have the agent framework set up
-ls docs/agents/
+ls minions/
 ```
 
 ## Step 2: Install Dependencies
@@ -32,7 +32,7 @@ If you have an existing `ASSIGNMENTS.md`, migrate it:
 
 ```bash
 cd ..  # Back to project root
-node scripts/agents/migrate-assignments.js
+node minions/bin/migrate-assignments.js
 ```
 
 Otherwise, the `assignments.json` file was already created.
@@ -49,7 +49,7 @@ The app window will open automatically.
 ## Step 5: Select Your Project
 
 1. Click "Select Project Folder"
-2. Navigate to your project root (the one with `docs/agents/`)
+2. Navigate to your project root (the one with `minions/`)
 3. Click "Select"
 
 ## Step 6: Create Your First Mission
@@ -84,7 +84,7 @@ The app window will open automatically.
 1. Click `agent-1` in the sidebar
 2. In the terminal, type:
    ```bash
-   ../../scripts/agents/test_signal.sh
+   ../../minions/bin/test_signal.sh
    ```
 3. Watch the signals appear as notifications!
 
@@ -92,7 +92,7 @@ The app window will open automatically.
 
 - Read [`TESTING.md`](TESTING.md) for comprehensive test scenarios
 - Read [`README.md`](README.md) for full documentation
-- Check out the signal protocol in `../docs/agents/rules/orchestrator_signals.md`
+- Check out the signal protocol in `../minions/rules/orchestrator_signals.md`
 
 ## Troubleshooting
 
@@ -100,7 +100,7 @@ The app window will open automatically.
 Make sure you're selecting the actual project root, not a subdirectory.
 
 ### "Not a valid minion framework project"
-Your project needs a `docs/agents/` directory. Run `../scripts/agents/init.sh` first.
+Your project needs a `minions/` directory. Run `../minions/bin/init.sh` first.
 
 ### Terminal shows nothing
 - Verify `claude` or `cursor` is installed: `which claude` / `which cursor`

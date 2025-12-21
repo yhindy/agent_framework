@@ -2,11 +2,11 @@
 # Setup Agent Worktree
 # Creates an isolated git worktree for a parallel agent
 #
-# Usage: ./scripts/agents/setup.sh <agent-id> <branch-name> [base-branch]
+# Usage: ./minions/bin/setup.sh <agent-id> <branch-name> [base-branch]
 #
 # Example:
-#   ./scripts/agents/setup.sh agent-1 feature/agent-1/new-feature
-#   ./scripts/agents/setup.sh agent-2 feature/agent-2/bugfix main
+#   ./minions/bin/setup.sh agent-1 feature/agent-1/new-feature
+#   ./minions/bin/setup.sh agent-2 feature/agent-2/bugfix main
 
 set -e
 
@@ -41,7 +41,7 @@ echo ""
 # Check if worktree already exists
 if [ -d "$WORKTREE_PATH" ]; then
     echo -e "${YELLOW}⚠️  Worktree already exists at $WORKTREE_PATH${NC}"
-    echo "   To remove it, run: ./scripts/agents/teardown.sh $AGENT_ID"
+    echo "   To remove it, run: ./minions/bin/teardown.sh $AGENT_ID"
     exit 1
 fi
 
@@ -75,8 +75,8 @@ fi
 
 # Copy minion mission files
 echo -e "${BLUE}📋 Copying minion mission files...${NC}"
-ASSIGNMENTS_SRC="$REPO_ROOT/docs/agents/assignments"
-ASSIGNMENTS_DST="$WORKTREE_PATH/docs/agents/assignments"
+ASSIGNMENTS_SRC="$REPO_ROOT/minions/assignments"
+ASSIGNMENTS_DST="$WORKTREE_PATH/minions/assignments"
 
 if [ -d "$ASSIGNMENTS_SRC" ]; then
     mkdir -p "$ASSIGNMENTS_DST"
@@ -90,14 +90,14 @@ if [ -d "$ASSIGNMENTS_SRC" ]; then
     done
     if [ $FOUND -eq 0 ]; then
         echo -e "${YELLOW}   No mission files found for $AGENT_ID${NC}"
-        echo "   Create one: docs/agents/assignments/${AGENT_ID}-feature-name.md"
+        echo "   Create one: minions/assignments/${AGENT_ID}-feature-name.md"
     fi
 fi
 
 # Copy orchestrator signal rules
 echo -e "${BLUE}📋 Copying orchestrator integration rules...${NC}"
-RULES_SRC="$REPO_ROOT/docs/agents/rules"
-RULES_DST="$WORKTREE_PATH/docs/agents/rules"
+RULES_SRC="$REPO_ROOT/minions/rules"
+RULES_DST="$WORKTREE_PATH/minions/rules"
 
 if [ -d "$RULES_SRC" ]; then
     mkdir -p "$RULES_DST"
@@ -139,6 +139,6 @@ echo "   cd $WORKTREE_PATH"
 echo ""
 echo "2. Or launch an AI minion:"
 echo "   cd $WORKTREE_PATH && cursor ."
-echo "   cd $WORKTREE_PATH && claude \"Read docs/agents/assignments/$AGENT_ID-*.md and implement\""
+echo "   cd $WORKTREE_PATH && claude \"Read minions/assignments/$AGENT_ID-*.md and implement\""
 echo ""
 

@@ -47,24 +47,16 @@ echo ""
 
 # Create directory structure
 echo -e "${BLUE}📁 Creating directory structure...${NC}"
-mkdir -p "$TARGET/scripts/agents"
-mkdir -p "$TARGET/docs/agents/assignments"
-mkdir -p "$TARGET/docs/agents/templates"
+mkdir -p "$TARGET/minions"
 mkdir -p "$TARGET/.cursor/rules"
 
 # Copy files
 echo -e "${BLUE}📋 Copying files...${NC}"
 
-# Scripts
-cp "$FRAMEWORK_DIR/scripts/agents/"*.sh "$TARGET/scripts/agents/"
-chmod +x "$TARGET/scripts/agents/"*.sh
-echo "   ✓ scripts/agents/"
-
-# Docs
-cp "$FRAMEWORK_DIR/docs/agents/README.md" "$TARGET/docs/agents/"
-cp "$FRAMEWORK_DIR/docs/agents/ASSIGNMENTS.md" "$TARGET/docs/agents/"
-cp "$FRAMEWORK_DIR/docs/agents/templates/FEATURE_SPEC.md" "$TARGET/docs/agents/templates/"
-echo "   ✓ docs/agents/"
+# Everything in minions folder
+cp -R "$FRAMEWORK_DIR/minions/"* "$TARGET/minions/"
+chmod +x "$TARGET/minions/bin/"*.sh
+echo "   ✓ minions/"
 
 # Cursor rules
 cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
@@ -76,8 +68,8 @@ echo ""
 echo -e "${BLUE}🔧 Configuring for project: $PROJECT_NAME${NC}"
 
 # Update config with detected project name
-sed -i.bak "s/PROJECT_NAME=\"myproject\"/PROJECT_NAME=\"$PROJECT_NAME\"/" "$TARGET/scripts/agents/config.sh"
-rm -f "$TARGET/scripts/agents/config.sh.bak"
+sed -i.bak "s/PROJECT_NAME=\"myproject\"/PROJECT_NAME=\"$PROJECT_NAME\"/" "$TARGET/minions/bin/config.sh"
+rm -f "$TARGET/minions/bin/config.sh.bak"
 
 # Add to .gitignore
 GITIGNORE="$TARGET/.gitignore"
@@ -99,11 +91,11 @@ echo -e "${GREEN}✅ Agent Framework installed!${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo ""
-echo "1. (Optional) Edit scripts/agents/config.sh to customize settings"
+echo "1. (Optional) Edit minions/bin/config.sh to customize settings"
 echo ""
 echo "2. Create your first agent worktree:"
 echo "   cd $TARGET"
-echo "   ./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature"
+echo "   ./minions/bin/setup.sh agent-1 feature/agent-1/my-feature"
 echo ""
 echo "3. Start an AI agent in the worktree:"
 echo "   cd ../$PROJECT_NAME-agent-1"

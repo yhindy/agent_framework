@@ -75,7 +75,7 @@ gui/
 ### 1. Select a Project
 
 When you first open the app, you'll be prompted to select a project folder. The project must have:
-- `docs/agents/` directory structure
+- `minions/` directory structure
 - `assignments.json` file (or run migration script first)
 
 ### 2. View Assignments
@@ -123,7 +123,7 @@ The UI will automatically:
 If you have an existing `ASSIGNMENTS.md` file, migrate it to JSON:
 
 ```bash
-node ../scripts/agents/migrate-assignments.js
+node ../minions/bin/migrate-assignments.js
 ```
 
 ## Configuration
@@ -170,7 +170,7 @@ Make sure:
 
 ### Assignments not loading
 
-1. Verify `assignments.json` exists in `docs/agents/`
+1. Verify `assignments.json` exists in `minions/`
 2. Check the JSON is valid
 3. Try reloading the project
 
@@ -178,7 +178,7 @@ Make sure:
 
 Run the setup script manually:
 ```bash
-./scripts/agents/setup.sh agent-1 feature/agent-1/my-feature
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
 ```
 
 ### Clean reinstall

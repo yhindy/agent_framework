@@ -135,7 +135,7 @@ function TestEnvPanel({ agentId }: TestEnvPanelProps) {
       <div className="test-env-panel">
         <div className="test-env-empty">
           <p>No test environment commands configured.</p>
-          <p>Create a <code>test-env.config.json</code> file in <code>docs/agents/</code> to define commands.</p>
+          <p>Create a <code>test-env.config.json</code> file in <code>minions/</code> to define commands.</p>
         </div>
       </div>
     )
