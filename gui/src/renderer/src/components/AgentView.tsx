@@ -21,6 +21,8 @@ interface Assignment {
   tool: string
   model?: string
   mode: string
+  prUrl?: string
+  prStatus?: string
 }
 
 interface AgentSession {
@@ -436,6 +438,15 @@ function AgentView({}: AgentViewProps) {
             </button>
           )}
           <button onClick={handleOpenCursor}>Open in Cursor</button>
+
+          {assignment && (assignment.status === 'pr_open' || assignment.status === 'merged' || assignment.status === 'closed') && assignment.prUrl && (
+            <button 
+              onClick={() => window.open(assignment.prUrl, '_blank')}
+              className="primary"
+            >
+              Open PR
+            </button>
+          )}
 
           {assignment && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
             <button 

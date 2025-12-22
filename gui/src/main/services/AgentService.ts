@@ -1,9 +1,10 @@
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 interface AgentSession {
   id: string
@@ -197,8 +198,9 @@ export class AgentService {
     // Run setup.sh to create the agent worktree
     const setupScript = join(projectPath, 'minions', 'bin', 'setup.sh')
     try {
-      const { stdout, stderr } = await execAsync(
-        `"${setupScript}" ${newAssignment.agentId} ${newAssignment.branch}`,
+      const { stdout, stderr } = await execFileAsync(
+        setupScript,
+        [newAssignment.agentId, newAssignment.branch],
         { cwd: projectPath }
       )
       console.log('Setup script output:', stdout)
@@ -234,7 +236,7 @@ export class AgentService {
     }
 
     // Open in Cursor
-    exec(`cursor "${agent.worktreePath}"`, (error) => {
+    execFile('cursor', [agent.worktreePath], (error) => {
       if (error) {
         console.error('Error opening Cursor:', error)
       }
@@ -260,9 +262,11 @@ export class AgentService {
     const teardownScript = join(projectPath, 'minions', 'bin', 'teardown.sh')
     
     try {
-      const forceFlag = force ? '--force' : ''
-      const { stdout, stderr } = await execAsync(
-        `"${teardownScript}" ${agentId} ${forceFlag}`,
+      const args = [agentId]
+      if (force) args.push('--force')
+      const { stdout, stderr } = await execFileAsync(
+        teardownScript,
+        args,
         { cwd: projectPath }
       )
       console.log('Teardown script output:', stdout)
@@ -411,15 +415,15 @@ export class AgentService {
           const commitMessage = `Complete: ${assignment.feature}`
           
           try {
-            await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
+            await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
             console.log('[AgentService] Changes committed')
           } catch (commitError: any) {
             // If identity is unknown, try to set a default one
             if (commitError.message.includes('identity unknown')) {
               console.log('[AgentService] Git identity unknown, setting default...')
-              await execAsync('git config user.email "agent@minions.ai"', { cwd: worktreePath })
-              await execAsync('git config user.name "Minion Agent"', { cwd: worktreePath })
-              await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd: worktreePath })
+              await execFileAsync('git', ['config', 'user.email', 'agent@minions.ai'], { cwd: worktreePath })
+              await execFileAsync('git', ['config', 'user.name', 'Minion Agent'], { cwd: worktreePath })
+              await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
               console.log('[AgentService] Changes committed with default identity')
             } else if (commitError.stderr && (commitError.stderr.includes('pre-commit') || commitError.stdout.includes('pre-commit') || commitError.message.includes('hook failed'))) {
               throw new Error(`Pre-commit hooks failed. Please fix the issues and try again.\n\n${commitError.stderr || commitError.stdout || commitError.message}`)
@@ -441,7 +445,7 @@ export class AgentService {
 
       // Check if there are commits on this branch
       try {
-        const { stdout: commitCount } = await execAsync(`git rev-list --count ${baseBranch}..${assignment.branch}`, { cwd: worktreePath })
+        const { stdout: commitCount } = await execFileAsync('git', ['rev-list', '--count', `${baseBranch}..${assignment.branch}`], { cwd: worktreePath })
         if (parseInt(commitCount.trim()) === 0) {
           throw new Error(`No commits on branch '${assignment.branch}' compared to '${baseBranch}'. Make sure changes are committed before creating a PR.`)
         }
@@ -455,7 +459,7 @@ export class AgentService {
       // Push the branch to remote
       console.log(`[AgentService] Pushing branch to ${remote}...`)
       try {
-        await execAsync(`git push -u ${remote} ${assignment.branch}`, { cwd: worktreePath })
+        await execFileAsync('git', ['push', '-u', remote, assignment.branch], { cwd: worktreePath })
       } catch (pushError: any) {
         // If it's already up to date, that's fine
         if (pushError.stderr && (pushError.stderr.includes('Everything up-to-date') || pushError.stdout.includes('Everything up-to-date'))) {
@@ -485,8 +489,9 @@ export class AgentService {
       // Try to create PR
       console.log('[AgentService] Creating PR...')
       try {
-        const { stdout } = await execAsync(
-          `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --base ${baseBranch} --head ${assignment.branch}`,
+        const { stdout } = await execFileAsync(
+          'gh',
+          ['pr', 'create', '--title', prTitle, '--body', prBody, '--base', baseBranch, '--head', assignment.branch],
           { cwd: worktreePath }
         )
         
@@ -509,8 +514,9 @@ export class AgentService {
         // Check if PR already exists
         if (prError.message.includes('already exists')) {
           console.log('[AgentService] PR already exists, fetching URL...')
-          const { stdout } = await execAsync(
-            `gh pr list --head ${assignment.branch} --json url --jq '.[0].url'`,
+          const { stdout } = await execFileAsync(
+            'gh',
+            ['pr', 'list', '--head', assignment.branch, '--json', 'url', '--jq', '.[0].url'],
             { cwd: worktreePath }
           )
           const prUrl = stdout.trim()
@@ -551,8 +557,9 @@ export class AgentService {
       const prNumber = prNumberMatch[1]
 
       // Check PR status using gh CLI
-      const { stdout } = await execAsync(
-        `gh pr view ${prNumber} --json state,mergedAt`,
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'view', prNumber, '--json', 'state,mergedAt'],
         { cwd: projectPath }
       )
 

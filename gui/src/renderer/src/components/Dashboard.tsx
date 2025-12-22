@@ -121,10 +121,12 @@ function Dashboard({ project }: DashboardProps) {
       const branch = generateBranchName(formData.agentId, formData.shortName)
 
       // Create assignment with prompt as the feature
+      const feature = formData.tool === 'cursor' ? `Cursor Session: ${formData.shortName}` : formData.prompt
+
       await window.electronAPI.createAssignment({
         agentId: formData.agentId,
         branch,
-        feature: formData.prompt,
+        feature,
         tool: formData.tool,
         model: formData.model,
         prompt: formData.prompt,
@@ -492,28 +494,30 @@ function Dashboard({ project }: DashboardProps) {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>{formData.mode === 'planning' ? 'Planning Prompt' : 'Task Description'}</label>
-                <textarea
-                  value={formData.prompt}
-                  onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
-                  placeholder={formData.mode === 'planning'
-                    ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
-                    : "Implement a login form with email and password fields. Style it with Tailwind CSS."}
-                  rows={6}
-                  required
-                  style={{
-                    width: '100%',
-                    resize: 'vertical',
-                    fontFamily: 'inherit'
-                  }}
-                />
-                <div className="form-hint">
-                  {formData.mode === 'planning'
-                    ? 'Minion will create a plan for you to review before implementing.'
-                    : 'Minion will implement directly without a planning phase.'}
+              {formData.tool !== 'cursor' && (
+                <div className="form-group">
+                  <label>{formData.mode === 'planning' ? 'Planning Prompt' : 'Task Description'}</label>
+                  <textarea
+                    value={formData.prompt}
+                    onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+                    placeholder={formData.mode === 'planning'
+                      ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
+                      : "Implement a login form with email and password fields. Style it with Tailwind CSS."}
+                    rows={6}
+                    required={formData.tool !== 'cursor'}
+                    style={{
+                      width: '100%',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  <div className="form-hint">
+                    {formData.mode === 'planning'
+                      ? 'Minion will create a plan for you to review before implementing.'
+                      : 'Minion will implement directly without a planning phase.'}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="form-row">
                 <div className="form-group">
