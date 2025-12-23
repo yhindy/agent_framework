@@ -333,7 +333,6 @@ function Dashboard({ project }: DashboardProps) {
                     </div>
                     {assignment.status !== 'unassigned' && (
                       <>
-                        <div className="card-title">{assignment.feature}</div>
                         <div className="card-meta">
                           <div className="meta-item">
                             <span className="meta-label">Branch:</span>
