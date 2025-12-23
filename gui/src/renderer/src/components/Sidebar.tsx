@@ -66,10 +66,12 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
     <div className="sidebar">
       <div className="sidebar-header">
         <div className="project-info">
-          <div className="project-name">{project.name}</div>
-          <button className="switch-project-btn" onClick={handleSwitchProject} title="Switch Project">
-            ⇄
-          </button>
+          <div className="project-name">
+            <span>{project.name}</span>
+            <button className="switch-project-btn" onClick={handleSwitchProject} title="Switch Project">
+              ⇄
+            </button>
+          </div>
         </div>
       </div>
 
