@@ -8,7 +8,7 @@ import LoadingModal from './LoadingModal'
 import './AgentView.css'
 
 interface AgentViewProps {
-  project: any
+  activeProjects: any[]
 }
 
 interface Assignment {
@@ -34,7 +34,7 @@ interface AgentSession {
   lastActivity: string
 }
 
-function AgentView({}: AgentViewProps) {
+function AgentView({ activeProjects }: AgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<AgentSession | null>(null)
@@ -121,15 +121,38 @@ function AgentView({}: AgentViewProps) {
   const loadAgentData = async () => {
     if (!agentId) return
 
-    // Load agent session
-    const agents = await window.electronAPI.listAgents()
-    const agentData = agents.find((a: AgentSession) => a.id === agentId)
-    setAgent(agentData || null)
+    // #region agent log
+    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentView.tsx:121',message:'loadAgentData called',data:{agentId,activeProjectsCount:activeProjects.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
 
-    // Load assignment
-    const assignments = await window.electronAPI.getAssignments()
-    const assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId)
-    setAssignment(assignmentData || null)
+    // Load agent session - search across all active projects
+    let agentData: AgentSession | null = null
+    let assignmentData: Assignment | null = null
+
+    for (const project of activeProjects) {
+      try {
+        const agents = await window.electronAPI.listAgentsForProject(project.path)
+        const found = agents.find((a: AgentSession) => a.id === agentId)
+        if (found) {
+          agentData = found
+          localStorage.setItem('lastSelectedProjectPath', project.path)
+          
+          // Also load assignment from this project
+          const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
+          assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId) || null
+          break
+        }
+      } catch (err) {
+        console.error(`Failed to search project ${project.path}:`, err)
+      }
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentView.tsx:145',message:'loadAgentData result',data:{agentId,foundAgent:!!agentData,foundAssignment:!!assignmentData},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
+
+    setAgent(agentData)
+    setAssignment(assignmentData)
 
     if (assignmentData) {
       setCurrentTool(assignmentData.tool)
