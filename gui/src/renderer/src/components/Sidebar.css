@@ -103,10 +103,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  color: #cccccc;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  color: #858585;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 11px;
+  text-transform: uppercase;
   position: relative;
 }
 
@@ -120,12 +122,13 @@
 }
 
 .project-header-content:hover {
-  color: #ffffff;
+  color: #cccccc;
 }
 
 .collapse-icon {
-  font-size: 10px;
+  font-size: 9px;
   color: #858585;
+  width: 12px;
 }
 
 .project-name {
@@ -136,8 +139,8 @@
   opacity: 0;
   background: none;
   border: none;
-  color: #f48771;
-  font-size: 18px;
+  color: #858585;
+  font-size: 14px;
   cursor: pointer;
   padding: 0 4px;
   transition: opacity 0.2s, color 0.2s;
@@ -149,7 +152,7 @@
 }
 
 .remove-project-btn:hover {
-  color: #ff6b6b;
+  color: #f48771;
 }
 
 .agent-list {
@@ -164,7 +167,7 @@
   margin: 2px 0;
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.1s;
   color: #cccccc;
   position: relative;
 }
@@ -174,7 +177,7 @@
 }
 
 .agent-item.active {
-  background: #37373d;
+  background: #094771;
   color: #ffffff;
 }
 

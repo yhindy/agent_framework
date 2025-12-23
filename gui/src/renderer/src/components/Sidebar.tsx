@@ -89,38 +89,18 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
   }
 
   const loadAllAgents = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:91',message:'loadAllAgents called',data:{activeProjectsCount:activeProjects.length,projects:activeProjects.map(p=>p.path)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
-    
     // Fetch agents for all active projects
     const agentsByProj: AgentsByProject = {}
     
     for (const project of activeProjects) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:98',message:'calling listAgentsForProject',data:{projectPath:project.path},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
-        
         const agents = await window.electronAPI.listAgentsForProject(project.path)
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:105',message:'received agents',data:{projectPath:project.path,agentCount:agents.length,agentIds:agents.map(a=>a.id)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
-        
         agentsByProj[project.path] = agents
       } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:113',message:'error loading agents',data:{projectPath:project.path,error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
         console.error(`Failed to load agents for ${project.path}:`, err)
         agentsByProj[project.path] = []
       }
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:122',message:'loadAllAgents complete',data:{totalProjects:Object.keys(agentsByProj).length,agentsByProject:Object.entries(agentsByProj).map(([path,agents])=>({path,count:agents.length}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     
     setAgentsByProject(agentsByProj)
   }
@@ -217,7 +197,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
                   onClick={(e) => handleRemoveProject(project.path, e)}
                   title="Remove project"
                 >
-                  −
+                  ✕
                 </button>
               </div>
 

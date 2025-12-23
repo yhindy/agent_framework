@@ -121,10 +121,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const loadAgentData = async () => {
     if (!agentId) return
 
-    // #region agent log
-    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentView.tsx:121',message:'loadAgentData called',data:{agentId,activeProjectsCount:activeProjects.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
-
     // Load agent session - search across all active projects
     let agentData: AgentSession | null = null
     let assignmentData: Assignment | null = null
@@ -135,7 +131,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         const found = agents.find((a: AgentSession) => a.id === agentId)
         if (found) {
           agentData = found
-          localStorage.setItem('lastSelectedProjectPath', project.path)
           
           // Also load assignment from this project
           const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
@@ -146,10 +141,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         console.error(`Failed to search project ${project.path}:`, err)
       }
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentView.tsx:145',message:'loadAgentData result',data:{agentId,foundAgent:!!agentData,foundAssignment:!!assignmentData},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
 
     setAgent(agentData)
     setAssignment(assignmentData)
@@ -163,7 +154,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
   const loadTestEnvConfig = async () => {
     try {
-      const config = await window.electronAPI.getTestEnvConfig()
+      const config = await window.electronAPI.getTestEnvConfig(agentId)
       setTestEnvCommands(config.defaultCommands || [])
     } catch (error) {
       console.error('Error loading test env config:', error)

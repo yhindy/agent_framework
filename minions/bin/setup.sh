@@ -29,7 +29,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
 BASE_BRANCH="${3:-$DEFAULT_BASE_BRANCH}"
-WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
+
+# New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+# Legacy: ../<PROJECT_NAME>-<AGENT_ID> (where AGENT_ID was agent-N)
+if [[ "$AGENT_ID" == "$PROJECT_NAME-"* ]]; then
+  WORKTREE_PATH="$(dirname "$REPO_ROOT")/$AGENT_ID"
+else
+  # Fallback/Legacy behavior or if ID doesn't start with project name
+  WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
+fi
 
 echo -e "${BLUE}🍌 Deploying minion worktree for $AGENT_ID${NC}"
 echo "   Project:    $PROJECT_NAME"

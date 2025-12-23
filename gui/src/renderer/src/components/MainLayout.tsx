@@ -5,28 +5,31 @@ import AgentView from './AgentView'
 import './MainLayout.css'
 
 interface MainLayoutProps {
-  project: any
-  onProjectCleared?: () => void
+  activeProjects: any[]
+  onProjectRemove: (path: string) => void
+  onProjectAdd: () => void
+  onRefresh: () => void
 }
 
-function MainLayout({ project, onProjectCleared }: MainLayoutProps) {
+function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }: MainLayoutProps) {
   const navigate = useNavigate()
 
   const handleNavigate = (path: string) => {
-    // If navigating to root, check if we're clearing project
-    if (path === '/') {
-      onProjectCleared?.()
-    }
     navigate(path)
   }
 
   return (
     <div className="main-layout">
-      <Sidebar project={project} onNavigate={handleNavigate} />
+      <Sidebar 
+        activeProjects={activeProjects}
+        onNavigate={handleNavigate}
+        onProjectRemove={onProjectRemove}
+        onProjectAdd={onProjectAdd}
+      />
       <div className="content-area">
         <Routes>
-          <Route path="/" element={<Dashboard project={project} />} />
-          <Route path="/agent/:agentId" element={<AgentView project={project} />} />
+          <Route path="/" element={<Dashboard activeProjects={activeProjects} onRefresh={onRefresh} />} />
+          <Route path="/agent/:agentId" element={<AgentView activeProjects={activeProjects} />} />
         </Routes>
       </div>
     </div>
@@ -34,4 +37,3 @@ function MainLayout({ project, onProjectCleared }: MainLayoutProps) {
 }
 
 export default MainLayout
-

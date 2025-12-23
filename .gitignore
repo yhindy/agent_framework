@@ -12,10 +12,16 @@ Thumbs.db
 *.swp
 *.swo
 
+# Cursor
+.cursor/
+
+# Dependencies
+node_modules/
+
 # GUI App
 gui/node_modules/
 gui/dist/
 gui/out/
 gui/.vite/
 gui/*.log
-
+*.tsbuildinfo

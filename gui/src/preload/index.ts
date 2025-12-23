@@ -8,9 +8,16 @@ const api = {
   getRecentProjects: () => ipcRenderer.invoke('project:getRecent'),
   getCurrentProject: () => ipcRenderer.invoke('project:getCurrent'),
   clearCurrentProject: () => ipcRenderer.invoke('project:clear'),
+  
+  // Multi-project APIs
+  addProject: (path: string) => ipcRenderer.invoke('project:add', path),
+  removeProject: (path: string) => ipcRenderer.invoke('project:remove', path),
+  switchProject: (path: string) => ipcRenderer.invoke('project:switch', path),
+  getActiveProjects: () => ipcRenderer.invoke('project:getActive'),
 
   // Agent APIs
   listAgents: () => ipcRenderer.invoke('agents:list'),
+  listAgentsForProject: (projectPath: string) => ipcRenderer.invoke('agents:listForProject', projectPath),
   stopAgent: (agentId: string) => ipcRenderer.invoke('agents:stop', agentId),
   openInCursor: (agentId: string) => ipcRenderer.invoke('agents:openCursor', agentId),
   clearUnread: (agentId: string) => ipcRenderer.invoke('agents:clearUnread', agentId),
@@ -43,7 +50,9 @@ const api = {
 
   // Assignment APIs
   getAssignments: () => ipcRenderer.invoke('assignments:get'),
+  getAssignmentsForProject: (projectPath: string) => ipcRenderer.invoke('assignments:getForProject', projectPath),
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
+  createAssignmentForProject: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createForProject', projectPath, assignment),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
   createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),
@@ -87,8 +96,9 @@ const api = {
   },
 
   // Test Environment APIs
-  getTestEnvConfig: () => ipcRenderer.invoke('testEnv:getConfig'),
-  getTestEnvCommands: (assignmentOverrides?: any[]) => ipcRenderer.invoke('testEnv:getCommands', assignmentOverrides),
+  getTestEnvConfig: (agentId?: string) => ipcRenderer.invoke('testEnv:getConfig', agentId),
+  getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => 
+    ipcRenderer.invoke('testEnv:getCommands', agentId, assignmentOverrides),
   startTestEnv: (agentId: string, commandId?: string) => ipcRenderer.invoke('testEnv:start', agentId, commandId),
   stopTestEnv: (agentId: string, commandId?: string) => ipcRenderer.invoke('testEnv:stop', agentId, commandId),
   getTestEnvStatus: (agentId: string) => ipcRenderer.invoke('testEnv:getStatus', agentId),

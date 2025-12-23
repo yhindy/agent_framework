@@ -64,20 +64,65 @@ function initializeServices(): void {
 function setupIPC(): void {
   if (!services) return
 
+  // Helper function to find which project an agent belongs to
+  const findProjectForAgent = async (agentId: string): Promise<string> => {
+    const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
+    return services!.agent.findProjectForAgent(activeProjectPaths, agentId)
+  }
+
+  // Helper function to find which project an assignment belongs to
+  const findProjectForAssignment = async (assignmentId: string): Promise<string> => {
+    const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
+    return services!.agent.findProjectForAssignment(activeProjectPaths, assignmentId)
+  }
+
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
-    const project = services!.project.selectProject(projectPath)
-    // Start watching the new project ONLY if it doesn't need install
+    // Legacy wrapper calling addProject
+    const project = services!.project.addProject(projectPath)
     if (!project.needsInstall) {
       services!.fileWatcher.watchProject(projectPath)
     }
     return project
   })
 
+  ipcMain.handle('project:add', async (_event, projectPath: string) => {
+    const project = services!.project.addProject(projectPath)
+    if (!project.needsInstall) {
+      // If it became the current project (e.g. was first one), watch it
+      const current = services!.project.getCurrentProject()
+      if (current?.path === projectPath) {
+        services!.fileWatcher.watchProject(projectPath)
+      }
+    }
+    return project
+  })
+
+  ipcMain.handle('project:remove', async (_event, projectPath: string) => {
+    services!.project.removeProject(projectPath)
+    // If current project changed, we might need to watch the new one
+    const current = services!.project.getCurrentProject()
+    if (current && !current.needsInstall) {
+      services!.fileWatcher.watchProject(current.path)
+    }
+  })
+
+  ipcMain.handle('project:switch', async (_event, projectPath: string) => {
+    services!.project.switchProject(projectPath)
+    const current = services!.project.getCurrentProject()
+    if (current && !current.needsInstall) {
+      services!.fileWatcher.watchProject(current.path)
+    }
+  })
+
+  ipcMain.handle('project:getActive', async () => {
+    return services!.project.getActiveProjects()
+  })
+
   ipcMain.handle('project:install', async (_event, projectPath: string) => {
     await services!.project.installFramework(projectPath)
-    // Re-select to update state and start watching
-    const project = services!.project.selectProject(projectPath)
+    // Re-select (add) to update state
+    const project = services!.project.addProject(projectPath)
     services!.fileWatcher.watchProject(projectPath)
     return project
   })
@@ -110,14 +155,24 @@ function setupIPC(): void {
     }))
   })
 
+  ipcMain.handle('agents:listForProject', async (_event, projectPath: string) => {
+    const agents = await services!.agent.listAgents(projectPath)
+    
+    // Merge in terminal PIDs from TerminalService
+    const activeTerminals = services!.terminal.getActiveTerminals()
+    return agents.map(agent => ({
+      ...agent,
+      terminalPid: activeTerminals.get(agent.id) ?? null
+    }))
+  })
+
   ipcMain.handle('agents:stop', async (_event, agentId: string) => {
     return services!.terminal.stopAgent(agentId)
   })
 
   ipcMain.handle('agents:openCursor', async (_event, agentId: string) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
-    return services!.agent.openInCursor(currentProject.path, agentId)
+    const projectPath = await findProjectForAgent(agentId)
+    return services!.agent.openInCursor(projectPath, agentId)
   })
 
   ipcMain.handle('agents:clearUnread', async (_event, agentId: string) => {
@@ -135,9 +190,8 @@ function setupIPC(): void {
 
   // Plain terminal handlers
   ipcMain.handle('plainTerminal:start', async (_event, agentId: string, terminalId: string) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
-    return services!.terminal.startPlainTerminal(currentProject.path, agentId, terminalId)
+    const projectPath = await findProjectForAgent(agentId)
+    return services!.terminal.startPlainTerminal(projectPath, agentId, terminalId)
   })
 
   ipcMain.on('plainTerminal:input', (_event, terminalId: string, data: string) => {
@@ -159,6 +213,10 @@ function setupIPC(): void {
     return services!.agent.getAssignments(currentProject.path)
   })
 
+  ipcMain.handle('assignments:getForProject', async (_event, projectPath: string) => {
+    return services!.agent.getAssignments(projectPath)
+  })
+
   ipcMain.handle('assignments:create', async (_event, assignment: any) => {
     const currentProject = services!.project.getCurrentProject()
     if (!currentProject) throw new Error('No project selected')
@@ -177,7 +235,40 @@ function setupIPC(): void {
         try {
           await services!.terminal.startAgent(
             currentProject.path,
-            assignment.agentId,
+            result.agentId,  // Use the auto-generated agentId from result
+            assignment.tool,
+            assignment.mode,
+            assignment.prompt,
+            assignment.model,
+            assignment.yolo
+          )
+          mainWindow?.webContents.send('agents:updated')
+        } catch (error) {
+          console.error('Failed to auto-start agent:', error)
+        }
+      }, 2000) // Wait 2 seconds for worktree to be fully set up
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('assignments:createForProject', async (_event, projectPath: string, assignment: any) => {
+    const result = await services!.agent.createAssignment(projectPath, assignment)
+    
+    // Trigger updates after worktree is created
+    setTimeout(() => {
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+    }, 1000)
+    
+    // Auto-start agent in planning mode if prompt is provided
+    // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
+    if (assignment.prompt && assignment.tool !== 'cursor' && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
+      setTimeout(async () => {
+        try {
+          await services!.terminal.startAgent(
+            projectPath,
+            result.agentId,  // Use the auto-generated agentId from result
             assignment.tool,
             assignment.mode,
             assignment.prompt,
@@ -195,17 +286,15 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:update', async (_event, assignmentId: string, updates: any) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
-    return services!.agent.updateAssignment(currentProject.path, assignmentId, updates)
+    const projectPath = await findProjectForAssignment(assignmentId)
+    return services!.agent.updateAssignment(projectPath, assignmentId, updates)
   })
 
   ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
+    const projectPath = await findProjectForAssignment(assignmentId)
 
     console.log('[PR] Creating pull request for assignment:', assignmentId, 'autoCommit:', autoCommit)
-    const result = await services!.agent.createPullRequest(currentProject.path, assignmentId, autoCommit)
+    const result = await services!.agent.createPullRequest(projectPath, assignmentId, autoCommit)
     console.log('[PR] Pull request created:', result.url)
 
     mainWindow?.webContents.send('assignments:updated')
@@ -214,11 +303,10 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:checkPR', async (_event, assignmentId: string) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
+    const projectPath = await findProjectForAssignment(assignmentId)
 
     console.log('[PR] Checking PR status for assignment:', assignmentId)
-    const result = await services!.agent.checkPullRequestStatus(currentProject.path, assignmentId)
+    const result = await services!.agent.checkPullRequestStatus(projectPath, assignmentId)
     console.log('[PR] PR status:', result.status)
 
     mainWindow?.webContents.send('assignments:updated')
@@ -232,8 +320,19 @@ function setupIPC(): void {
 
   // Cleanup handlers
   ipcMain.handle('agents:teardown', async (_event, agentId: string, force: boolean) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
+    // Find the project this agent belongs to by searching all active projects
+    const activeProjects = services!.project.getActiveProjects()
+    let projectPath: string | null = null
+    
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      if (agents.some(a => a.id === agentId)) {
+        projectPath = project.path
+        break
+      }
+    }
+    
+    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
     
     // Stop agent if running
     try {
@@ -249,7 +348,7 @@ function setupIPC(): void {
       console.error('Failed to stop test environments:', error)
     }
     
-    await services!.agent.teardownAgent(currentProject.path, agentId, force)
+    await services!.agent.teardownAgent(projectPath, agentId, force)
     
     // Trigger updates
     mainWindow?.webContents.send('agents:updated')
@@ -257,10 +356,21 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('agents:unassign', async (_event, agentId: string) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
+    // Find the project this agent belongs to by searching all active projects
+    const activeProjects = services!.project.getActiveProjects()
+    let projectPath: string | null = null
     
-    await services!.agent.unassignAgent(currentProject.path, agentId)
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      if (agents.some(a => a.id === agentId)) {
+        projectPath = project.path
+        break
+      }
+    }
+    
+    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
+    
+    await services!.agent.unassignAgent(projectPath, agentId)
     
     // Trigger updates
     mainWindow?.webContents.send('agents:updated')
@@ -268,37 +378,63 @@ function setupIPC(): void {
   })
 
   // Test Environment handlers
-  ipcMain.handle('testEnv:getConfig', async () => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) return { defaultCommands: [] }
-    return services!.testEnv.loadConfig(currentProject.path)
+  ipcMain.handle('testEnv:getConfig', async (_event, agentId?: string) => {
+    let projectPath: string | null = null
+    
+    if (agentId) {
+      try {
+        projectPath = await findProjectForAgent(agentId)
+      } catch (err) {
+        // Fallback to current project if agentId not found (e.g. legacy or during creation)
+        const currentProject = services!.project.getCurrentProject()
+        projectPath = currentProject?.path || null
+      }
+    } else {
+      const currentProject = services!.project.getCurrentProject()
+      projectPath = currentProject?.path || null
+    }
+    
+    if (!projectPath) return { defaultCommands: [] }
+    return services!.testEnv.loadConfig(projectPath)
   })
 
-  ipcMain.handle('testEnv:getCommands', async (_event, assignmentOverrides?: any[]) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) return []
-    return services!.testEnv.getCommands(currentProject.path, assignmentOverrides)
+  ipcMain.handle('testEnv:getCommands', async (_event, agentId?: string, assignmentOverrides?: any[]) => {
+    let projectPath: string | null = null
+    
+    if (agentId) {
+      try {
+        projectPath = await findProjectForAgent(agentId)
+      } catch (err) {
+        const currentProject = services!.project.getCurrentProject()
+        projectPath = currentProject?.path || null
+      }
+    } else {
+      const currentProject = services!.project.getCurrentProject()
+      projectPath = currentProject?.path || null
+    }
+    
+    if (!projectPath) return []
+    return services!.testEnv.getCommands(projectPath, assignmentOverrides)
   })
 
   ipcMain.handle('testEnv:start', async (_event, agentId: string, commandId?: string) => {
-    const currentProject = services!.project.getCurrentProject()
-    if (!currentProject) throw new Error('No project selected')
+    const projectPath = await findProjectForAgent(agentId)
     
     // Get agent worktree path
-    const agents = await services!.agent.listAgents(currentProject.path)
+    const agents = await services!.agent.listAgents(projectPath)
     const agent = agents.find(a => a.id === agentId)
     if (!agent) throw new Error('Agent not found')
 
-    const commands = services!.testEnv.getCommands(currentProject.path)
+    const commands = services!.testEnv.getCommands(projectPath)
     
     if (commandId) {
       // Start specific command
       const command = commands.find(c => c.id === commandId)
       if (!command) throw new Error('Command not found')
-      await services!.testEnv.startCommand(currentProject.path, agentId, agent.worktreePath, command)
+      await services!.testEnv.startCommand(projectPath, agentId, agent.worktreePath, command)
     } else {
       // Start all commands
-      await services!.testEnv.startAll(currentProject.path, agentId, agent.worktreePath, commands)
+      await services!.testEnv.startAll(projectPath, agentId, agent.worktreePath, commands)
     }
   })
 
@@ -347,3 +483,4 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+

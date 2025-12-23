@@ -10,8 +10,15 @@ declare global {
       getCurrentProject: () => Promise<any>
       clearCurrentProject: () => Promise<void>
 
+      // Multi-project APIs
+      addProject: (path: string) => Promise<any>
+      removeProject: (path: string) => Promise<void>
+      switchProject: (path: string) => Promise<void>
+      getActiveProjects: () => Promise<any[]>
+
       // Agent APIs
       listAgents: () => Promise<any[]>
+      listAgentsForProject: (projectPath: string) => Promise<any[]>
       stopAgent: (agentId: string) => Promise<void>
       openInCursor: (agentId: string) => Promise<void>
       clearUnread: (agentId: string) => Promise<void>
@@ -32,15 +39,17 @@ declare global {
 
       // Assignment APIs
       getAssignments: () => Promise<any>
+      getAssignmentsForProject: (projectPath: string) => Promise<any>
       createAssignment: (assignment: any) => Promise<any>
+      createAssignmentForProject: (projectPath: string, assignment: any) => Promise<any>
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
       createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
       checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>
       checkDependencies: () => Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }>
 
       // Test Environment APIs
-      getTestEnvConfig: () => Promise<any>
-      getTestEnvCommands: (assignmentOverrides?: any[]) => Promise<any[]>
+      getTestEnvConfig: (agentId?: string) => Promise<any>
+      getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any[]>
       startTestEnv: (agentId: string, commandId?: string) => Promise<void>
       stopTestEnv: (agentId: string, commandId?: string) => Promise<void>
       getTestEnvStatus: (agentId: string) => Promise<any[]>
@@ -55,6 +64,8 @@ declare global {
       onAgentSignal: (callback: (agentId: string, signal: string) => void) => () => void
       onAgentListUpdate: (callback: () => void) => () => void
       onAssignmentsUpdate: (callback: () => void) => () => void
+      onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => void
+      onAgentResumedWork: (callback: (agentId: string) => void) => () => void
     }
   }
 }
