@@ -8,10 +8,19 @@
 
 # Project name - used for worktree folder names
 # Worktrees will be created as: ../<PROJECT_NAME>-agent-1, etc.
-PROJECT_NAME="myproject"
+# Auto-detect from git repository directory name
+PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel)")
 
 # Default base branch for new feature branches
-DEFAULT_BASE_BRANCH="main"
+# Auto-detect the default branch (main, master, or whatever is configured)
+if git rev-parse --verify main >/dev/null 2>&1; then
+    DEFAULT_BASE_BRANCH="main"
+elif git rev-parse --verify master >/dev/null 2>&1; then
+    DEFAULT_BASE_BRANCH="master"
+else
+    # Fallback: try to get from remote HEAD
+    DEFAULT_BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+fi
 
 # ============================================================================
 # FILES TO COPY

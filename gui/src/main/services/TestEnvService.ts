@@ -215,8 +215,13 @@ export class TestEnvService {
     if (!agentProcesses) return
 
     const process = agentProcesses.get(commandId)
-    if (process) {
-      process.pty.resize(cols, rows)
+    if (process && process.isRunning) {
+      try {
+        process.pty.resize(cols, rows)
+      } catch (error) {
+        // Silently ignore resize errors - terminal may have exited
+        console.warn(`[TestEnvService] Failed to resize terminal ${commandId}:`, error)
+      }
     }
   }
 
