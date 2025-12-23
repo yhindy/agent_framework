@@ -15,11 +15,13 @@ interface AgentSession {
   hasUnread: boolean
   lastActivity: string
   mode?: string
+  tool?: string  // 'claude', 'aider', 'cursor', etc.
 }
 
 function Sidebar({ project, onNavigate }: SidebarProps) {
   const location = useLocation()
   const [agents, setAgents] = useState<AgentSession[]>([])
+  const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const currentPath = location.pathname
 
   useEffect(() => {
@@ -30,7 +32,24 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
       loadAgents()
     })
 
-    return () => unsubscribe()
+    // Listen for waiting state changes
+    const unsubWaiting = window.electronAPI.onAgentWaitingForInput((agentId) => {
+      setWaitingAgents(prev => new Set([...prev, agentId]))
+    })
+
+    const unsubResumed = window.electronAPI.onAgentResumedWork((agentId) => {
+      setWaitingAgents(prev => {
+        const next = new Set(prev)
+        next.delete(agentId)
+        return next
+      })
+    })
+
+    return () => {
+      unsubscribe()
+      unsubWaiting()
+      unsubResumed()
+    }
   }, [project])
 
   const loadAgents = async () => {
@@ -62,6 +81,15 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
     // The App component should probably listen for project changes or we need a callback in SidebarProps
   }
 
+  // Sort agents: waiting first, then by id
+  const sortedAgents = [...agents].sort((a, b) => {
+    const aWaiting = waitingAgents.has(a.id)
+    const bWaiting = waitingAgents.has(b.id)
+    if (aWaiting && !bWaiting) return -1
+    if (!aWaiting && bWaiting) return 1
+    return a.id.localeCompare(b.id)
+  })
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -88,30 +116,34 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
       <div className="sidebar-section">
         <div className="section-header">Minions 🍌</div>
         <div className="agent-list">
-          {agents.length === 0 && (
+          {sortedAgents.length === 0 && (
             <div className="empty-state">No minions working</div>
           )}
-          {agents.map((agent) => {
-            const isWorking = agent.mode && agent.mode !== 'idle'
+          {sortedAgents.map((agent) => {
             const isActive = activeAgentId === agent.id
+            const isWaiting = waitingAgents.has(agent.id)
+            const isCursor = agent.tool === 'cursor'
+            // Show spinner only for non-cursor tools with an active terminal that's not waiting
+            const showSpinner = !isCursor && agent.terminalPid && !isWaiting
+            
             return (
               <div
                 key={agent.id}
-                className={`agent-item ${isActive ? 'active' : ''}`}
+                className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''}`}
                 onClick={() => handleAgentClick(agent.id)}
               >
                 <div className="agent-info">
                   <div className="agent-id">{agent.id}</div>
-                  {isWorking && (
+                  {isWaiting && (
+                    <div className="attention-badge" title="Waiting for input">!</div>
+                  )}
+                  {showSpinner && (
                     <div className="agent-spinner">
                       <div className="spinner"></div>
                     </div>
                   )}
-                  {!isWorking && agent.terminalPid && (
-                    <div className="agent-status running">●</div>
-                  )}
                 </div>
-                {agent.hasUnread && <div className="unread-badge">●</div>}
+                {agent.hasUnread && !isWaiting && <div className="unread-badge">●</div>}
               </div>
             )
           })}
@@ -122,4 +154,3 @@ function Sidebar({ project, onNavigate }: SidebarProps) {
 }
 
 export default Sidebar
-

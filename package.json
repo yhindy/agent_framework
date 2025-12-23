@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/yhindy/agent_framework/issues"
   },
-  "homepage": "https://github.com/yhindy/agent_framework#readme"
+  "homepage": "https://github.com/yhindy/agent_framework#readme",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
 }
