@@ -40,7 +40,7 @@ function AgentView({}: AgentViewProps) {
   const [agent, setAgent] = useState<AgentSession | null>(null)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [currentTool, setCurrentTool] = useState('claude')
-  const [currentModel, setCurrentModel] = useState('opus')
+  const [currentModel, setCurrentModel] = useState('haiku')
   const [currentMode, setCurrentMode] = useState('idle')
   const [signalMessage, setSignalMessage] = useState<string>('')
   const [showCleanupModal, setShowCleanupModal] = useState(false)

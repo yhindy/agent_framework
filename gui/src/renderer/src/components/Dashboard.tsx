@@ -74,8 +74,8 @@ function Dashboard({ project }: DashboardProps) {
     shortName: '',
     prompt: '',
     tool: 'claude',
-    model: 'opus',
-    mode: 'planning' as 'planning' | 'dev',
+    model: 'haiku',
+    mode: 'dev',
     status: 'pending',
     yolo: false
   })
