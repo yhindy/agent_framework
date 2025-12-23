@@ -182,6 +182,12 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
           return (
             <div key={project.path} className="project-group">
               <div className="project-header">
+                {/* #region agent log */}
+                {(() => {
+                  fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sidebar.tsx:185',message:'Rendering project header',data:{projectName:project.name,projectPath:project.path,isCollapsed},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+                  return null;
+                })()}
+                {/* #endregion */}
                 <div 
                   className="project-header-content"
                   onClick={() => {
@@ -190,7 +196,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
                   }}
                 >
                   <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
-                  <span className="project-name">{project.name}</span>
+                  <span className="project-name-sidebar">{project.name}</span>
                 </div>
                 <button 
                   className="remove-project-btn"

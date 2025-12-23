@@ -7,6 +7,11 @@ interface ProjectPickerProps {
 }
 
 function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7254/ingest/6de0f374-f7c6-49b7-b558-3a685ee1af39',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProjectPicker.tsx:11',message:'ProjectPicker rendered',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  }, []);
+  // #endregion
   const [recentProjects, setRecentProjects] = useState<any[]>([])
   const [error, setError] = useState<string>('')
   const [showInstallModal, setShowInstallModal] = useState(false)
