@@ -1,6 +1,8 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join } from 'path'
+import { readFileSync, existsSync } from 'fs'
+import { execSync } from 'child_process'
 
 // Simple ANSI strip function to avoid ESM issues
 function stripAnsi(str: string): string {
@@ -12,6 +14,12 @@ interface TerminalSession {
   agentId: string
   tool: string
   mode: string
+  idleTimer?: NodeJS.Timeout
+  isWaiting?: boolean
+  lastInputTime: number
+  outputBuffer: string        // Buffer recent output for pattern detection
+  claudeStarted: boolean      // Track if Claude UI has been seen
+  lastWorkingTime: number     // When we last saw working indicators
 }
 
 interface PlainTerminalSession {
@@ -27,6 +35,40 @@ const SIGNAL_PATTERNS = [
   { pattern: '===SIGNAL:WORKING===', signal: 'WORKING' }
 ]
 
+const PROMPT_PATTERNS = [
+  /\?\s*$/,                    // Ends with question mark
+  /\[Y\/n\]/i,                 // [Y/n] or [y/N]
+  /\(yes\/no\)/i,              // (yes/no)
+  /Press Enter/i,              // Press Enter to continue
+  /Allow .+ to/i,              // Permission prompts
+  /Do you want to/i,           // Confirmation prompts
+  /Approve\?/i,
+  /Continue\?/i,
+  /Overwrite\?/i,
+  /Claude is waiting for your input/i,  // Explicit Claude notification
+]
+
+// Claude Code specific: detect when spinner stops and input prompt is shown
+const CLAUDE_IDLE_INDICATORS = [
+  /^>\s*$/m,                   // Just ">" on a line (empty input prompt)
+  /⏵⏵\s*bypass/i,             // Permission bypass prompt
+  /shift\+tab to cycle/i,     // Permission selector UI
+  /-- INSERT --/,              // Vim-like insert mode indicator
+]
+
+// Patterns that indicate Claude is still working (spinner active)
+const CLAUDE_WORKING_PATTERNS = [
+  /Sussing…/,                  // Claude's spinner text
+  /Booping…/,                  // Another spinner text
+  /Puttering…/,                // Another spinner text
+  /Thinking…/,                 // Thinking indicator
+  /Inferring…/,                // Inference indicator
+  /Working…/,                  // Generic working indicator
+  /Running…/,                  // Running a command
+  /Waiting…/,                  // Waiting for something (tool execution)
+  /esc to interrupt/,          // Still processing
+]
+
 export class TerminalService {
   private terminals: Map<string, TerminalSession>
   private plainTerminals: Map<string, PlainTerminalSession>
@@ -36,6 +78,40 @@ export class TerminalService {
     this.terminals = new Map()
     this.plainTerminals = new Map()
     this.mainWindow = mainWindow
+  }
+
+  // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
+  private isProcessWaitingForInput(pid: number): boolean {
+    try {
+      if (process.platform === 'linux' && existsSync(`/proc/${pid}/stat`)) {
+        // Direct /proc read: ~0.1ms
+        const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+        const state = stat.split(' ')[2]
+        return state === 'S' || state === 'I' // Sleeping (interruptible) or Idle
+      } else {
+        // macOS fallback: single ps call ~10ms
+        const result = execSync(`ps -o state= -p ${pid}`, { encoding: 'utf8' }).trim()
+        // On macOS, 'S' is sleeping, 'I' is idle. '+' means foreground.
+        return result.includes('S') || result.includes('I')
+      }
+    } catch {
+      return false
+    }
+  }
+
+  private looksLikePrompt(text: string): boolean {
+    const stripped = stripAnsi(text)
+    return PROMPT_PATTERNS.some(pattern => pattern.test(stripped))
+  }
+
+  private isClaudeWorking(text: string): boolean {
+    const stripped = stripAnsi(text)
+    return CLAUDE_WORKING_PATTERNS.some(pattern => pattern.test(stripped))
+  }
+
+  private isClaudeIdle(text: string): boolean {
+    const stripped = stripAnsi(text)
+    return CLAUDE_IDLE_INDICATORS.some(pattern => pattern.test(stripped))
   }
 
   async startAgent(
@@ -91,7 +167,11 @@ export class TerminalService {
       pty: terminal,
       agentId,
       tool,
-      mode
+      mode,
+      lastInputTime: 0,
+      outputBuffer: '',
+      claudeStarted: false,
+      lastWorkingTime: 0
     }
     this.terminals.set(agentId, session)
 
@@ -167,22 +247,83 @@ export class TerminalService {
   }
 
   private handleOutput(agentId: string, data: string): void {
+    const session = this.terminals.get(agentId)
+    if (!session) return
+
     // Send raw data to renderer for terminal display
     this.mainWindow.webContents.send('terminal:output', agentId, data)
 
-    // Check for signals
+    // Update output buffer (keep last 2000 chars for pattern detection across chunks)
+    session.outputBuffer = (session.outputBuffer + data).slice(-2000)
+    
+    // Check if Claude UI has started (look for Claude Code header)
+    if (!session.claudeStarted && session.outputBuffer.includes('Claude Code')) {
+      session.claudeStarted = true
+    }
+
     const stripped = stripAnsi(data)
+    // Check for working patterns in the CURRENT CHUNK only (not buffer - buffer retains old patterns)
+    const isWorkingNow = this.isClaudeWorking(stripped)
+
+    // If Claude is actively working (spinner visible in CURRENT output), cancel idle timer and clear waiting state
+    if (isWorkingNow) {
+      session.lastWorkingTime = Date.now()
+      if (session.idleTimer) {
+        clearTimeout(session.idleTimer)
+        session.idleTimer = undefined
+      }
+      if (session.isWaiting) {
+        session.isWaiting = false
+        this.mainWindow.webContents.send('agent:resumedWork', agentId)
+      }
+      return // Don't process further - Claude is working
+    }
+
+    // Check for signals
     for (const { pattern, signal } of SIGNAL_PATTERNS) {
       if (stripped.includes(pattern)) {
         this.mainWindow.webContents.send('agent:signal', agentId, signal)
         break
       }
     }
+
+    // Only start idle detection if Claude has started
+    if (!session.claudeStarted) {
+      return
+    }
+
+    // Claude is NOT showing working indicators - start idle timer
+    // Only start timer if not already running and not already waiting
+    if (!session.idleTimer && !session.isWaiting) {
+      session.idleTimer = setTimeout(() => {
+        session.idleTimer = undefined
+        
+        // Grace period check: if input was sent VERY recently (< 1s), don't trigger waiting state
+        // This prevents flicker when user is actively typing, but doesn't block after sending a message
+        const timeSinceLastInput = Date.now() - session.lastInputTime
+        if (timeSinceLastInput < 1000) {
+          return 
+        }
+
+        // Double-check we haven't seen working indicators recently (within timer delay)
+        const timeSinceLastWorking = Date.now() - session.lastWorkingTime
+        if (timeSinceLastWorking < 2000) {
+          return
+        }
+
+        // Claude is idle - emit waiting event
+        session.isWaiting = true
+        this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+      }, 2000) // 2 seconds of no working indicators
+    }
   }
 
   stopAgent(agentId: string): void {
     const session = this.terminals.get(agentId)
     if (session) {
+      if (session.idleTimer) {
+        clearTimeout(session.idleTimer)
+      }
       session.pty.kill()
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')
@@ -192,6 +333,14 @@ export class TerminalService {
   sendInput(agentId: string, data: string): void {
     const session = this.terminals.get(agentId)
     if (session) {
+      session.lastInputTime = Date.now()
+      
+      // If was waiting, clear that state immediately on input
+      if (session.isWaiting) {
+        session.isWaiting = false
+        this.mainWindow.webContents.send('agent:resumedWork', agentId)
+      }
+      
       session.pty.write(data)
     }
   }
@@ -210,6 +359,26 @@ export class TerminalService {
     for (const [terminalId, _session] of this.plainTerminals) {
       this.stopPlainTerminal(terminalId)
     }
+  }
+
+  // Check if an agent has an active terminal
+  hasActiveTerminal(agentId: string): boolean {
+    return this.terminals.has(agentId)
+  }
+
+  // Get the PID of an agent's terminal (if running)
+  getTerminalPid(agentId: string): number | null {
+    const session = this.terminals.get(agentId)
+    return session ? session.pty.pid : null
+  }
+
+  // Get all active agent terminal info
+  getActiveTerminals(): Map<string, number> {
+    const result = new Map<string, number>()
+    for (const [agentId, session] of this.terminals) {
+      result.set(agentId, session.pty.pid)
+    }
+    return result
   }
 
   // Plain terminal methods (for user shells, not agent tools)
@@ -276,4 +445,3 @@ export class TerminalService {
     }
   }
 }
-

@@ -14,6 +14,7 @@ interface AgentSession {
   hasUnread: boolean
   lastActivity: string
   mode?: string
+  tool?: string  // 'claude', 'aider', 'cursor', etc.
 }
 
 interface Assignment {
@@ -105,6 +106,7 @@ export class AgentService {
           if (assignment) {
             session.assignmentId = assignment.id
             session.mode = assignment.mode || 'idle'
+            session.tool = assignment.tool
           }
 
           agents.push(session)

@@ -100,7 +100,14 @@ function setupIPC(): void {
   ipcMain.handle('agents:list', async () => {
     const currentProject = services!.project.getCurrentProject()
     if (!currentProject) return []
-    return services!.agent.listAgents(currentProject.path)
+    const agents = await services!.agent.listAgents(currentProject.path)
+    
+    // Merge in terminal PIDs from TerminalService
+    const activeTerminals = services!.terminal.getActiveTerminals()
+    return agents.map(agent => ({
+      ...agent,
+      terminalPid: activeTerminals.get(agent.id) ?? null
+    }))
   })
 
   ipcMain.handle('agents:stop', async (_event, agentId: string) => {

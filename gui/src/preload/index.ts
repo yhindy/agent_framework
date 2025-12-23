@@ -72,6 +72,20 @@ const api = {
     return () => ipcRenderer.removeListener('assignments:updated', subscription)
   },
 
+  // Agent Waiting Events
+  onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => {
+    const subscription = (_event: any, agentId: string, promptText: string) =>
+      callback(agentId, promptText)
+    ipcRenderer.on('agent:waitingForInput', subscription)
+    return () => ipcRenderer.removeListener('agent:waitingForInput', subscription)
+  },
+
+  onAgentResumedWork: (callback: (agentId: string) => void) => {
+    const subscription = (_event: any, agentId: string) => callback(agentId)
+    ipcRenderer.on('agent:resumedWork', subscription)
+    return () => ipcRenderer.removeListener('agent:resumedWork', subscription)
+  },
+
   // Test Environment APIs
   getTestEnvConfig: () => ipcRenderer.invoke('testEnv:getConfig'),
   getTestEnvCommands: (assignmentOverrides?: any[]) => ipcRenderer.invoke('testEnv:getCommands', assignmentOverrides),
@@ -115,4 +129,3 @@ const api = {
 contextBridge.exposeInMainWorld('electronAPI', api)
 
 export type ElectronAPI = typeof api
-
