@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import ProjectPicker from './ProjectPicker'
 import './Sidebar.css'
@@ -32,7 +32,25 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const currentPath = location.pathname
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [showDropdown])
 
   useEffect(() => {
     loadAllAgents()
@@ -147,22 +165,38 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
           <span className="nav-icon">🏠</span>
           <span className="nav-label">Home</span>
         </div>
-      </div>
-
-      <div 
-        className="add-project-button"
-        onClick={() => setShowAddModal(true)}
-      >
-        <span className="add-icon">+</span>
-        <span className="add-label">Add Project</span>
-      </div>
-
-      <div 
-        className="add-minion-button"
-        onClick={handleAddMinion}
-      >
-        <span className="add-icon">🍌</span>
-        <span className="add-label">New Mission</span>
+        <div className="dropdown-container" ref={dropdownRef}>
+          <div
+            className="nav-item dropdown-trigger"
+            onClick={() => setShowDropdown(!showDropdown)}
+          >
+            <span className="nav-icon">+</span>
+          </div>
+          {showDropdown && (
+            <div className="dropdown-menu">
+              <div
+                className="dropdown-item"
+                onClick={() => {
+                  setShowAddModal(true)
+                  setShowDropdown(false)
+                }}
+              >
+                <span className="dropdown-icon">📁</span>
+                <span className="dropdown-label">Add Project</span>
+              </div>
+              <div
+                className="dropdown-item"
+                onClick={() => {
+                  handleAddMinion()
+                  setShowDropdown(false)
+                }}
+              >
+                <span className="dropdown-icon">🍌</span>
+                <span className="dropdown-label">New Mission</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="projects-section">
