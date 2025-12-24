@@ -17,6 +17,8 @@ interface AgentSession {
   lastActivity: string
   mode?: string
   tool?: string
+  isSuperMinion?: boolean
+  parentAgentId?: string
 }
 
 export class AgentService {
@@ -351,37 +353,39 @@ export class AgentService {
   }
 
   async getSuperAgentDetails(projectPath: string, agentId: string): Promise<SuperAgentInfo> {
-    // 1. Get the super agent's own info
+    // 1. Get all agents to find the super agent and its children
     const agents = await this.listAgents(projectPath)
-    const superAgent = agents.find(a => a.id === agentId)
+    const session = agents.find(a => a.id === agentId)
     
-    if (!superAgent) {
+    if (!session) {
       throw new Error('Super agent not found')
     }
 
-    // Check if it really is a super minion
-    if (!(superAgent as any).isSuperMinion) {
+    // 2. Read full agent info for the super agent
+    const agentInfo = this.readAgentInfo(session.worktreePath)
+    if (!agentInfo) {
+      throw new Error('Failed to read super agent info')
+    }
+
+    if (!(agentInfo as any).isSuperMinion) {
       throw new Error('Agent is not a super minion')
     }
 
-    // 2. Find all children (agents with this agentId as parent)
-    // Note: listAgents already returns all agents in the project
-    const children = agents.filter(a => a.parentAgentId === agentId)
-
-    // 3. Read pending plans from .pending-plans.json
-    let pendingPlans: ChildPlan[] = []
+    // 3. Find and read full info for all children
+    const childSessions = agents.filter(a => a.parentAgentId === agentId)
+    const children: AgentInfo[] = []
     
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-    
-    let worktreePath: string
-    if (superAgent.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), superAgent.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${superAgent.agentId}`)
+    for (const childSession of childSessions) {
+      const childInfo = this.readAgentInfo(childSession.worktreePath)
+      if (childInfo) {
+        children.push(childInfo)
+      }
     }
 
-    const plansPath = join(worktreePath, '.pending-plans.json')
+    // 4. Read pending plans from .pending-plans.json
+    let pendingPlans: ChildPlan[] = []
+    
+    const plansPath = join(session.worktreePath, '.pending-plans.json')
     if (existsSync(plansPath)) {
       try {
         const content = readFileSync(plansPath, 'utf-8')
@@ -394,19 +398,10 @@ export class AgentService {
       }
     }
 
-    // 4. Assemble full object
-    // Need to cast to any first because listAgents returns AgentInfo (or AgentSession in frontend)
-    // but here we are in backend working with AgentInfo. 
-    // The createSuperAssignment writes the extra fields to .agent-info, so they should be in the object returned by listAgents
-    // if we update listAgents to include them.
-    
-    // Actually, listAgents calls readAgentInfo which returns whatever is in the JSON.
-    // So superAgent object ALREADY has isSuperMinion and minionBudget if they were in .agent-info.
-    
     return {
-      ...superAgent,
+      ...agentInfo,
       isSuperMinion: true,
-      minionBudget: (superAgent as any).minionBudget || 5,
+      minionBudget: (agentInfo as any).minionBudget || 5,
       children,
       pendingPlans
     } as SuperAgentInfo
