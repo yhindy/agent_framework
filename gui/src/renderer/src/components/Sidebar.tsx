@@ -238,7 +238,19 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
               {!isCollapsed && (
                 <div className="agent-list">
                   {sortedAgents.length === 0 && (
-                    <div className="empty-state">No minions working</div>
+                    <div className="empty-state">
+                      <span>No minions working</span>
+                      <button
+                        className="add-mission-btn"
+                        onClick={() => {
+                          localStorage.setItem('lastSelectedProjectPath', project.path)
+                          handleAddMinion()
+                        }}
+                        title="Add new mission"
+                      >
+                        +
+                      </button>
+                    </div>
                   )}
                   {sortedAgents.map((agent) => {
                     const isActive = activeAgentId === agent.id
