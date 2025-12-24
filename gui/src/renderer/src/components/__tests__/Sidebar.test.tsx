@@ -61,11 +61,11 @@ describe('Sidebar Integration', () => {
   it('collapses children when super minion toggle is clicked', async () => {
     render(
       <MemoryRouter>
-        <Sidebar 
-          activeProjects={mockProjects} 
-          onNavigate={() => {}} 
-          onProjectRemove={() => {}} 
-          onProjectAdd={() => {}} 
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
         />
       </MemoryRouter>
     )
@@ -75,8 +75,7 @@ describe('Sidebar Integration', () => {
     })
 
     const superItem = screen.getByText('super-1').closest('.agent-item')!
-    const toggle = superItem.querySelector('.collapse-icon')!
-    fireEvent.click(toggle)
+    fireEvent.click(superItem)
 
     // Child should be gone
     expect(screen.queryByText('child-1')).not.toBeInTheDocument()

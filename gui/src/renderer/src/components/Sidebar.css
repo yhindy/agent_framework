@@ -225,27 +225,20 @@
   font-size: 16px;
   line-height: 1;
   margin-right: 2px;
+  width: 16px;
 }
 
-.collapse-icon.collapsed {
-  transform: rotate(-90deg);
-}
-
-.collapse-icon {
-  font-size: 10px;
-  color: #999;
-  width: 14px;
+.super-minion-indicator {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
   display: inline-block;
-  margin-right: 4px;
-  opacity: 0.8;
+  transition: transform 0.2s ease;
 }
 
-.collapse-icon:hover {
-  color: #ccc;
-  opacity: 1;
-  transform: scale(1.15);
+.super-minion-indicator.collapsed {
+  transform: rotate(-90deg);
 }
 
 @keyframes pulse-waiting {

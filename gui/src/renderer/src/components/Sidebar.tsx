@@ -182,24 +182,29 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
     const isCursor = agent.tool === 'cursor'
     const showSpinner = !isCursor && agent.terminalPid && !isWaiting
     const isCollapsed = collapsedSuperMinions.has(agent.id)
-    
+
+    const handleAgentItemClick = (e: React.MouseEvent) => {
+      if (agent.isSuperMinion) {
+        toggleSuperMinionCollapse(agent.id, e)
+      } else {
+        handleAgentClick(agent, projectPath)
+      }
+    }
+
     return (
       <div key={agent.id} className="agent-item-container">
         <div
-          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''}`}
-          onClick={() => handleAgentClick(agent, projectPath)}
+          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''}`}
+          onClick={handleAgentItemClick}
           style={{ paddingLeft: `${depth * 12 + 12}px` }}
         >
           <div className="agent-info">
             {agent.isSuperMinion && (
-              <span 
-                className={`collapse-icon ${isCollapsed ? 'collapsed' : ''}`}
-                onClick={(e) => toggleSuperMinionCollapse(agent.id, e)}
-              >
-                {isCollapsed ? '▶' : '▼'}
+              <span className={`super-minion-indicator ${isCollapsed ? 'collapsed' : ''}`}>
+                👑
               </span>
             )}
-            <span className="agent-icon">{agent.isSuperMinion ? '👑' : ''}</span>
+            {!agent.isSuperMinion && <span className="agent-icon"></span>}
             <div className="agent-id">{agent.id}</div>
             {isWaiting && (
               <div className="attention-badge" title="Waiting for input">!</div>
