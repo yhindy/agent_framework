@@ -128,7 +128,15 @@ export class TerminalService {
 
     // Determine worktree path
     const projectName = projectPath.split('/').pop() || 'project'
-    const worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+    let worktreePath: string
+    
+    // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+    if (agentId.startsWith(`${projectName}-`)) {
+      worktreePath = join(projectPath, '..', agentId)
+    } else {
+      // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
+      worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+    }
 
     // Determine command based on tool
     let command: string
@@ -392,7 +400,13 @@ export class TerminalService {
 
     // Determine worktree path
     const projectName = projectPath.split('/').pop() || 'project'
-    const worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+    let worktreePath: string
+    
+    if (agentId.startsWith(`${projectName}-`)) {
+      worktreePath = join(projectPath, '..', agentId)
+    } else {
+      worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+    }
 
     // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'

@@ -8,7 +8,7 @@ import LoadingModal from './LoadingModal'
 import './AgentView.css'
 
 interface AgentViewProps {
-  project: any
+  activeProjects: any[]
 }
 
 interface Assignment {
@@ -34,7 +34,7 @@ interface AgentSession {
   lastActivity: string
 }
 
-function AgentView({}: AgentViewProps) {
+function AgentView({ activeProjects }: AgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<AgentSession | null>(null)
@@ -121,15 +121,29 @@ function AgentView({}: AgentViewProps) {
   const loadAgentData = async () => {
     if (!agentId) return
 
-    // Load agent session
-    const agents = await window.electronAPI.listAgents()
-    const agentData = agents.find((a: AgentSession) => a.id === agentId)
-    setAgent(agentData || null)
+    // Load agent session - search across all active projects
+    let agentData: AgentSession | null = null
+    let assignmentData: Assignment | null = null
 
-    // Load assignment
-    const assignments = await window.electronAPI.getAssignments()
-    const assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId)
-    setAssignment(assignmentData || null)
+    for (const project of activeProjects) {
+      try {
+        const agents = await window.electronAPI.listAgentsForProject(project.path)
+        const found = agents.find((a: AgentSession) => a.id === agentId)
+        if (found) {
+          agentData = found
+          
+          // Also load assignment from this project
+          const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
+          assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId) || null
+          break
+        }
+      } catch (err) {
+        console.error(`Failed to search project ${project.path}:`, err)
+      }
+    }
+
+    setAgent(agentData)
+    setAssignment(assignmentData)
 
     if (assignmentData) {
       setCurrentTool(assignmentData.tool)
@@ -140,7 +154,7 @@ function AgentView({}: AgentViewProps) {
 
   const loadTestEnvConfig = async () => {
     try {
-      const config = await window.electronAPI.getTestEnvConfig()
+      const config = await window.electronAPI.getTestEnvConfig(agentId)
       setTestEnvCommands(config.defaultCommands || [])
     } catch (error) {
       console.error('Error loading test env config:', error)

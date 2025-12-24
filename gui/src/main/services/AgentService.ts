@@ -34,7 +34,7 @@ interface Assignment {
 
 interface AssignmentsFile {
   assignments: Assignment[]
-  availableAgentIds: string[]
+  availableAgentIds?: string[]  // Optional for backward compatibility
 }
 
 export class AgentService {
@@ -82,6 +82,7 @@ export class AgentService {
       for (const worktree of worktrees) {
         // Check if .agent-info exists
         const agentInfoPath = join(worktree.path, '.agent-info')
+        
         if (existsSync(agentInfoPath)) {
           const info = this.parseAgentInfo(agentInfoPath)
           
@@ -127,8 +128,11 @@ export class AgentService {
     for (const line of lines) {
       if (line.startsWith('worktree ')) {
         const path = line.substring('worktree '.length)
-        // Only include agent worktrees
-        if (path.includes(`${projectName}-agent-`)) {
+        // Include worktrees that start with project name
+        // Supports legacy 'project-agent-N' and new 'project-N'
+        // We filter by .agent-info existence later
+        const dirName = path.split('/').pop()
+        if (dirName && dirName.startsWith(`${projectName}-`)) {
           currentWorktree.path = path
         }
       } else if (line.startsWith('branch ')) {
@@ -161,19 +165,41 @@ export class AgentService {
     return info
   }
 
+  async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
+    for (const projectPath of activeProjectPaths) {
+      const agents = await this.listAgents(projectPath)
+      if (agents.some(a => a.id === agentId)) {
+        return projectPath
+      }
+    }
+    throw new Error(`Agent ${agentId} not found in any active project`)
+  }
+
+  async findProjectForAssignment(activeProjectPaths: string[], assignmentId: string): Promise<string> {
+    for (const projectPath of activeProjectPaths) {
+      const { assignments } = this.getAssignments(projectPath)
+      if (assignments.some(a => a.id === assignmentId)) {
+        return projectPath
+      }
+    }
+    throw new Error(`Assignment ${assignmentId} not found in any active project`)
+  }
+
   getAssignments(projectPath: string): AssignmentsFile {
     const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     
     if (!existsSync(assignmentsPath)) {
-      return { assignments: [], availableAgentIds: [] }
+      return { assignments: [] }
     }
 
     try {
       const content = readFileSync(assignmentsPath, 'utf-8')
-      return JSON.parse(content)
+      const data = JSON.parse(content)
+      // Remove availableAgentIds if present (legacy cleanup)
+      return { assignments: data.assignments || [] }
     } catch (error) {
       console.error('Error reading assignments:', error)
-      return { assignments: [], availableAgentIds: [] }
+      return { assignments: [] }
     }
   }
 
@@ -181,13 +207,30 @@ export class AgentService {
     const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
     const data = this.getAssignments(projectPath)
 
+    // Auto-generate agent ID if not provided
+    let agentId = assignment.agentId
+    if (!agentId) {
+      const projectName = projectPath.split('/').pop() || 'project'
+      const hash = Math.random().toString(36).substring(2, 6)
+      agentId = `${projectName}-${hash}`
+    }
+
+    // Auto-generate branch name if not provided
+    // Expects assignment.branch to be just the short name (e.g., "user-auth")
+    // or the full branch name (e.g., "feature/myrepo-a3f2/user-auth")
+    let branch = assignment.branch!
+    if (!branch.startsWith('feature/')) {
+      // It's just a short name, generate full branch
+      branch = `feature/${agentId}/${branch}`
+    }
+
     const newAssignment: Assignment = {
-      id: assignment.id || `${assignment.agentId}-${Date.now()}`,
-      agentId: assignment.agentId!,
-      branch: assignment.branch!,
+      id: assignment.id || `${agentId}-${Date.now()}`,
+      agentId: agentId,
+      branch: branch,
       feature: assignment.feature!,
       status: assignment.status || 'pending',
-      specFile: assignment.specFile || `minions/assignments/${assignment.agentId}-${assignment.branch?.split('/').pop()}.md`,
+      specFile: assignment.specFile || `minions/assignments/${agentId}-${branch.split('/').pop()}.md`,
       tool: assignment.tool || 'claude',
       model: assignment.model,
       mode: assignment.mode || 'idle',
@@ -309,11 +352,6 @@ export class AgentService {
 
     // Remove assignment for this agent
     data.assignments = data.assignments.filter(a => a.agentId !== agentId)
-
-    // Add agent back to available pool if not already there
-    if (!data.availableAgentIds.includes(agentId)) {
-      data.availableAgentIds.push(agentId)
-    }
 
     writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
   }

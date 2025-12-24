@@ -5,34 +5,38 @@ import MainLayout from './components/MainLayout'
 import './App.css'
 
 function App() {
-  const [currentProject, setCurrentProject] = useState<any>(null)
+  const [activeProjects, setActiveProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if there's a current project on load
-    window.electronAPI.getCurrentProject().then((project) => {
-      setCurrentProject(project)
+    const init = async () => {
+      const active = await window.electronAPI.getActiveProjects()
+      setActiveProjects(active)
       setLoading(false)
-    })
+    }
+    init()
   }, [])
 
-  // Listen for project clear/change events from Sidebar or other components
-  // In a real app we might use a Context or Redux, but checking periodically or exposing a refresher works too
-  // Or simply, since Sidebar calls clearCurrentProject and then navigates to /, we should be fine IF App re-renders
-  // But App only checks on mount. We need a way to know when project state changes.
-  // Actually, MainLayout is rendered when currentProject is set. 
-  // When Sidebar navigates to '/', if currentProject is still set, it redirects back to /workspace.
-  // So we MUST update currentProject state here.
-  
-  // Quick fix: Expose a way for children to update project state
-  // const handleProjectCleared = () => {
-  //   setCurrentProject(null)
-  // }
+  const refreshState = async () => {
+    const active = await window.electronAPI.getActiveProjects()
+    setActiveProjects(active)
+  }
 
-  // We can pass this down, but Sidebar is deep in MainLayout.
-  // Instead, let's poll or listen for an event.
-  // Or better: MainLayout can accept a prop 'onProjectCleared'
+  const handleProjectSelect = async (_project: any) => {
+    // ProjectPicker (via electronAPI) handles the add/select logic backend-side
+    // We just need to refresh our state
+    await refreshState()
+  }
 
+  const handleRemoveProject = async (path: string) => {
+    await window.electronAPI.removeProject(path)
+    await refreshState()
+  }
+
+  const handleProjectAdd = () => {
+    // This will be implemented in Sidebar with a modal
+    // For now, we pass it down but implementation moves to Sidebar
+  }
 
   if (loading) {
     return <div className="loading">Loading...</div>
@@ -40,31 +44,37 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            currentProject ? (
-              <Navigate to="/workspace" replace />
-            ) : (
-              <ProjectPicker onProjectSelect={setCurrentProject} />
-            )
-          }
-        />
-        <Route
-          path="/workspace/*"
-          element={
-            currentProject ? (
-              <MainLayout project={currentProject} onProjectCleared={() => setCurrentProject(null)} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-      </Routes>
+      <div className="app-container">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              activeProjects.length > 0 ? (
+                <Navigate to="/workspace" replace />
+              ) : (
+                <ProjectPicker onProjectSelect={handleProjectSelect} />
+              )
+            }
+          />
+          <Route
+            path="/workspace/*"
+            element={
+              activeProjects.length > 0 ? (
+                <MainLayout 
+                  activeProjects={activeProjects}
+                  onProjectRemove={handleRemoveProject}
+                  onProjectAdd={handleProjectAdd}
+                  onRefresh={refreshState}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+        </Routes>
+      </div>
     </Router>
   )
 }
 
 export default App
-

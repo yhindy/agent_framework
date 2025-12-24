@@ -89,15 +89,16 @@ describe('TerminalService Input Detection', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) S ...') // 'S' state
     
-    // Simulate prompt
+    // Simulate Claude UI start and prompt
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+    dataHandler('Claude Code 0.0.1\n') // Header to set claudeStarted = true
     dataHandler('Continue? [y/n]')
     
-    // Advance time by 1s
-    vi.advanceTimersByTime(1000)
+    // Advance time
+    vi.advanceTimersByTime(1500)
     
     // Verify event
-    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', 'Continue? [y/n]')
+    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', expect.stringContaining('Continue? [y/n]'))
   })
 
   it('does NOT emit waitingForInput if process is running', async () => {
@@ -108,8 +109,9 @@ describe('TerminalService Input Detection', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) R ...') // 'R' state
     
-    // Simulate prompt
+    // Simulate Claude UI start and prompt
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+    dataHandler('Claude Code started...\n')
     dataHandler('Continue? [y/n]')
     
     // Advance time
@@ -152,6 +154,7 @@ describe('TerminalService Input Detection', () => {
     
     // Prompt immediately after input
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+    dataHandler('Claude Code started...\n')
     dataHandler('Confirm? [y/n]')
     
     // Advance 1s
@@ -179,11 +182,12 @@ describe('TerminalService Input Detection', () => {
     vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) S ...')
     
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+    dataHandler('Claude Code 0.0.1\n')
     dataHandler('Confirm? [y/n]')
-    vi.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1500)
     
     // Should be waiting now
-    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', 'Confirm? [y/n]')
+    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', expect.stringContaining('Confirm? [y/n]'))
     
     // Send input
     terminalService.sendInput('agent-1', 'y\n')

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import LoadingModal from './LoadingModal'
 import './Dashboard.css'
 
 interface DashboardProps {
-  project: any
+  activeProjects: any[]
+  onRefresh: () => void
 }
 
 interface Assignment {
@@ -19,12 +20,13 @@ interface Assignment {
   mode: string
   prUrl?: string
   prStatus?: string
+  projectPath?: string  // Added to track which project the assignment belongs to
 }
 
-function Dashboard({ project }: DashboardProps) {
+function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [assignments, setAssignments] = useState<Assignment[]>([])
-  const [availableAgents, setAvailableAgents] = useState<string[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isCreatingPR, setIsCreatingPR] = useState(false)
@@ -70,6 +72,7 @@ function Dashboard({ project }: DashboardProps) {
   const [ghAvailable, setGhAvailable] = useState(true)
   const [ghError, setGhError] = useState<string>('')
   const [formData, setFormData] = useState({
+    projectPath: '',
     agentId: '',
     shortName: '',
     prompt: '',
@@ -90,7 +93,20 @@ function Dashboard({ project }: DashboardProps) {
     })
 
     return () => unsubscribe()
-  }, [project])
+  }, [activeProjects])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('create') === 'true') {
+      const projectPath = params.get('projectPath')
+      if (projectPath) {
+        setFormData(prev => ({ ...prev, projectPath }))
+      }
+      setShowCreateForm(true)
+      // Clear params so it doesn't reopen on refresh
+      navigate('/workspace', { replace: true })
+    }
+  }, [location.search])
 
   const checkDependencies = async () => {
     try {
@@ -104,28 +120,41 @@ function Dashboard({ project }: DashboardProps) {
   }
 
   const loadAssignments = async () => {
-    const data = await window.electronAPI.getAssignments()
-    setAssignments(data.assignments)
-    setAvailableAgents(data.availableAgentIds)
-  }
-
-  const generateBranchName = (agentId: string, shortName: string): string => {
-    return `feature/${agentId}/${shortName}`
+    // Load assignments from all active projects
+    const allAssignments: Assignment[] = []
+    
+    for (const project of activeProjects) {
+      try {
+        const data = await window.electronAPI.getAssignmentsForProject(project.path)
+        // Add projectPath to each assignment for tracking
+        const projectAssignments = data.assignments.map((a: Assignment) => ({
+          ...a,
+          projectPath: project.path
+        }))
+        allAssignments.push(...projectAssignments)
+      } catch (err) {
+        console.error(`Failed to load assignments for ${project.path}:`, err)
+      }
+    }
+    
+    setAssignments(allAssignments)
   }
 
   const handleCreateAssignment = async () => {
     try {
       setIsCreating(true)
 
-      // Generate branch name
-      const branch = generateBranchName(formData.agentId, formData.shortName)
-
       // Create assignment with prompt as the feature
       const feature = formData.tool === 'cursor' ? `Cursor Session: ${formData.shortName}` : formData.prompt
 
-      await window.electronAPI.createAssignment({
-        agentId: formData.agentId,
-        branch,
+      // Determine project path (if single project, use that, otherwise use selected)
+      const projectPath = activeProjects.length === 1 
+        ? activeProjects[0].path 
+        : formData.projectPath
+
+      // Backend will auto-generate agentId and construct full branch name
+      const result = await window.electronAPI.createAssignmentForProject(projectPath, {
+        branch: formData.shortName,  // Just pass short name, backend will construct full branch
         feature,
         tool: formData.tool,
         model: formData.model,
@@ -135,7 +164,7 @@ function Dashboard({ project }: DashboardProps) {
         yolo: formData.yolo
       })
 
-      const agentId = formData.agentId
+      const agentId = result.agentId  // Use the auto-generated agentId from backend
       setShowCreateForm(false)
       setIsCreating(false)
 
@@ -143,6 +172,7 @@ function Dashboard({ project }: DashboardProps) {
       navigate(`/workspace/agent/${agentId}`)
 
       setFormData({
+        projectPath: '',
         agentId: '',
         shortName: '',
         prompt: '',
@@ -156,6 +186,7 @@ function Dashboard({ project }: DashboardProps) {
       // Wait a moment for worktree creation then refresh
       setTimeout(() => {
         loadAssignments()
+        onRefresh()  // Refresh parent state too
       }, 1500)
     } catch (error: any) {
       setIsCreating(false)
@@ -262,24 +293,7 @@ function Dashboard({ project }: DashboardProps) {
     }
   }
 
-  const getUnassignedAgents = () => {
-    const assignedAgentIds = new Set(assignments.map((a) => a.agentId))
-    return availableAgents
-      .filter((agentId) => !assignedAgentIds.has(agentId))
-      .map((agentId) => ({
-        id: `unassigned-${agentId}`,
-        agentId,
-        branch: '',
-        feature: 'Unassigned',
-        status: 'unassigned',
-        specFile: '',
-        tool: '',
-        mode: 'idle'
-      }))
-  }
-
   const groupedAssignments = {
-    unassigned: getUnassignedAgents(),
     in_progress: assignments.filter((a) => a.status === 'in_progress'),
     review: assignments.filter((a) => a.status === 'review'),
     completed: assignments.filter((a) => a.status === 'completed'),
@@ -288,13 +302,13 @@ function Dashboard({ project }: DashboardProps) {
   }
 
   const handleNewAssignment = () => {
-    // Auto-populate with next available agent
-    const assignedAgentIds = new Set(assignments.map((a) => a.agentId))
-    const nextAgent = availableAgents.find((id) => !assignedAgentIds.has(id))
+    // Auto-select last selected project, or first project if only one exists
+    const lastProject = localStorage.getItem('lastSelectedProjectPath')
+    const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
+      ? lastProject
+      : (activeProjects.length === 1 ? activeProjects[0].path : '')
     
-    if (nextAgent) {
-      setFormData({ ...formData, agentId: nextAgent })
-    }
+    setFormData({ ...formData, projectPath: defaultProject })
     setShowCreateForm(true)
   }
 
@@ -462,26 +476,32 @@ function Dashboard({ project }: DashboardProps) {
                 handleCreateAssignment()
               }}
             >
-              <div className="form-group">
-                <label>Minion ID</label>
-                <select
-                  value={formData.agentId}
-                  onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
-                  required
-                >
-                  <option value="">Select minion...</option>
-                  {availableAgents.map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {activeProjects.length > 1 && (
+                <div className="form-group">
+                  <label>Project</label>
+                  <select
+                    value={formData.projectPath}
+                    onChange={(e) => {
+                      const newProjectPath = e.target.value
+                      // Filter available agents for this project
+                      setFormData({ ...formData, projectPath: newProjectPath, agentId: '' })
+                    }}
+                    required
+                  >
+                    <option value="">Select project...</option>
+                    {activeProjects.map((proj) => (
+                      <option key={proj.path} value={proj.path}>
+                        {proj.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="form-group">
                 <label>Branch Short Name</label>
                 <div className="branch-input-wrapper">
-                  <span className="branch-prefix">feature/{formData.agentId || 'agent-X'}/</span>
+                  <span className="branch-prefix">feature/</span>
                   <input
                     type="text"
                     value={formData.shortName}
