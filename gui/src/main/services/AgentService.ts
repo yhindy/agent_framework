@@ -391,7 +391,8 @@ export class AgentService {
         const content = readFileSync(plansPath, 'utf-8')
         const data = JSON.parse(content)
         if (data.plans && Array.isArray(data.plans)) {
-          pendingPlans = data.plans
+          // Only show pending plans to the user
+          pendingPlans = data.plans.filter((p: ChildPlan) => p.status === 'pending')
         }
       } catch (error) {
         console.error('Error reading .pending-plans.json:', error)
@@ -407,7 +408,7 @@ export class AgentService {
     } as SuperAgentInfo
   }
 
-  async approvePlan(projectPath: string, superAgentId: string, planId: string): Promise<void> {
+  async approvePlan(projectPath: string, superAgentId: string, planId: string): Promise<AgentInfo> {
     // 1. Get super agent details to find worktree path
     const agents = await this.listAgents(projectPath)
     const session = agents.find(a => a.id === superAgentId)
@@ -497,6 +498,8 @@ export class AgentService {
     })
 
     writeFileSync(statusPath, JSON.stringify(statusData, null, 2))
+
+    return childAgent
   }
 
   async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {

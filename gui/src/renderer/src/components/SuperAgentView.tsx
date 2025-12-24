@@ -168,7 +168,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
 
           <div className="plans-section">
             <PlanApproval 
-              plans={agent.pendingPlans}
+              plans={agent.pendingPlans.filter(p => p.status === 'pending')}
               onApprove={handleApprovePlan}
               onReject={handleRejectPlan}
             />

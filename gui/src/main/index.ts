@@ -200,7 +200,9 @@ function setupIPC(): void {
 
   ipcMain.handle('agents:approvePlan', async (_event, superAgentId: string, planId: string) => {
     const projectPath = await findProjectForAgent(superAgentId)
-    await services!.agent.approvePlan(projectPath, superAgentId, planId)
+    const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
+    // Auto-start the child agent
+    await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode)
   })
 
   // Terminal handlers
