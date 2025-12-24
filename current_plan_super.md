@@ -103,7 +103,7 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
   - Update `SuperAgentView` to fetch real data (removing mock data).
   - Add unit tests for `SuperAgentView` data fetching.
 
-- [ ] **Milestone 9: Create AI Rules File**
+- [x] **Milestone 9: Create AI Rules File** ✅
   - Create `gui/resources/minions/rules/super-minion-rules.md`.
   - Define plan proposal format and monitoring rules.
 
