@@ -80,6 +80,10 @@ export class TerminalService {
     this.mainWindow = mainWindow
   }
 
+  setWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow
+  }
+
   // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
   private isProcessWaitingForInput(pid: number): boolean {
     try {

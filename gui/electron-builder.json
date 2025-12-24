@@ -9,7 +9,7 @@
   ],
   "extraResources": [
     {
-      "from": "../minions",
+      "from": "resources/minions",
       "to": "minions",
       "filter": ["!**/node_modules/**", "!**/.git/**"]
     }

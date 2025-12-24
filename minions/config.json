@@ -1,0 +1,23 @@
+{
+  "project": {
+    "name": "agent_framework-ryko",
+    "defaultBaseBranch": "master"
+  },
+  "setup": {
+    "filesToCopy": [],
+    "postSetupCommands": [],
+    "requiredFiles": [],
+    "preflightCommands": []
+  },
+  "assignments": [],
+  "testEnvironments": [
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "command": "npm run rebuild; npm install; npx rebuild-electron; npm run dev",
+      "cwd": "gui/",
+      "port": 3000
+    }
+  ]
+}
+

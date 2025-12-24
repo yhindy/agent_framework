@@ -30,6 +30,13 @@ function createWindow(): void {
     }
   })
 
+  // Update window reference in services if they exist (handling reopen)
+  if (services) {
+    services.terminal.setWindow(mainWindow)
+    services.testEnv.setWindow(mainWindow)
+    services.fileWatcher.setWindow(mainWindow)
+  }
+
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
