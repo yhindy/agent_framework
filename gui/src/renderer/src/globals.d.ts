@@ -22,6 +22,8 @@ declare global {
       stopAgent: (agentId: string) => Promise<void>
       openInCursor: (agentId: string) => Promise<void>
       clearUnread: (agentId: string) => Promise<void>
+      getSuperAgentDetails: (agentId: string) => Promise<any>
+      approvePlan: (superAgentId: string, planId: string) => Promise<void>
       teardownAgent: (agentId: string, force: boolean) => Promise<void>
       unassignAgent: (agentId: string) => Promise<void>
 

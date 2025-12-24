@@ -20,6 +20,8 @@ interface AgentSession {
   mode?: string
   tool?: string
   projectPath?: string  // Added to track which project the agent belongs to
+  isSuperMinion?: boolean
+  parentAgentId?: string
 }
 
 interface AgentsByProject {
@@ -31,6 +33,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
+  const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -106,6 +109,19 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
     })
   }
 
+  const toggleSuperMinionCollapse = (agentId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setCollapsedSuperMinions(prev => {
+      const next = new Set(prev)
+      if (next.has(agentId)) {
+        next.delete(agentId)
+      } else {
+        next.add(agentId)
+      }
+      return next
+    })
+  }
+
   const loadAllAgents = async () => {
     // Fetch agents for all active projects
     const agentsByProj: AgentsByProject = {}
@@ -127,10 +143,13 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
     onNavigate(path)
   }
 
-  const handleAgentClick = async (agentId: string, projectPath: string) => {
+  const handleAgentClick = async (agent: AgentSession, projectPath: string) => {
     localStorage.setItem('lastSelectedProjectPath', projectPath)
-    await window.electronAPI.clearUnread(agentId)
-    handleNavigate(`/workspace/agent/${agentId}`)
+    await window.electronAPI.clearUnread(agent.id)
+    const route = agent.isSuperMinion 
+      ? `/workspace/super/${agent.id}` 
+      : `/workspace/agent/${agent.id}`
+    handleNavigate(route)
     loadAllAgents() // Refresh to clear unread badge
   }
 
@@ -153,7 +172,49 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
-    : null
+    : currentPath.startsWith('/workspace/super/')
+      ? currentPath.replace('/workspace/super/', '')
+      : null
+
+  const renderAgent = (agent: AgentSession, projectPath: string, depth = 0) => {
+    const isActive = activeAgentId === agent.id
+    const isWaiting = waitingAgents.has(agent.id)
+    const isCursor = agent.tool === 'cursor'
+    const showSpinner = !isCursor && agent.terminalPid && !isWaiting
+    const isCollapsed = collapsedSuperMinions.has(agent.id)
+    
+    return (
+      <div key={agent.id} className="agent-item-container">
+        <div
+          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''}`}
+          onClick={() => handleAgentClick(agent, projectPath)}
+          style={{ paddingLeft: `${depth * 12 + 12}px` }}
+        >
+          <div className="agent-info">
+            {agent.isSuperMinion && (
+              <span 
+                className={`collapse-icon ${isCollapsed ? 'collapsed' : ''}`}
+                onClick={(e) => toggleSuperMinionCollapse(agent.id, e)}
+              >
+                {isCollapsed ? '▶' : '▼'}
+              </span>
+            )}
+            <span className="agent-icon">{agent.isSuperMinion ? '👑' : ''}</span>
+            <div className="agent-id">{agent.id}</div>
+            {isWaiting && (
+              <div className="attention-badge" title="Waiting for input">!</div>
+            )}
+            {showSpinner && (
+              <div className="agent-spinner">
+                <div className="spinner"></div>
+              </div>
+            )}
+          </div>
+          {agent.hasUnread && !isWaiting && <div className="unread-badge">●</div>}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="sidebar">
@@ -250,33 +311,29 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
                   {sortedAgents.length === 0 && (
                     <div className="empty-state">No minions working</div>
                   )}
-                  {sortedAgents.map((agent) => {
-                    const isActive = activeAgentId === agent.id
-                    const isWaiting = waitingAgents.has(agent.id)
-                    const isCursor = agent.tool === 'cursor'
-                    const showSpinner = !isCursor && agent.terminalPid && !isWaiting
-                    
-                    return (
-                      <div
-                        key={agent.id}
-                        className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''}`}
-                        onClick={() => handleAgentClick(agent.id, project.path)}
-                      >
-                        <div className="agent-info">
-                          <div className="agent-id">{agent.id}</div>
-                          {isWaiting && (
-                            <div className="attention-badge" title="Waiting for input">!</div>
-                          )}
-                          {showSpinner && (
-                            <div className="agent-spinner">
-                              <div className="spinner"></div>
-                            </div>
-                          )}
-                        </div>
-                        {agent.hasUnread && !isWaiting && <div className="unread-badge">●</div>}
-                      </div>
-                    )
-                  })}
+                  {(() => {
+                    const roots = sortedAgents.filter(a => !a.parentAgentId)
+                    const childrenMap: Record<string, AgentSession[]> = {}
+                    sortedAgents.forEach(a => {
+                      if (a.parentAgentId) {
+                        if (!childrenMap[a.parentAgentId]) childrenMap[a.parentAgentId] = []
+                        childrenMap[a.parentAgentId].push(a)
+                      }
+                    })
+
+                    const renderWithChildren = (agent: AgentSession, depth = 0): React.ReactNode[] => {
+                      const items: React.ReactNode[] = [renderAgent(agent, project.path, depth)]
+                      const children = childrenMap[agent.id] || []
+                      if (children.length > 0 && !collapsedSuperMinions.has(agent.id)) {
+                        children.forEach(child => {
+                          items.push(...renderWithChildren(child, depth + 1))
+                        })
+                      }
+                      return items
+                    }
+
+                    return roots.map(root => renderWithChildren(root))
+                  })()}
                 </div>
               )}
             </div>
