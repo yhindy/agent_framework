@@ -62,7 +62,7 @@
   gap: 20px;
 }
 
-.children-section h3, .plans-section h3 {
+.children-section h3 {
   font-size: 16px;
   margin-bottom: 15px;
   color: #d4d4d4;
@@ -74,75 +74,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 15px;
-}
-
-.plan-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.plan-item {
-  background: #2d2d2d;
-  border: 1px solid #444;
-  border-radius: 6px;
-  padding: 15px;
-}
-
-.plan-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.plan-name {
-  font-weight: bold;
-  color: #ce9178;
-}
-
-.complexity-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.complexity-badge.small { background: #228b22; color: white; }
-.complexity-badge.medium { background: #daa520; color: white; }
-.complexity-badge.large { background: #b22222; color: white; }
-
-.plan-desc {
-  font-size: 12px;
-  color: #ccc;
-  margin: 0 0 15px 0;
-}
-
-.plan-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.plan-actions button {
-  flex: 1;
-  padding: 6px;
-  font-size: 12px;
-}
-
-.approve-btn {
-  background: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.reject-btn {
-  background: #c62828;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
 }
 
 .empty-hint {

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import ChildStatusCard from './ChildStatusCard'
+import PlanApproval from './PlanApproval'
 import './SuperAgentView.css'
-import { SuperAgentInfo, AgentInfo, isSuperMinion } from '../services/types/ProjectConfig'
+import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
 
 interface SuperAgentViewProps {
   activeProjects: any[]
@@ -134,23 +135,11 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           </div>
 
           <div className="plans-section">
-            <h3>Proposed Plans ({agent.pendingPlans.length})</h3>
-            <div className="plan-list">
-              {agent.pendingPlans.map(plan => (
-                <div key={plan.id} className="plan-item">
-                  <div className="plan-header">
-                    <span className="plan-name">📋 {plan.shortName}</span>
-                    <span className={`complexity-badge ${plan.estimatedComplexity}`}>{plan.estimatedComplexity}</span>
-                  </div>
-                  <p className="plan-desc">{plan.description}</p>
-                  <div className="plan-actions">
-                    <button className="approve-btn">✓ Approve</button>
-                    <button className="reject-btn">✗ Reject</button>
-                  </div>
-                </div>
-              ))}
-              {agent.pendingPlans.length === 0 && <p className="empty-hint">No plans pending approval.</p>}
-            </div>
+            <PlanApproval 
+              plans={agent.pendingPlans}
+              onApprove={(planId) => console.log('Approved plan:', planId)}
+              onReject={(planId) => console.log('Rejected plan:', planId)}
+            />
           </div>
         </div>
       </div>
