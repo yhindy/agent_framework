@@ -346,6 +346,18 @@ export class AgentService {
     this.updateAgentInfo(worktreePath, updates)
   }
 
+  async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {
+    // This will be properly implemented in Milestone 7
+    // For Milestone 6, we just provide a stub that allows navigation
+    const result = await this.createAssignment(projectPath, {
+      ...assignment,
+      mode: 'planning'
+    })
+    
+    // We'll add the isSuperMinion flag in Milestone 7's real implementation
+    return result
+  }
+
   async openInCursor(projectPath: string, agentId: string): Promise<void> {
     const agents = await this.listAgents(projectPath)
     const agent = agents.find(a => a.id === agentId)

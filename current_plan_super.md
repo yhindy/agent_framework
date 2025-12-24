@@ -80,9 +80,9 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
 ### Phase 2: Component Extraction & UI Integration
 - [x] **Milestone 3: ChildStatusCard Component**
   - Extract reusable card component for child status.
-- [ ] **Milestone 4: PlanApproval Component**
+- [x] **Milestone 4: PlanApproval Component**
   - Extract reusable UI for reviewing/approving proposed tasks.
-- [ ] **Milestone 5: Sidebar Integration**
+- [x] **Milestone 5: Sidebar Integration**
   - Show 👑 icon for super minions.
   - Implement expandable tree to see children under parent.
 - [ ] **Milestone 6: Creation Flow & Routing**

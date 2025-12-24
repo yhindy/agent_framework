@@ -53,6 +53,7 @@ const api = {
   getAssignmentsForProject: (projectPath: string) => ipcRenderer.invoke('assignments:getForProject', projectPath),
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
   createAssignmentForProject: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createForProject', projectPath, assignment),
+  createSuperAssignment: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createSuper', projectPath, assignment),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
   createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),

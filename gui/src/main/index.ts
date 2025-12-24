@@ -299,6 +299,37 @@ function setupIPC(): void {
     return result
   })
 
+  ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
+    const result = await services!.agent.createSuperAssignment(projectPath, assignment)
+    
+    // Trigger updates
+    setTimeout(() => {
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+    }, 1000)
+
+    // Auto-start super minion in planning mode
+    if (assignment.prompt && assignment.tool !== 'cursor') {
+      setTimeout(async () => {
+        try {
+          await services!.terminal.startAgent(
+            projectPath,
+            result.agentId,
+            assignment.tool,
+            'planning',
+            assignment.prompt,
+            assignment.model
+          )
+          mainWindow?.webContents.send('agents:updated')
+        } catch (error) {
+          console.error('Failed to auto-start super minion:', error)
+        }
+      }, 2000)
+    }
+    
+    return result
+  })
+
   ipcMain.handle('assignments:update', async (_event, assignmentId: string, updates: any) => {
     const projectPath = await findProjectForAssignment(assignmentId)
     return services!.agent.updateAssignment(projectPath, assignmentId, updates)
