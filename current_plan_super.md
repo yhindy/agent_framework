@@ -85,7 +85,7 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
 - [x] **Milestone 5: Sidebar Integration**
   - Show 👑 icon for super minions.
   - Implement expandable tree to see children under parent.
-- [ ] **Milestone 6: Creation Flow & Routing**
+- [x] **Milestone 6: Creation Flow & Routing**
   - Add "New Super Mission" button and form.
   - Register `/super/:agentId` route.
 
