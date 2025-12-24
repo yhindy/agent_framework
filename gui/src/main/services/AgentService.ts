@@ -229,22 +229,10 @@ export class AgentService {
       branch: branch,
       feature: assignment.feature!,
       status: assignment.status as any || 'active',
-      // specFile is now relative to minions/assignments/
-      // But wait, are we keeping assignments/ folder? 
-      // Plan didn't specify, but let's assume we keep creating spec files there or templates
-      // For now, let's keep the logic but maybe point to templates
-      // Actually, specFile was used for PR body.
-      // Let's assume we still write specs to disk or keep them in memory/config?
-      // The old way wrote to minions/assignments/. 
-      // If we only have config.json, maybe we don't need separate spec files?
-      // But user said "4 5 and 6 should be general", meaning templates are general.
-      // Let's keep specFile concept for now if it helps.
-      // Or maybe we can just store the prompt/spec in the config itself?
-      // ProjectConfig has `assignments: Assignment[]`. Assignment has `prompt`.
-      // Let's stick to Assignment interface.
       tool: assignment.tool || 'claude',
       model: assignment.model,
       mode: assignment.mode as any || 'auto',
+      prompt: assignment.prompt,
       prUrl: undefined,
       prStatus: undefined
     }
@@ -502,14 +490,8 @@ export class AgentService {
         }
       }
 
-      // Read the spec file for PR body
-      let prBody = assignment.feature
-      const specPath = join(projectPath, assignment.specFile)
-      if (existsSync(specPath)) {
-        prBody = readFileSync(specPath, 'utf-8')
-      } else if (assignment.prompt) {
-        prBody = assignment.prompt
-      }
+      // Use prompt for PR body, fallback to feature description
+      const prBody = assignment.prompt || assignment.feature
 
       // Create PR title from feature
       const prTitle = assignment.feature.length > 72 
