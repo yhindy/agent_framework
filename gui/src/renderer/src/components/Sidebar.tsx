@@ -216,7 +216,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
           return (
             <div key={project.path} className="project-group">
               <div className="project-header">
-                <div 
+                <div
                   className="project-header-content"
                   onClick={() => {
                     toggleProjectCollapse(project.path)
@@ -226,7 +226,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
                   <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
                   <span className="project-name-sidebar">{project.name}</span>
                 </div>
-                <button 
+                <button
+                  className="add-mission-btn"
+                  onClick={() => {
+                    localStorage.setItem('lastSelectedProjectPath', project.path)
+                    handleAddMinion()
+                  }}
+                  title="Add new mission"
+                >
+                  +
+                </button>
+                <button
                   className="remove-project-btn"
                   onClick={(e) => handleRemoveProject(project.path, e)}
                   title="Remove project"
@@ -238,19 +248,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
               {!isCollapsed && (
                 <div className="agent-list">
                   {sortedAgents.length === 0 && (
-                    <div className="empty-state">
-                      <span>No minions working</span>
-                      <button
-                        className="add-mission-btn"
-                        onClick={() => {
-                          localStorage.setItem('lastSelectedProjectPath', project.path)
-                          handleAddMinion()
-                        }}
-                        title="Add new mission"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <div className="empty-state">No minions working</div>
                   )}
                   {sortedAgents.map((agent) => {
                     const isActive = activeAgentId === agent.id
