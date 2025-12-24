@@ -56,6 +56,7 @@ export interface Assignment {
   worktreePath?: string
   lastActivity?: string
   hasUnread?: boolean
+  prompt?: string
 }
 
 export interface TestEnvironment {

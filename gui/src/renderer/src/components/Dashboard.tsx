@@ -14,7 +14,6 @@ interface Assignment {
   branch: string
   feature: string
   status: string
-  specFile: string
   tool: string
   model?: string
   mode: string

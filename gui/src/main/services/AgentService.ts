@@ -293,12 +293,11 @@ export class AgentService {
       branch: branch,
       project: projectName,
       feature: assignment.feature!,
-      status: (assignment.status as any) || 'in_progress',
+      status: assignment.status as any || 'active',
       tool: assignment.tool || 'claude',
       model: assignment.model,
-      mode: (assignment.mode as any) || 'auto',
-      prompt: (assignment as any).prompt,
-      specFile: (assignment as any).specFile,
+      mode: assignment.mode as any || 'auto',
+      prompt: assignment.prompt,
       prUrl: undefined,
       prStatus: undefined,
       createdAt: new Date().toISOString(),
@@ -786,17 +785,8 @@ export class AgentService {
         }
       }
 
-      // Read the spec file for PR body
-      let prBody = assignment.feature
-      if (assignment.specFile) {
-        const specPath = join(projectPath, assignment.specFile)
-        if (existsSync(specPath)) {
-          prBody = readFileSync(specPath, 'utf-8')
-        }
-      }
-      if (assignment.prompt) {
-        prBody = assignment.prompt
-      }
+      // Use prompt for PR body, fallback to feature description
+      const prBody = assignment.prompt || assignment.feature
 
       // Create PR title from feature
       const prTitle = assignment.feature.length > 72 
