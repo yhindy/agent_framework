@@ -193,6 +193,11 @@ function setupIPC(): void {
     return services!.agent.clearUnread(agentId)
   })
 
+  ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
+    const projectPath = await findProjectForAgent(agentId)
+    return services!.agent.getSuperAgentDetails(projectPath, agentId)
+  })
+
   // Terminal handlers
   ipcMain.on('terminal:input', (_event, agentId: string, data: string) => {
     services!.terminal.sendInput(agentId, data)

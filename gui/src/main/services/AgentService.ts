@@ -3,7 +3,7 @@ import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { app } from 'electron'
-import { ProjectConfig, Assignment, AgentInfo } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan } from './types/ProjectConfig'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -348,6 +348,68 @@ export class AgentService {
 
     // Update the .agent-info file
     this.updateAgentInfo(worktreePath, updates)
+  }
+
+  async getSuperAgentDetails(projectPath: string, agentId: string): Promise<SuperAgentInfo> {
+    // 1. Get the super agent's own info
+    const agents = await this.listAgents(projectPath)
+    const superAgent = agents.find(a => a.id === agentId)
+    
+    if (!superAgent) {
+      throw new Error('Super agent not found')
+    }
+
+    // Check if it really is a super minion
+    if (!(superAgent as any).isSuperMinion) {
+      throw new Error('Agent is not a super minion')
+    }
+
+    // 2. Find all children (agents with this agentId as parent)
+    // Note: listAgents already returns all agents in the project
+    const children = agents.filter(a => a.parentAgentId === agentId)
+
+    // 3. Read pending plans from .pending-plans.json
+    let pendingPlans: ChildPlan[] = []
+    
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    
+    let worktreePath: string
+    if (superAgent.agentId.startsWith(`${projectName}-`)) {
+      worktreePath = join(dirname(projectPath), superAgent.agentId)
+    } else {
+      worktreePath = join(dirname(projectPath), `${projectName}-${superAgent.agentId}`)
+    }
+
+    const plansPath = join(worktreePath, '.pending-plans.json')
+    if (existsSync(plansPath)) {
+      try {
+        const content = readFileSync(plansPath, 'utf-8')
+        const data = JSON.parse(content)
+        if (data.plans && Array.isArray(data.plans)) {
+          pendingPlans = data.plans
+        }
+      } catch (error) {
+        console.error('Error reading .pending-plans.json:', error)
+      }
+    }
+
+    // 4. Assemble full object
+    // Need to cast to any first because listAgents returns AgentInfo (or AgentSession in frontend)
+    // but here we are in backend working with AgentInfo. 
+    // The createSuperAssignment writes the extra fields to .agent-info, so they should be in the object returned by listAgents
+    // if we update listAgents to include them.
+    
+    // Actually, listAgents calls readAgentInfo which returns whatever is in the JSON.
+    // So superAgent object ALREADY has isSuperMinion and minionBudget if they were in .agent-info.
+    
+    return {
+      ...superAgent,
+      isSuperMinion: true,
+      minionBudget: (superAgent as any).minionBudget || 5,
+      children,
+      pendingPlans
+    } as SuperAgentInfo
   }
 
   async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {

@@ -21,6 +21,7 @@ const api = {
   stopAgent: (agentId: string) => ipcRenderer.invoke('agents:stop', agentId),
   openInCursor: (agentId: string) => ipcRenderer.invoke('agents:openCursor', agentId),
   clearUnread: (agentId: string) => ipcRenderer.invoke('agents:clearUnread', agentId),
+  getSuperAgentDetails: (agentId: string) => ipcRenderer.invoke('agents:getSuperDetails', agentId),
   teardownAgent: (agentId: string, force: boolean) => ipcRenderer.invoke('agents:teardown', agentId, force),
   unassignAgent: (agentId: string) => ipcRenderer.invoke('agents:unassign', agentId),
 

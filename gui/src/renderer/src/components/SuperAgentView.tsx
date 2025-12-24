@@ -10,78 +10,68 @@ interface SuperAgentViewProps {
   activeProjects: any[]
 }
 
-const MOCK_SUPER_AGENT: SuperAgentInfo = {
-  id: 'super-minion-1',
-  agentId: 'super-minion-1',
-  branch: 'feature/super-orchestrator',
-  project: 'agent-framework',
-  feature: 'Implement Super Minion Orchestration',
-  status: 'in_progress',
-  tool: 'claude',
-  mode: 'planning',
-  createdAt: new Date().toISOString(),
-  lastActivity: new Date().toISOString(),
-  isSuperMinion: true,
-  minionBudget: 5,
-  children: [
-    {
-      id: 'child-1',
-      agentId: 'child-1',
-      branch: 'feature/child-1-ui',
-      project: 'agent-framework',
-      feature: 'Build UI Scaffolding',
-      status: 'active',
-      tool: 'claude',
-      mode: 'dev',
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString(),
-      parentAgentId: 'super-minion-1'
-    },
-    {
-      id: 'child-2',
-      agentId: 'child-2',
-      branch: 'feature/child-2-logic',
-      project: 'agent-framework',
-      feature: 'Implement Backend Logic',
-      status: 'pending',
-      tool: 'claude',
-      mode: 'dev',
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString(),
-      parentAgentId: 'super-minion-1'
-    }
-  ],
-  pendingPlans: [
-    {
-      id: 'plan-1',
-      shortName: 'refactor-auth',
-      branch: 'feature/refactor-auth',
-      description: 'Refactor authentication to use JWT tokens for better session management.',
-      prompt: 'Implement JWT-based authentication...',
-      status: 'pending',
-      estimatedComplexity: 'medium'
-    }
-  ]
-}
-
 function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadAgent = async () => {
+    if (!agentId) return
+    try {
+      setError(null)
+      const details = await window.electronAPI.getSuperAgentDetails(agentId)
+      setAgent(details)
+    } catch (err: any) {
+      console.error('Failed to load super agent details:', err)
+      setError(err.message || 'Failed to load super agent')
+    }
+  }
 
   useEffect(() => {
-    // For Milestone 2, we use mock data
-    // In real implementation, we'd load this from AgentService
-    setAgent(MOCK_SUPER_AGENT)
+    loadAgent()
+    
+    // Listen for updates
+    const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
+      loadAgent()
+    })
+    
+    return () => {
+      unsubscribe()
+    }
   }, [agentId])
+
+  if (error) {
+    return (
+      <div className="super-agent-view">
+        <div className="agent-view-error">
+          <h3>Error Loading Super Minion</h3>
+          <p>{error}</p>
+          <button onClick={() => navigate('/workspace')}>Back to Dashboard</button>
+        </div>
+      </div>
+    )
+  }
 
   if (!agent) {
     return (
       <div className="super-agent-view">
-        <div className="agent-view-error">Loading Super Minion {agentId}...</div>
+        <div className="agent-view-loading">Loading Super Minion {agentId}...</div>
       </div>
     )
+  }
+
+  const handleOpenCursor = async () => {
+    if (agent) {
+      await window.electronAPI.openInCursor(agent.agentId)
+    }
+  }
+
+  const handleStop = async () => {
+    if (agent) {
+      await window.electronAPI.stopAgent(agent.agentId)
+    }
   }
 
   return (
@@ -91,11 +81,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           <h2>👑 {agent.agentId} <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span></h2>
         </div>
         <div className="agent-actions">
-          <button onClick={() => {}}>Open in Cursor</button>
-          <button className="danger">Stop</button>
-          <div className="cleanup-dropdown">
-            <button className="cleanup-button">Cleanup ▾</button>
-          </div>
+          <button onClick={handleOpenCursor}>Open in Cursor</button>
+          <button className="danger" onClick={handleStop}>Stop</button>
+          {/* Cleanup implementation can be added later or copied from AgentView */}
         </div>
       </div>
 

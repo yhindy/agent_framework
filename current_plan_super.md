@@ -65,7 +65,7 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
 
 ---
 
-## Implementation Milestones
+## Implementation Milestones (Revised)
 
 ### Phase 1: Scaffolding & Types
 - [x] **Milestone 1: Type Definitions**
@@ -87,21 +87,38 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
   - Implement expandable tree to see children under parent.
 - [x] **Milestone 6: Creation Flow & Routing**
   - Add "New Super Mission" button and form.
-  - Register `/super/:agentId` route.
+  - Route to `/workspace/super/:agentId` after creation.
 
-### Phase 3: Backend & Orchestration
-- [ ] **Milestone 7: Backend Creation Logic**
-  - Implement `createSuperAssignment` in `AgentService`.
-  - Update `listAgents` to assemble recursive child trees.
-- [ ] **Milestone 8: Signal Protocol Extension**
-  - Detect `PLANS_READY` signal.
-  - Implement reading/writing of `.pending-plans.json`.
-- [ ] **Milestone 9: Child Spawning Engine**
+### Phase 3: Backend & Orchestration (Revised)
+- [x] **Milestone 7: Backend Creation Logic**
+  - Implement `AgentService.createSuperAssignment`.
+  - Write `isSuperMinion` to `.agent-info`.
+  - Update `listAgents` to preserve super minion metadata.
+  - **Bug Fix**: Fixed sidebar crown icon display.
+  - **UI Polish**: Sleek modern styling.
+
+- [x] **Milestone 8: Wire Real Data to UI**
+  - Implement `getSuperAgentDetails` in `AgentService`.
+  - Expose via IPC.
+  - Update `SuperAgentView` to fetch real data (removing mock data).
+  - Add unit tests for `SuperAgentView` data fetching.
+
+- [ ] **Milestone 9: Create AI Rules File**
+  - Create `gui/resources/minions/rules/super-minion-rules.md`.
+  - Define plan proposal format and monitoring rules.
+
+- [ ] **Milestone 10: Plan Detection and Display**
+  - Add `PLANS_READY` to `SIGNAL_PATTERNS`.
+  - Implement `readPendingPlans` in `AgentService`.
+  - Trigger UI refresh on signal.
+
+- [ ] **Milestone 11: Plan Approval and Child Spawning**
+  - Implement `approvePlan` IPC.
   - Logic to create child worktrees from approved plans.
-  - Automatic `parentAgentId` linking.
-- [ ] **Milestone 10: Final Integration & Rules**
-  - Create `super-minion-rules.md` for the AI to follow.
-  - End-to-end testing of the full orchestration loop.
+  - Link children via `parentAgentId`.
+
+- [ ] **Milestone 12: End-to-End Verification**
+  - Full loop with real Claude session.
 
 ---
 
@@ -109,22 +126,12 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
 
 | Milestone | Testing Type | Plan |
 |-----------|--------------|------|
-| **1-2** | Unit / Manual | Verify `isSuperMinion` type guard. Inspect `SuperAgentView` via mock data injection. |
-| **3-4** | Component | Verify components react correctly to prop changes (status badges, plan counts). |
-| **5-6** | Integration | Mock Electron IPC to verify sidebar tree expansion and routing triggers. |
-| **7** | Integration | Create super minion, verify filesystem worktree and `.agent-info` JSON validity. |
-| **8-9** | Integration | Manually drop a `.pending-plans.json` file and verify the GUI detects and displays it. |
-| **10** | E2E | Use a real Claude session to generate a plan, approve it, and watch the child minion spawn. |
-
----
-
-## Commit Log Plan
-
-- `[feat] add SuperAgentInfo type extending AgentInfo` (DONE)
-- `[feat] add SuperAgentView component skeleton with mock data` (DONE)
-- `[feat] extract ChildStatusCard and PlanApproval components`
-- `[feat] sidebar tree display for super/child hierarchy`
-- `[feat] super mission creation form and routing`
-- `[feat] AgentService support for super minion creation`
-- `[feat] plan proposal detection and spawn logic`
-- `[feat] finalize orchestration loop and rules file`
+| **1-2** | Unit / Manual | Verify types and UI scaffolding. |
+| **3-4** | Component | Verify components react to props. |
+| **5-6** | Integration | Verify sidebar tree and routing. |
+| **7** | Integration | Verify creation logic and persistence. |
+| **8** | Component | Mock IPC and verify `SuperAgentView` renders real data. |
+| **9** | Manual | Verify rules file content. |
+| **10** | Integration | Manually drop `.pending-plans.json` and verify UI detection. |
+| **11** | Integration | Approve plan manually and verify child creation. |
+| **12** | E2E | Real Claude session. |
