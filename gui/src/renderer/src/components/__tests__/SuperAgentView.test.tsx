@@ -80,5 +80,58 @@ describe('SuperAgentView', () => {
     })
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument()
   })
+
+  it('reloads data when PLANS_READY signal is received', async () => {
+    let signalCallback: ((agentId: string, signal: string) => void) | null = null
+    
+    // Capture the signal callback
+    vi.mocked(window.electronAPI.onAgentSignal).mockImplementation((cb) => {
+      signalCallback = cb
+      return vi.fn() // Return unsubscribe function
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(screen.getByText('👑 super-1')).toBeInTheDocument()
+    })
+
+    // Initially no plans
+    expect(screen.getByText('No plans pending approval.')).toBeInTheDocument()
+
+    // Update mock to return agent with plans
+    const agentWithPlans = {
+      ...mockSuperAgent,
+      pendingPlans: [
+        {
+          id: 'plan-1',
+          shortName: 'auth-fix',
+          description: 'Fix authentication',
+          prompt: 'Fix the login bug...',
+          status: 'pending',
+          estimatedComplexity: 'small'
+        }
+      ]
+    }
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(agentWithPlans)
+
+    // Trigger the signal
+    if (signalCallback) {
+      signalCallback('super-1', 'PLANS_READY')
+    }
+
+    // Should reload and show the plan
+    await waitFor(() => {
+      expect(screen.getByText('📋 auth-fix')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Fix authentication')).toBeInTheDocument()
+  })
 })
 
