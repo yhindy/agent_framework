@@ -23,13 +23,65 @@
   gap: 12px;
 }
 
-.super-btn {
-  background: #6a1b9a;
-  color: white;
+.mission-dropdown-container {
+  position: relative;
 }
 
-.super-btn:hover {
-  background: #8e24aa;
+.new-mission-btn {
+  background: #0e639c;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.new-mission-btn:hover {
+  background: #1177bb;
+}
+
+.mission-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 160px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.mission-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.mission-dropdown-item:hover {
+  background: #2a2d2e;
+}
+
+.mission-dropdown-item.super-option {
+  color: #d4a0d4;
+}
+
+.mission-dropdown-item.super-option:hover {
+  background: #3d2a3d;
+}
+
+.super-icon {
+  font-size: 16px;
 }
 
 .dashboard-content {

@@ -93,6 +93,14 @@
   font-weight: 500;
 }
 
+.dropdown-item.super-option {
+  color: #d4a0d4;
+}
+
+.dropdown-item.super-option:hover {
+  background: #3d2a3d;
+}
+
 .projects-section {
   flex: 1;
   overflow-y: auto;
@@ -321,6 +329,10 @@
   text-align: center;
 }
 
+.add-mission-dropdown {
+  position: relative;
+}
+
 .add-mission-btn {
   opacity: 0;
   background: none;
@@ -339,6 +351,44 @@
 
 .add-mission-btn:hover {
   color: #4ec9b0;
+}
+
+.add-mission-submenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: -40px;
+  margin-top: 4px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 160px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.add-mission-submenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.add-mission-submenu-item:hover {
+  background: #2a2d2e;
+}
+
+.add-mission-submenu-item.super-option {
+  color: #d4a0d4;
+}
+
+.add-mission-submenu-item.super-option:hover {
+  background: #3d2a3d;
 }
 
 /* Modal styles */
