@@ -64,6 +64,13 @@ function initializeServices(): void {
     testEnv: new TestEnvService(mainWindow)
   }
 
+  // Migrate existing assignments from config.json to .agent-info files
+  const activeProjects = services.project.getActiveProjects()
+  for (const project of activeProjects) {
+    services.agent.migrateAssignments(project.path)
+      .catch(err => console.error(`Failed to migrate assignments for ${project.path}:`, err))
+  }
+
   // Set up IPC handlers
   setupIPC()
 }

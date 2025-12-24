@@ -183,12 +183,7 @@ except: pass" | while read -r cmd; do
     fi
 done
 
-# Create agent info file
-cat > "$WORKTREE_PATH/.agent-info" << EOF
-AGENT_ID=$AGENT_ID
-BRANCH=$BRANCH
-PROJECT=$PROJECT_NAME
-EOF
+# Note: .agent-info file is now created by the GUI with full assignment data in JSON format
 
 echo ""
 echo -e "${GREEN}✅ Minion ready for service!${NC}"
