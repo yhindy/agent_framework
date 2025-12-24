@@ -81,6 +81,23 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     }
   }
 
+  const handleApprovePlan = async (planId: string) => {
+    if (!agent) return
+    try {
+      await window.electronAPI.approvePlan(agent.agentId, planId)
+      // Reload agent data to show updated state
+      await loadAgent()
+    } catch (err: any) {
+      console.error('Failed to approve plan:', err)
+      setError('Failed to approve plan: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  const handleRejectPlan = async (planId: string) => {
+    // TODO: Implement plan rejection
+    console.log('Rejected plan:', planId)
+  }
+
   if (error) {
     return (
       <div className="super-agent-view">
@@ -152,8 +169,8 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           <div className="plans-section">
             <PlanApproval 
               plans={agent.pendingPlans}
-              onApprove={(planId) => console.log('Approved plan:', planId)}
-              onReject={(planId) => console.log('Rejected plan:', planId)}
+              onApprove={handleApprovePlan}
+              onReject={handleRejectPlan}
             />
           </div>
         </div>

@@ -13,6 +13,7 @@ Object.defineProperty(window, 'electronAPI', {
     onTestEnvExited: vi.fn(() => vi.fn()),
     clearUnread: vi.fn(),
     getSuperAgentDetails: vi.fn(),
+    approvePlan: vi.fn(),
     updateAssignment: vi.fn(),
     createAssignmentForProject: vi.fn(),
     stopAgent: vi.fn(),

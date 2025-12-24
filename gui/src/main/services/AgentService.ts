@@ -407,6 +407,98 @@ export class AgentService {
     } as SuperAgentInfo
   }
 
+  async approvePlan(projectPath: string, superAgentId: string, planId: string): Promise<void> {
+    // 1. Get super agent details to find worktree path
+    const agents = await this.listAgents(projectPath)
+    const session = agents.find(a => a.id === superAgentId)
+    
+    if (!session) {
+      throw new Error('Super agent not found')
+    }
+
+    const agentInfo = this.readAgentInfo(session.worktreePath)
+    if (!agentInfo || !(agentInfo as any).isSuperMinion) {
+      throw new Error('Agent is not a super minion')
+    }
+
+    // 2. Read .pending-plans.json
+    const plansPath = join(session.worktreePath, '.pending-plans.json')
+    if (!existsSync(plansPath)) {
+      throw new Error('No pending plans file found')
+    }
+
+    let plansData: { plans: ChildPlan[] }
+    try {
+      const content = readFileSync(plansPath, 'utf-8')
+      plansData = JSON.parse(content)
+    } catch (error) {
+      throw new Error('Failed to read pending plans file')
+    }
+
+    // 3. Find the plan
+    const plan = plansData.plans.find(p => p.id === planId)
+    if (!plan) {
+      throw new Error('Plan not found')
+    }
+
+    if (plan.status !== 'pending') {
+      throw new Error('Plan is not in pending status')
+    }
+
+    // 4. Create child agent
+    const childAssignment = {
+      branch: plan.shortName,
+      feature: plan.description,
+      prompt: plan.prompt,
+      tool: agentInfo.tool,
+      model: agentInfo.model,
+      mode: 'dev' as const
+    }
+
+    const childAgent = await this.createAssignment(projectPath, childAssignment)
+
+    // 5. Update child's .agent-info to set parentAgentId
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    
+    let childWorktreePath: string
+    if (childAgent.agentId.startsWith(`${projectName}-`)) {
+      childWorktreePath = join(dirname(projectPath), childAgent.agentId)
+    } else {
+      childWorktreePath = join(dirname(projectPath), `${projectName}-${childAgent.agentId}`)
+    }
+
+    this.updateAgentInfo(childWorktreePath, {
+      parentAgentId: superAgentId
+    })
+
+    // 6. Mark plan as approved in .pending-plans.json
+    plan.status = 'approved'
+    writeFileSync(plansPath, JSON.stringify(plansData, null, 2))
+
+    // 7. Update .children-status.json
+    const statusPath = join(session.worktreePath, '.children-status.json')
+    let statusData: { children: any[] } = { children: [] }
+    
+    if (existsSync(statusPath)) {
+      try {
+        const content = readFileSync(statusPath, 'utf-8')
+        statusData = JSON.parse(content)
+      } catch (error) {
+        // If parse fails, start fresh
+      }
+    }
+
+    // Add new child to status
+    statusData.children.push({
+      agentId: childAgent.agentId,
+      status: childAgent.status,
+      lastSignal: null
+    })
+
+    writeFileSync(statusPath, JSON.stringify(statusData, null, 2))
+  }
+
   async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {
     // Create the base assignment
     const result = await this.createAssignment(projectPath, {
