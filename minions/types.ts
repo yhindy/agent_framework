@@ -19,6 +19,28 @@ export interface Assignment {
   mode: AgentMode;
   prompt?: string;
   originalAssignmentId?: string;
+  parentAgentId?: string;  // Set if this is a child of a super minion
+}
+
+export interface ChildPlan {
+  id: string;
+  shortName: string;
+  branch: string;
+  description: string;
+  prompt: string;
+  estimatedComplexity?: 'small' | 'medium' | 'large';
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface SuperAgentInfo extends Assignment {
+  isSuperMinion: true;
+  minionBudget: number;
+  children: Assignment[];
+  pendingPlans: ChildPlan[];
+}
+
+export function isSuperMinion(agent: Assignment): agent is SuperAgentInfo {
+  return (agent as any).isSuperMinion === true;
 }
 
 export interface AgentSession {
