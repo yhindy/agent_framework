@@ -208,6 +208,29 @@
   background: #094771;
 }
 
+.agent-item-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-icon {
+  font-size: 14px;
+}
+
+.collapse-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.collapse-icon {
+  font-size: 9px;
+  color: #858585;
+  width: 12px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  display: inline-block;
+  margin-right: 4px;
+}
+
 @keyframes pulse-waiting {
   0%, 100% {
     background: #3d3d1a;
