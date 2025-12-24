@@ -32,11 +32,15 @@ export class TestEnvService {
     this.mainWindow = mainWindow
   }
 
+  setWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow
+  }
+
   /**
-   * Load test environment configuration from docs/agents/
+   * Load test environment configuration from minions/config.json
    */
   loadConfig(projectPath: string): TestEnvConfig {
-    const configPath = join(projectPath, 'minions', 'test-env.config.json')
+    const configPath = join(projectPath, 'minions', 'config.json')
     
     console.log('[TestEnvService] Loading config from:', configPath)
     
@@ -49,10 +53,9 @@ export class TestEnvService {
     try {
       const content = readFileSync(configPath, 'utf-8')
       const config = JSON.parse(content)
-      console.log('[TestEnvService] Loaded config:', config)
-      return config
+      return { defaultCommands: config.testEnvironments || [] }
     } catch (error) {
-      console.error('[TestEnvService] Error loading test-env.config.json:', error)
+      console.error('[TestEnvService] Error loading config.json:', error)
       return { defaultCommands: [] }
     }
   }

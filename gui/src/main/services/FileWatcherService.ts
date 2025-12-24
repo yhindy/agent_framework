@@ -10,6 +10,10 @@ export class FileWatcherService {
     this.mainWindow = mainWindow
   }
 
+  setWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow
+  }
+
   watchProject(projectPath: string): void {
     // Stop existing watcher
     if (this.watcher) {

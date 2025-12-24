@@ -47,31 +47,46 @@ echo ""
 
 # Create directory structure
 echo -e "${BLUE}📁 Creating directory structure...${NC}"
-mkdir -p "$TARGET/minions"
+mkdir -p "$TARGET/minions/assignments"
 mkdir -p "$TARGET/.cursor/rules"
 
-# Copy files
-echo -e "${BLUE}📋 Copying files...${NC}"
-
-# Everything in minions folder
-cp -R "$FRAMEWORK_DIR/minions/"* "$TARGET/minions/"
-# Remove dashboard.sh from the installed copy
-rm -f "$TARGET/minions/bin/dashboard.sh"
-chmod +x "$TARGET/minions/bin/"*.sh
-echo "   ✓ minions/"
-
-# Cursor rules
+# Copy Cursor rules
+echo -e "${BLUE}📋 Copying configuration files...${NC}"
 cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
 echo "   ✓ .cursor/rules/agent-rules.mdc"
 
 # Detect project name
 PROJECT_NAME=$(basename "$TARGET")
-echo ""
-echo -e "${BLUE}🔧 Configuring for project: $PROJECT_NAME${NC}"
 
-# Update config with detected project name
-sed -i.bak "s/PROJECT_NAME=\"myproject\"/PROJECT_NAME=\"$PROJECT_NAME\"/" "$TARGET/minions/bin/config.sh"
-rm -f "$TARGET/minions/bin/config.sh.bak"
+# Detect default branch
+DEFAULT_BASE_BRANCH="main"
+if git -C "$TARGET" rev-parse --verify main >/dev/null 2>&1; then
+    DEFAULT_BASE_BRANCH="main"
+elif git -C "$TARGET" rev-parse --verify master >/dev/null 2>&1; then
+    DEFAULT_BASE_BRANCH="master"
+fi
+
+echo ""
+echo -e "${BLUE}🔧 Configuring for project: $PROJECT_NAME ($DEFAULT_BASE_BRANCH)${NC}"
+
+# Create config.json
+cat > "$TARGET/minions/config.json" << EOF
+{
+  "project": {
+    "name": "$PROJECT_NAME",
+    "defaultBaseBranch": "$DEFAULT_BASE_BRANCH"
+  },
+  "setup": {
+    "filesToCopy": [],
+    "postSetupCommands": [],
+    "requiredFiles": [],
+    "preflightCommands": []
+  },
+  "assignments": [],
+  "testEnvironments": []
+}
+EOF
+echo "   ✓ minions/config.json"
 
 # Add to .gitignore
 GITIGNORE="$TARGET/.gitignore"
@@ -93,14 +108,10 @@ echo -e "${GREEN}✅ Agent Framework installed!${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo ""
-echo "1. (Optional) Edit minions/bin/config.sh to customize settings"
+echo "1. (Optional) Edit minions/config.json to customize settings"
 echo ""
-echo "2. Create your first agent worktree:"
-echo "   cd $TARGET"
-echo "   ./minions/bin/setup.sh agent-1 feature/agent-1/my-feature"
+echo "2. Open the Minion Laboratory app to manage your agents"
 echo ""
-echo "3. Start an AI agent in the worktree:"
-echo "   cd ../$PROJECT_NAME-agent-1"
-echo "   cursor ."
+echo "3. Create your first mission in the app"
 echo ""
 

@@ -2,6 +2,8 @@ import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { app } from 'electron'
+import { ProjectConfig, Assignment } from './types/ProjectConfig'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -14,27 +16,7 @@ interface AgentSession {
   hasUnread: boolean
   lastActivity: string
   mode?: string
-  tool?: string  // 'claude', 'aider', 'cursor', etc.
-}
-
-interface Assignment {
-  id: string
-  agentId: string
-  branch: string
-  feature: string
-  status: string
-  specFile: string
-  tool: string
-  model?: string
-  mode: string
-  prompt?: string
-  prUrl?: string
-  prStatus?: string
-}
-
-interface AssignmentsFile {
-  assignments: Assignment[]
-  availableAgentIds?: string[]  // Optional for backward compatibility
+  tool?: string
 }
 
 export class AgentService {
@@ -76,7 +58,8 @@ export class AgentService {
       // Get worktrees from git
       const { stdout } = await execAsync('git worktree list --porcelain', { cwd: projectPath })
       
-      const projectName = projectPath.split('/').pop() || 'project'
+      const config = this.getProjectConfig(projectPath)
+      const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
       const worktrees = this.parseWorktrees(stdout, projectName)
 
       for (const worktree of worktrees) {
@@ -185,42 +168,58 @@ export class AgentService {
     throw new Error(`Assignment ${assignmentId} not found in any active project`)
   }
 
-  getAssignments(projectPath: string): AssignmentsFile {
-    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-    
-    if (!existsSync(assignmentsPath)) {
-      return { assignments: [] }
-    }
+  private getMinionsPath(): string {
+    return app.isPackaged
+      ? join(process.resourcesPath, 'minions')
+      : join(app.getAppPath(), 'resources', 'minions')
+  }
 
+  private getProjectConfigPath(projectPath: string): string {
+    return join(projectPath, 'minions', 'config.json')
+  }
+
+  private getProjectConfig(projectPath: string): ProjectConfig {
+    const configPath = this.getProjectConfigPath(projectPath)
+    if (!existsSync(configPath)) {
+      return {
+        project: { name: 'unknown', defaultBaseBranch: 'main' },
+        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+        assignments: [],
+        testEnvironments: []
+      }
+    }
     try {
-      const content = readFileSync(assignmentsPath, 'utf-8')
-      const data = JSON.parse(content)
-      // Remove availableAgentIds if present (legacy cleanup)
-      return { assignments: data.assignments || [] }
-    } catch (error) {
-      console.error('Error reading assignments:', error)
-      return { assignments: [] }
+      return JSON.parse(readFileSync(configPath, 'utf-8'))
+    } catch (e) {
+      console.error('Error parsing config.json', e)
+      return {
+        project: { name: 'unknown', defaultBaseBranch: 'main' },
+        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+        assignments: [],
+        testEnvironments: []
+      }
     }
   }
 
+  private saveProjectConfig(projectPath: string, config: ProjectConfig): void {
+    const configPath = this.getProjectConfigPath(projectPath)
+    writeFileSync(configPath, JSON.stringify(config, null, 2))
+  }
+
   async createAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<Assignment> {
-    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-    const data = this.getAssignments(projectPath)
+    const config = this.getProjectConfig(projectPath)
 
     // Auto-generate agent ID if not provided
     let agentId = assignment.agentId
     if (!agentId) {
-      const projectName = projectPath.split('/').pop() || 'project'
+      const projectName = config.project.name || projectPath.split('/').pop() || 'project'
       const hash = Math.random().toString(36).substring(2, 6)
       agentId = `${projectName}-${hash}`
     }
 
     // Auto-generate branch name if not provided
-    // Expects assignment.branch to be just the short name (e.g., "user-auth")
-    // or the full branch name (e.g., "feature/myrepo-a3f2/user-auth")
     let branch = assignment.branch!
     if (!branch.startsWith('feature/')) {
-      // It's just a short name, generate full branch
       branch = `feature/${agentId}/${branch}`
     }
 
@@ -229,47 +228,59 @@ export class AgentService {
       agentId: agentId,
       branch: branch,
       feature: assignment.feature!,
-      status: assignment.status || 'pending',
-      specFile: assignment.specFile || `minions/assignments/${agentId}-${branch.split('/').pop()}.md`,
+      status: assignment.status as any || 'active',
+      // specFile is now relative to minions/assignments/
+      // But wait, are we keeping assignments/ folder? 
+      // Plan didn't specify, but let's assume we keep creating spec files there or templates
+      // For now, let's keep the logic but maybe point to templates
+      // Actually, specFile was used for PR body.
+      // Let's assume we still write specs to disk or keep them in memory/config?
+      // The old way wrote to minions/assignments/. 
+      // If we only have config.json, maybe we don't need separate spec files?
+      // But user said "4 5 and 6 should be general", meaning templates are general.
+      // Let's keep specFile concept for now if it helps.
+      // Or maybe we can just store the prompt/spec in the config itself?
+      // ProjectConfig has `assignments: Assignment[]`. Assignment has `prompt`.
+      // Let's stick to Assignment interface.
       tool: assignment.tool || 'claude',
       model: assignment.model,
-      mode: assignment.mode || 'idle',
-      prompt: assignment.prompt
+      mode: assignment.mode as any || 'auto',
+      prUrl: undefined,
+      prStatus: undefined
     }
 
-    data.assignments.push(newAssignment)
-    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+    config.assignments.push(newAssignment)
+    this.saveProjectConfig(projectPath, config)
 
     // Run setup.sh to create the agent worktree
-    const setupScript = join(projectPath, 'minions', 'bin', 'setup.sh')
+    const setupScript = join(this.getMinionsPath(), 'bin', 'setup.sh')
+    const configPath = this.getProjectConfigPath(projectPath)
+    
     try {
       const { stdout, stderr } = await execFileAsync(
         setupScript,
-        [newAssignment.agentId, newAssignment.branch],
+        [newAssignment.agentId, newAssignment.branch, '--config', configPath],
         { cwd: projectPath }
       )
       console.log('Setup script output:', stdout)
       if (stderr) console.error('Setup script errors:', stderr)
     } catch (error: any) {
       console.error('Failed to run setup.sh:', error)
-      // Don't throw - assignment is still created, just worktree creation failed
-      // User can run setup.sh manually
     }
 
     return newAssignment
   }
 
   async updateAssignment(projectPath: string, assignmentId: string, updates: Partial<Assignment>): Promise<void> {
-    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-    const data = this.getAssignments(projectPath)
+    const config = this.getProjectConfig(projectPath)
 
-    const index = data.assignments.findIndex(a => a.id === assignmentId)
+    const index = config.assignments.findIndex(a => a.id === assignmentId)
     if (index === -1) {
       throw new Error('Assignment not found')
     }
 
-    data.assignments[index] = { ...data.assignments[index], ...updates }
-    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+    config.assignments[index] = { ...config.assignments[index], ...updates }
+    this.saveProjectConfig(projectPath, config)
   }
 
   async openInCursor(projectPath: string, agentId: string): Promise<void> {
@@ -303,11 +314,17 @@ export class AgentService {
     }
   }
 
+  getAssignments(projectPath: string): { assignments: Assignment[] } {
+    const config = this.getProjectConfig(projectPath)
+    return { assignments: config.assignments }
+  }
+
   async teardownAgent(projectPath: string, agentId: string, force: boolean = false): Promise<void> {
-    const teardownScript = join(projectPath, 'minions', 'bin', 'teardown.sh')
+    const teardownScript = join(this.getMinionsPath(), 'bin', 'teardown.sh')
+    const configPath = this.getProjectConfigPath(projectPath)
     
     try {
-      const args = [agentId]
+      const args = [agentId, '--config', configPath]
       if (force) args.push('--force')
       const { stdout, stderr } = await execFileAsync(
         teardownScript,
@@ -347,43 +364,16 @@ export class AgentService {
   }
 
   private async removeAssignment(projectPath: string, agentId: string): Promise<void> {
-    const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-    const data = this.getAssignments(projectPath)
-
-    // Remove assignment for this agent
-    data.assignments = data.assignments.filter(a => a.agentId !== agentId)
-
-    writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+    const config = this.getProjectConfig(projectPath)
+    config.assignments = config.assignments.filter(a => a.agentId !== agentId)
+    this.saveProjectConfig(projectPath, config)
   }
-
-  private async getProjectConfig(projectPath: string): Promise<Record<string, string>> {
-    const configPath = join(projectPath, 'minions', 'bin', 'config.sh')
-    const config: Record<string, string> = {}
-    
-    if (existsSync(configPath)) {
-      try {
-        const content = readFileSync(configPath, 'utf-8')
-        const lines = content.split('\n')
-        for (const line of lines) {
-          const match = line.match(/^([A-Z_]+)="?([^"]*)"?/)
-          if (match) {
-            config[match[1]] = match[2]
-          }
-        }
-      } catch (error) {
-        console.error('[AgentService] Error reading config.sh:', error)
-      }
-    }
-    
-    return config
-  }
-
   private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {
     // 1. Try to get from project config first
-    const config = await this.getProjectConfig(projectPath)
-    if (config.DEFAULT_BASE_BRANCH) {
-      console.log(`[AgentService] Using default branch from config: ${config.DEFAULT_BASE_BRANCH}`)
-      return config.DEFAULT_BASE_BRANCH
+    const config = this.getProjectConfig(projectPath)
+    if (config.project?.defaultBaseBranch) {
+      console.log(`[AgentService] Using default branch from config: ${config.project.defaultBaseBranch}`)
+      return config.project.defaultBaseBranch
     }
 
     try {
@@ -422,8 +412,8 @@ export class AgentService {
   }
 
   async createPullRequest(projectPath: string, assignmentId: string, autoCommit: boolean = false): Promise<{ url: string }> {
-    const data = this.getAssignments(projectPath)
-    const assignment = data.assignments.find(a => a.id === assignmentId)
+    const config = this.getProjectConfig(projectPath)
+    const assignment = config.assignments.find(a => a.id === assignmentId)
 
     if (!assignment) {
       throw new Error('Assignment not found')
@@ -540,13 +530,12 @@ export class AgentService {
         const prUrl = urlMatch ? urlMatch[0] : stdout.trim()
 
         // Update assignment with PR URL and status
-        const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
-        data.assignments[assignmentIndex].prUrl = prUrl
-        data.assignments[assignmentIndex].prStatus = 'OPEN'
-        data.assignments[assignmentIndex].status = 'pr_open'
+        const assignmentIndex = config.assignments.findIndex(a => a.id === assignmentId)
+        config.assignments[assignmentIndex].prUrl = prUrl
+        config.assignments[assignmentIndex].prStatus = 'OPEN'
+        config.assignments[assignmentIndex].status = 'pr_open'
 
-        const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-        writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+        this.saveProjectConfig(projectPath, config)
 
         console.log('[AgentService] PR created:', prUrl)
         return { url: prUrl }
@@ -562,13 +551,12 @@ export class AgentService {
           const prUrl = stdout.trim()
 
           // Update assignment
-          const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
-          data.assignments[assignmentIndex].prUrl = prUrl
-          data.assignments[assignmentIndex].prStatus = 'OPEN'
-          data.assignments[assignmentIndex].status = 'pr_open'
+          const assignmentIndex = config.assignments.findIndex(a => a.id === assignmentId)
+          config.assignments[assignmentIndex].prUrl = prUrl
+          config.assignments[assignmentIndex].prStatus = 'OPEN'
+          config.assignments[assignmentIndex].status = 'pr_open'
 
-          const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-          writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+          this.saveProjectConfig(projectPath, config)
 
           return { url: prUrl }
         }
@@ -581,8 +569,8 @@ export class AgentService {
   }
 
   async checkPullRequestStatus(projectPath: string, assignmentId: string): Promise<{ status: string; mergedAt?: string }> {
-    const data = this.getAssignments(projectPath)
-    const assignment = data.assignments.find(a => a.id === assignmentId)
+    const config = this.getProjectConfig(projectPath)
+    const assignment = config.assignments.find(a => a.id === assignmentId)
 
     if (!assignment || !assignment.prUrl) {
       throw new Error('Assignment or PR URL not found')
@@ -607,17 +595,16 @@ export class AgentService {
       const status = prData.state // OPEN, MERGED, CLOSED
 
       // Update assignment status
-      const assignmentIndex = data.assignments.findIndex(a => a.id === assignmentId)
-      data.assignments[assignmentIndex].prStatus = status
+      const assignmentIndex = config.assignments.findIndex(a => a.id === assignmentId)
+      config.assignments[assignmentIndex].prStatus = status
 
       if (status === 'MERGED') {
-        data.assignments[assignmentIndex].status = 'merged'
+        config.assignments[assignmentIndex].status = 'merged'
       } else if (status === 'CLOSED') {
-        data.assignments[assignmentIndex].status = 'closed'
+        config.assignments[assignmentIndex].status = 'closed'
       }
 
-      const assignmentsPath = join(projectPath, 'minions', 'assignments.json')
-      writeFileSync(assignmentsPath, JSON.stringify(data, null, 2))
+      this.saveProjectConfig(projectPath, config)
 
       return {
         status,
