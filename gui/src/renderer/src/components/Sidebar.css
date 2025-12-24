@@ -10,6 +10,8 @@
 .sidebar-nav {
   padding: 12px 8px;
   border-bottom: 1px solid #3c3c3c;
+  display: flex;
+  gap: 4px;
 }
 
 .nav-item {
@@ -21,6 +23,10 @@
   cursor: pointer;
   transition: background 0.2s;
   color: #cccccc;
+}
+
+.nav-item:not(.dropdown-trigger) {
+  flex: 1;
 }
 
 .nav-item:hover {
@@ -41,50 +47,48 @@
   font-weight: 500;
 }
 
-.add-project-button {
+.dropdown-container {
+  position: relative;
+}
+
+.dropdown-trigger {
+  padding: 8px;
+  min-width: auto;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  margin: 12px 8px;
-  border-radius: 4px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: background 0.2s;
-  color: #4ec9b0;
-  border: 1px dashed #4ec9b0;
+  color: #cccccc;
 }
 
-.add-project-button:hover {
+.dropdown-item:hover {
   background: #2a2d2e;
-  border-color: #6fd4ba;
-  color: #6fd4ba;
 }
 
-.add-minion-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  margin: 0 8px 12px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
-  color: #ffcc00;
-  border: 1px dashed #ffcc00;
+.dropdown-icon {
+  font-size: 16px;
 }
 
-.add-minion-button:hover {
-  background: #2a2d2e;
-  border-color: #ffe066;
-  color: #ffe066;
-}
-
-.add-icon {
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.add-label {
+.dropdown-label {
   font-size: 14px;
   font-weight: 500;
 }
