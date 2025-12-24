@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "agent_framework-ryko",
+    "name": "agent_framework",
     "defaultBaseBranch": "master"
   },
   "setup": {
