@@ -3,7 +3,7 @@ import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { app } from 'electron'
-import { ProjectConfig, Assignment, AgentInfo } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan } from './types/ProjectConfig'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -17,6 +17,8 @@ interface AgentSession {
   lastActivity: string
   mode?: string
   tool?: string
+  isSuperMinion?: boolean
+  parentAgentId?: string
 }
 
 export class AgentService {
@@ -78,7 +80,9 @@ export class AgentService {
               hasUnread: agentInfo.hasUnread || false,
               lastActivity: agentInfo.lastActivity,
               mode: agentInfo.mode,
-              tool: agentInfo.tool
+              tool: agentInfo.tool,
+              isSuperMinion: (agentInfo as any).isSuperMinion,
+              parentAgentId: agentInfo.parentAgentId
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -88,6 +92,8 @@ export class AgentService {
             session.tool = agentInfo.tool
             session.hasUnread = agentInfo.hasUnread || session.hasUnread
             session.lastActivity = agentInfo.lastActivity
+            session.isSuperMinion = (agentInfo as any).isSuperMinion
+            session.parentAgentId = agentInfo.parentAgentId
           }
 
           agents.push(session)
@@ -287,12 +293,11 @@ export class AgentService {
       branch: branch,
       project: projectName,
       feature: assignment.feature!,
-      status: (assignment.status as any) || 'in_progress',
+      status: assignment.status as any || 'active',
       tool: assignment.tool || 'claude',
       model: assignment.model,
-      mode: (assignment.mode as any) || 'auto',
-      prompt: (assignment as any).prompt,
-      specFile: (assignment as any).specFile,
+      mode: assignment.mode as any || 'auto',
+      prompt: assignment.prompt,
       prUrl: undefined,
       prStatus: undefined,
       createdAt: new Date().toISOString(),
@@ -344,6 +349,192 @@ export class AgentService {
 
     // Update the .agent-info file
     this.updateAgentInfo(worktreePath, updates)
+  }
+
+  async getSuperAgentDetails(projectPath: string, agentId: string): Promise<SuperAgentInfo> {
+    // 1. Get all agents to find the super agent and its children
+    const agents = await this.listAgents(projectPath)
+    const session = agents.find(a => a.id === agentId)
+    
+    if (!session) {
+      throw new Error('Super agent not found')
+    }
+
+    // 2. Read full agent info for the super agent
+    const agentInfo = this.readAgentInfo(session.worktreePath)
+    if (!agentInfo) {
+      throw new Error('Failed to read super agent info')
+    }
+
+    if (!(agentInfo as any).isSuperMinion) {
+      throw new Error('Agent is not a super minion')
+    }
+
+    // 3. Find and read full info for all children
+    const childSessions = agents.filter(a => a.parentAgentId === agentId)
+    const children: AgentInfo[] = []
+    
+    for (const childSession of childSessions) {
+      const childInfo = this.readAgentInfo(childSession.worktreePath)
+      if (childInfo) {
+        children.push(childInfo)
+      }
+    }
+
+    // 4. Read pending plans from .pending-plans.json
+    let pendingPlans: ChildPlan[] = []
+    
+    const plansPath = join(session.worktreePath, '.pending-plans.json')
+    if (existsSync(plansPath)) {
+      try {
+        const content = readFileSync(plansPath, 'utf-8')
+        const data = JSON.parse(content)
+        if (data.plans && Array.isArray(data.plans)) {
+          // Only show pending plans to the user
+          pendingPlans = data.plans.filter((p: ChildPlan) => p.status === 'pending')
+        }
+      } catch (error) {
+        console.error('Error reading .pending-plans.json:', error)
+      }
+    }
+
+    return {
+      ...agentInfo,
+      isSuperMinion: true,
+      minionBudget: (agentInfo as any).minionBudget || 5,
+      children,
+      pendingPlans
+    } as SuperAgentInfo
+  }
+
+  async approvePlan(projectPath: string, superAgentId: string, planId: string): Promise<AgentInfo> {
+    // 1. Get super agent details to find worktree path
+    const agents = await this.listAgents(projectPath)
+    const session = agents.find(a => a.id === superAgentId)
+    
+    if (!session) {
+      throw new Error('Super agent not found')
+    }
+
+    const agentInfo = this.readAgentInfo(session.worktreePath)
+    if (!agentInfo || !(agentInfo as any).isSuperMinion) {
+      throw new Error('Agent is not a super minion')
+    }
+
+    // 2. Read .pending-plans.json
+    const plansPath = join(session.worktreePath, '.pending-plans.json')
+    if (!existsSync(plansPath)) {
+      throw new Error('No pending plans file found')
+    }
+
+    let plansData: { plans: ChildPlan[] }
+    try {
+      const content = readFileSync(plansPath, 'utf-8')
+      plansData = JSON.parse(content)
+    } catch (error) {
+      throw new Error('Failed to read pending plans file')
+    }
+
+    // 3. Find the plan
+    const plan = plansData.plans.find(p => p.id === planId)
+    if (!plan) {
+      throw new Error('Plan not found')
+    }
+
+    if (plan.status !== 'pending') {
+      throw new Error('Plan is not in pending status')
+    }
+
+    // 4. Create child agent
+    const childAssignment = {
+      branch: plan.shortName,
+      feature: plan.description,
+      prompt: plan.prompt,
+      tool: agentInfo.tool,
+      model: agentInfo.model,
+      mode: 'dev' as const
+    }
+
+    const childAgent = await this.createAssignment(projectPath, childAssignment)
+
+    // 5. Update child's .agent-info to set parentAgentId
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    
+    let childWorktreePath: string
+    if (childAgent.agentId.startsWith(`${projectName}-`)) {
+      childWorktreePath = join(dirname(projectPath), childAgent.agentId)
+    } else {
+      childWorktreePath = join(dirname(projectPath), `${projectName}-${childAgent.agentId}`)
+    }
+
+    this.updateAgentInfo(childWorktreePath, {
+      parentAgentId: superAgentId
+    })
+
+    // 6. Mark plan as approved in .pending-plans.json
+    plan.status = 'approved'
+    writeFileSync(plansPath, JSON.stringify(plansData, null, 2))
+
+    // 7. Update .children-status.json
+    const statusPath = join(session.worktreePath, '.children-status.json')
+    let statusData: { children: any[] } = { children: [] }
+    
+    if (existsSync(statusPath)) {
+      try {
+        const content = readFileSync(statusPath, 'utf-8')
+        statusData = JSON.parse(content)
+      } catch (error) {
+        // If parse fails, start fresh
+      }
+    }
+
+    // Add new child to status
+    statusData.children.push({
+      agentId: childAgent.agentId,
+      status: childAgent.status,
+      lastSignal: null
+    })
+
+    writeFileSync(statusPath, JSON.stringify(statusData, null, 2))
+
+    return childAgent
+  }
+
+  async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {
+    // Create the base assignment
+    const result = await this.createAssignment(projectPath, {
+      ...assignment,
+      mode: 'planning'
+    })
+    
+    // Calculate worktree path to update .agent-info with super minion metadata
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    
+    let worktreePath: string
+    if (result.agentId.startsWith(`${projectName}-`)) {
+      worktreePath = join(dirname(projectPath), result.agentId)
+    } else {
+      worktreePath = join(dirname(projectPath), `${projectName}-${result.agentId}`)
+    }
+    
+    // Update .agent-info with super minion fields
+    this.updateAgentInfo(worktreePath, {
+      isSuperMinion: true,
+      minionBudget: assignment.minionBudget || 5,
+      children: [],
+      pendingPlans: []
+    } as any)
+    
+    // Return the updated info
+    return {
+      ...result,
+      isSuperMinion: true,
+      minionBudget: assignment.minionBudget || 5,
+      children: [],
+      pendingPlans: []
+    } as any
   }
 
   async openInCursor(projectPath: string, agentId: string): Promise<void> {
@@ -594,17 +785,8 @@ export class AgentService {
         }
       }
 
-      // Read the spec file for PR body
-      let prBody = assignment.feature
-      if (assignment.specFile) {
-        const specPath = join(projectPath, assignment.specFile)
-        if (existsSync(specPath)) {
-          prBody = readFileSync(specPath, 'utf-8')
-        }
-      }
-      if (assignment.prompt) {
-        prBody = assignment.prompt
-      }
+      // Use prompt for PR body, fallback to feature description
+      const prBody = assignment.prompt || assignment.feature
 
       // Create PR title from feature
       const prTitle = assignment.feature.length > 72 

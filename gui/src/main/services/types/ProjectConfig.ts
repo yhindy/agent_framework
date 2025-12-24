@@ -16,6 +16,28 @@ export interface AgentInfo {
   createdAt: string
   lastActivity: string
   hasUnread?: boolean
+  parentAgentId?: string  // Set if this is a child of a super minion
+}
+
+export interface ChildPlan {
+  id: string
+  shortName: string
+  branch: string
+  description: string
+  prompt: string
+  estimatedComplexity?: 'small' | 'medium' | 'large'
+  status: 'pending' | 'approved' | 'rejected'
+}
+
+export interface SuperAgentInfo extends AgentInfo {
+  isSuperMinion: true
+  minionBudget: number
+  children: AgentInfo[]
+  pendingPlans: ChildPlan[]
+}
+
+export function isSuperMinion(agent: AgentInfo): agent is SuperAgentInfo {
+  return (agent as any).isSuperMinion === true
 }
 
 // @deprecated - Legacy Assignment interface for backward compatibility during migration
@@ -34,6 +56,7 @@ export interface Assignment {
   worktreePath?: string
   lastActivity?: string
   hasUnread?: boolean
+  prompt?: string
 }
 
 export interface TestEnvironment {

@@ -193,6 +193,18 @@ function setupIPC(): void {
     return services!.agent.clearUnread(agentId)
   })
 
+  ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
+    const projectPath = await findProjectForAgent(agentId)
+    return services!.agent.getSuperAgentDetails(projectPath, agentId)
+  })
+
+  ipcMain.handle('agents:approvePlan', async (_event, superAgentId: string, planId: string) => {
+    const projectPath = await findProjectForAgent(superAgentId)
+    const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
+    // Auto-start the child agent
+    await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode)
+  })
+
   // Terminal handlers
   ipcMain.on('terminal:input', (_event, agentId: string, data: string) => {
     services!.terminal.sendInput(agentId, data)
@@ -294,6 +306,37 @@ function setupIPC(): void {
           console.error('Failed to auto-start agent:', error)
         }
       }, 2000) // Wait 2 seconds for worktree to be fully set up
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
+    const result = await services!.agent.createSuperAssignment(projectPath, assignment)
+    
+    // Trigger updates
+    setTimeout(() => {
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+    }, 1000)
+
+    // Auto-start super minion in planning mode
+    if (assignment.prompt && assignment.tool !== 'cursor') {
+      setTimeout(async () => {
+        try {
+          await services!.terminal.startAgent(
+            projectPath,
+            result.agentId,
+            assignment.tool,
+            'planning',
+            assignment.prompt,
+            assignment.model
+          )
+          mainWindow?.webContents.send('agents:updated')
+        } catch (error) {
+          console.error('Failed to auto-start super minion:', error)
+        }
+      }, 2000)
     }
     
     return result

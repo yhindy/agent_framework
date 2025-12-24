@@ -21,6 +21,8 @@ const api = {
   stopAgent: (agentId: string) => ipcRenderer.invoke('agents:stop', agentId),
   openInCursor: (agentId: string) => ipcRenderer.invoke('agents:openCursor', agentId),
   clearUnread: (agentId: string) => ipcRenderer.invoke('agents:clearUnread', agentId),
+  getSuperAgentDetails: (agentId: string) => ipcRenderer.invoke('agents:getSuperDetails', agentId),
+  approvePlan: (superAgentId: string, planId: string) => ipcRenderer.invoke('agents:approvePlan', superAgentId, planId),
   teardownAgent: (agentId: string, force: boolean) => ipcRenderer.invoke('agents:teardown', agentId, force),
   unassignAgent: (agentId: string) => ipcRenderer.invoke('agents:unassign', agentId),
 
@@ -53,6 +55,7 @@ const api = {
   getAssignmentsForProject: (projectPath: string) => ipcRenderer.invoke('assignments:getForProject', projectPath),
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
   createAssignmentForProject: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createForProject', projectPath, assignment),
+  createSuperAssignment: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createSuper', projectPath, assignment),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
   createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),

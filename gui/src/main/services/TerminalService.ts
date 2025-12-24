@@ -28,7 +28,7 @@ interface PlainTerminalSession {
 }
 
 const SIGNAL_PATTERNS = [
-  { pattern: '===SIGNAL:PLAN_READY===', signal: 'PLAN_READY' },
+  { pattern: '===SIGNAL:PLANS_READY===', signal: 'PLANS_READY' },
   { pattern: '===SIGNAL:DEV_COMPLETED===', signal: 'DEV_COMPLETED' },
   { pattern: '===SIGNAL:BLOCKER===', signal: 'BLOCKER' },
   { pattern: '===SIGNAL:QUESTION===', signal: 'QUESTION' },

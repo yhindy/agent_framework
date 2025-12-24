@@ -14,7 +14,6 @@ interface Assignment {
   branch: string
   feature: string
   status: string
-  specFile: string
   tool: string
   model?: string
   mode: string
@@ -80,7 +79,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     model: 'haiku',
     mode: 'dev',
     status: 'pending',
-    yolo: false
+    yolo: false,
+    isSuper: false,
+    minionBudget: 3
   })
 
   useEffect(() => {
@@ -153,23 +154,39 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         : formData.projectPath
 
       // Backend will auto-generate agentId and construct full branch name
-      const result = await window.electronAPI.createAssignmentForProject(projectPath, {
-        branch: formData.shortName,  // Just pass short name, backend will construct full branch
-        feature,
-        tool: formData.tool,
-        model: formData.model,
-        prompt: formData.prompt,
-        mode: formData.mode,
-        status: 'in_progress',
-        yolo: formData.yolo
-      })
+      let result;
+      if (formData.isSuper) {
+        result = await window.electronAPI.createSuperAssignment(projectPath, {
+          branch: formData.shortName,
+          feature,
+          minionBudget: formData.minionBudget,
+          tool: formData.tool,
+          model: formData.model,
+          prompt: formData.prompt
+        })
+      } else {
+        result = await window.electronAPI.createAssignmentForProject(projectPath, {
+          branch: formData.shortName,  // Just pass short name, backend will construct full branch
+          feature,
+          tool: formData.tool,
+          model: formData.model,
+          prompt: formData.prompt,
+          mode: formData.mode,
+          status: 'in_progress',
+          yolo: formData.yolo
+        })
+      }
 
       const agentId = result.agentId  // Use the auto-generated agentId from backend
       setShowCreateForm(false)
       setIsCreating(false)
 
       // Navigate to the new agent view
-      navigate(`/workspace/agent/${agentId}`)
+      if (formData.isSuper) {
+        navigate(`/workspace/super/${agentId}`)
+      } else {
+        navigate(`/workspace/agent/${agentId}`)
+      }
 
       setFormData({
         projectPath: '',
@@ -180,7 +197,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         model: 'opus',
         mode: 'planning',
         status: 'pending',
-        yolo: false
+        yolo: false,
+        isSuper: false,
+        minionBudget: 3
       })
 
       // Wait a moment for worktree creation then refresh
@@ -301,14 +320,14 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     merged: assignments.filter((a) => a.status === 'merged')
   }
 
-  const handleNewAssignment = () => {
+  const handleNewAssignment = (isSuper = false) => {
     // Auto-select last selected project, or first project if only one exists
     const lastProject = localStorage.getItem('lastSelectedProjectPath')
     const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
       ? lastProject
       : (activeProjects.length === 1 ? activeProjects[0].path : '')
     
-    setFormData({ ...formData, projectPath: defaultProject })
+    setFormData({ ...formData, projectPath: defaultProject, isSuper })
     setShowCreateForm(true)
   }
 
@@ -316,7 +335,10 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>Minion Missions 🍌</h1>
-        <button onClick={handleNewAssignment}>+ New Mission</button>
+        <div className="header-actions">
+          <button onClick={() => handleNewAssignment(false)}>+ New Mission</button>
+          <button className="super-btn" onClick={() => handleNewAssignment(true)}>👑 New Super Mission</button>
+        </div>
       </div>
 
       <div className="dashboard-content">
@@ -469,7 +491,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       {showCreateForm && (
         <div className="modal-overlay" onClick={() => setShowCreateForm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Create New Mission</h2>
+            <h2>{formData.isSuper ? '👑 Create New Super Mission' : 'Create New Mission'}</h2>
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -512,6 +534,23 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                   />
                 </div>
               </div>
+
+              {formData.isSuper && (
+                <div className="form-group">
+                  <label>Minion Budget: {formData.minionBudget}</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={formData.minionBudget}
+                    onChange={(e) => setFormData({ ...formData, minionBudget: parseInt(e.target.value) })}
+                    className="budget-slider"
+                  />
+                  <div className="form-hint">
+                    Maximum number of child minions the super minion can orchestrate.
+                  </div>
+                </div>
+              )}
 
               {formData.tool !== 'cursor' && (
                 <div className="form-group">
