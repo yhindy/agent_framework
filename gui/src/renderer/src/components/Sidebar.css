@@ -214,7 +214,9 @@
 }
 
 .agent-icon {
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 2px;
 }
 
 .collapse-icon.collapsed {
@@ -222,13 +224,20 @@
 }
 
 .collapse-icon {
-  font-size: 9px;
-  color: #858585;
-  width: 12px;
+  font-size: 10px;
+  color: #999;
+  width: 14px;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: all 0.2s ease;
   display: inline-block;
   margin-right: 4px;
+  opacity: 0.8;
+}
+
+.collapse-icon:hover {
+  color: #ccc;
+  opacity: 1;
+  transform: scale(1.15);
 }
 
 @keyframes pulse-waiting {

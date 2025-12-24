@@ -78,7 +78,9 @@ export class AgentService {
               hasUnread: agentInfo.hasUnread || false,
               lastActivity: agentInfo.lastActivity,
               mode: agentInfo.mode,
-              tool: agentInfo.tool
+              tool: agentInfo.tool,
+              isSuperMinion: (agentInfo as any).isSuperMinion,
+              parentAgentId: agentInfo.parentAgentId
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -88,6 +90,8 @@ export class AgentService {
             session.tool = agentInfo.tool
             session.hasUnread = agentInfo.hasUnread || session.hasUnread
             session.lastActivity = agentInfo.lastActivity
+            session.isSuperMinion = (agentInfo as any).isSuperMinion
+            session.parentAgentId = agentInfo.parentAgentId
           }
 
           agents.push(session)
@@ -347,15 +351,39 @@ export class AgentService {
   }
 
   async createSuperAssignment(projectPath: string, assignment: any): Promise<AgentInfo> {
-    // This will be properly implemented in Milestone 7
-    // For Milestone 6, we just provide a stub that allows navigation
+    // Create the base assignment
     const result = await this.createAssignment(projectPath, {
       ...assignment,
       mode: 'planning'
     })
     
-    // We'll add the isSuperMinion flag in Milestone 7's real implementation
-    return result
+    // Calculate worktree path to update .agent-info with super minion metadata
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    
+    let worktreePath: string
+    if (result.agentId.startsWith(`${projectName}-`)) {
+      worktreePath = join(dirname(projectPath), result.agentId)
+    } else {
+      worktreePath = join(dirname(projectPath), `${projectName}-${result.agentId}`)
+    }
+    
+    // Update .agent-info with super minion fields
+    this.updateAgentInfo(worktreePath, {
+      isSuperMinion: true,
+      minionBudget: assignment.minionBudget || 5,
+      children: [],
+      pendingPlans: []
+    } as any)
+    
+    // Return the updated info
+    return {
+      ...result,
+      isSuperMinion: true,
+      minionBudget: assignment.minionBudget || 5,
+      children: [],
+      pendingPlans: []
+    } as any
   }
 
   async openInCursor(projectPath: string, agentId: string): Promise<void> {
