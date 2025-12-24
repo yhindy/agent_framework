@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
+import ChildStatusCard from './ChildStatusCard'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo, isSuperMinion } from '../services/types/ProjectConfig'
 
@@ -122,17 +123,11 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
             <h3>Active Children ({agent.children.length})</h3>
             <div className="child-cards">
               {agent.children.map(child => (
-                <div key={child.id} className="child-card" onClick={() => navigate(`/workspace/agent/${child.agentId}`)}>
-                  <div className="child-card-header">
-                    <span className="child-icon">🍌</span>
-                    <span className="child-id">{child.agentId}</span>
-                    <span className={`status-dot ${child.status}`}></span>
-                  </div>
-                  <div className="child-card-body">
-                    <p className="child-feature">{child.feature}</p>
-                    <span className="view-link">View Terminal →</span>
-                  </div>
-                </div>
+                <ChildStatusCard 
+                  key={child.id} 
+                  child={child} 
+                  onClick={() => navigate(`/workspace/agent/${child.agentId}`)} 
+                />
               ))}
               {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
             </div>
