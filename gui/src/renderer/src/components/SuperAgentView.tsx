@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import ChildStatusCard from './ChildStatusCard'
 import PlanApproval from './PlanApproval'
+import ConfirmModal from './ConfirmModal'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
 
@@ -16,6 +17,8 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
+  const [isTearingDown, setIsTearingDown] = useState(false)
 
   const loadAgent = async () => {
     if (!agentId) return
@@ -42,6 +45,33 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     }
   }, [agentId])
 
+  const handleOpenCursor = async () => {
+    if (agent) {
+      await window.electronAPI.openInCursor(agent.agentId)
+    }
+  }
+
+  const handleStop = async () => {
+    if (agent) {
+      await window.electronAPI.stopAgent(agent.agentId)
+    }
+  }
+
+  const handleTeardown = async () => {
+    if (!agent) return
+    setIsTearingDown(true)
+    try {
+      await window.electronAPI.teardownAgent(agent.agentId, true) // Force teardown
+      navigate('/workspace')
+    } catch (err) {
+      console.error('Failed to teardown:', err)
+      setError('Failed to cleanup agent')
+      setShowTeardownConfirm(false)
+    } finally {
+      setIsTearingDown(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="super-agent-view">
@@ -62,18 +92,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     )
   }
 
-  const handleOpenCursor = async () => {
-    if (agent) {
-      await window.electronAPI.openInCursor(agent.agentId)
-    }
-  }
-
-  const handleStop = async () => {
-    if (agent) {
-      await window.electronAPI.stopAgent(agent.agentId)
-    }
-  }
-
   return (
     <div className="super-agent-view">
       <div className="agent-header">
@@ -83,7 +101,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         <div className="agent-actions">
           <button onClick={handleOpenCursor}>Open in Cursor</button>
           <button className="danger" onClick={handleStop}>Stop</button>
-          {/* Cleanup implementation can be added later or copied from AgentView */}
+          <button className="danger" onClick={() => setShowTeardownConfirm(true)}>Cleanup</button>
         </div>
       </div>
 
@@ -131,6 +149,17 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showTeardownConfirm}
+        title="Cleanup Super Minion?"
+        message="This will delete the agent worktree and all data. Child minions will NOT be automatically deleted yet. Are you sure?"
+        confirmText="Cleanup"
+        confirmVariant="danger"
+        onConfirm={handleTeardown}
+        onCancel={() => setShowTeardownConfirm(false)}
+        isLoading={isTearingDown}
+      />
     </div>
   )
 }
