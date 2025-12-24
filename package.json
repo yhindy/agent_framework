@@ -3,11 +3,18 @@
   "version": "1.0.0",
   "description": "A lightweight framework for running multiple AI coding agents in parallel on any codebase.",
   "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "gui"
+  ],
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "gui:dev": "npm run dev -w gui",
+    "gui:build": "npm run build -w gui",
+    "gui:test": "npm run test -w gui"
   },
   "repository": {
     "type": "git",
