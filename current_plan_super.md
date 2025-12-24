@@ -107,10 +107,10 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
   - Create `gui/resources/minions/rules/super-minion-rules.md`.
   - Define plan proposal format and monitoring rules.
 
-- [ ] **Milestone 10: Plan Detection and Display**
-  - Add `PLANS_READY` to `SIGNAL_PATTERNS`.
-  - Implement `readPendingPlans` in `AgentService`.
-  - Trigger UI refresh on signal.
+- [x] **Milestone 10: Plan Detection and Display** ✅
+  - Add `PLANS_READY` to `SIGNAL_PATTERNS` in `TerminalService`.
+  - Update `SuperAgentView` to listen for `agent:signal` and reload.
+  - Verified orchestration loop: Signal -> IPC -> Frontend Refresh -> Read JSON.
 
 - [ ] **Milestone 11: Plan Approval and Child Spawning**
   - Implement `approvePlan` IPC.

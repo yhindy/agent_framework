@@ -36,12 +36,21 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     loadAgent()
     
     // Listen for updates
-    const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
+    const unsubscribeList = window.electronAPI.onAgentListUpdate(() => {
       loadAgent()
+    })
+
+    // Listen for signals (e.g. PLANS_READY)
+    const unsubscribeSignals = window.electronAPI.onAgentSignal((signalingAgentId, signal) => {
+      if (signalingAgentId === agentId) {
+        console.log(`Received signal ${signal} from ${signalingAgentId}, reloading...`)
+        loadAgent()
+      }
     })
     
     return () => {
-      unsubscribe()
+      unsubscribeList()
+      unsubscribeSignals()
     }
   }, [agentId])
 
