@@ -28,7 +28,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Load config
 source "$SCRIPT_DIR/config.sh"
 
-WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
+# Check if agent ID already contains project name prefix (for multi-repo support)
+# Agent IDs can be in format: "projectname-xxxx" where projectname might match PROJECT_NAME
+if [[ "$AGENT_ID" == "$PROJECT_NAME-"* ]]; then
+  # Agent ID already includes project name, don't duplicate it
+  WORKTREE_PATH="$(dirname "$REPO_ROOT")/$AGENT_ID"
+else
+  # Legacy format: agent ID doesn't include project name
+  WORKTREE_PATH="$(dirname "$REPO_ROOT")/$PROJECT_NAME-$AGENT_ID"
+fi
 
 echo -e "${BLUE}🗑️  Retiring minion $AGENT_ID${NC}"
 echo "   Path: $WORKTREE_PATH"
