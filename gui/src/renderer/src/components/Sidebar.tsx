@@ -153,9 +153,9 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
     loadAllAgents() // Refresh to clear unread badge
   }
 
-  const handleAddMinion = () => {
+  const handleAddMinion = (isSuper = false) => {
     const lastProject = localStorage.getItem('lastSelectedProjectPath') || (activeProjects.length > 0 ? activeProjects[0].path : '')
-    handleNavigate(`/workspace?create=true&projectPath=${encodeURIComponent(lastProject)}`)
+    handleNavigate(`/workspace?create=true&projectPath=${encodeURIComponent(lastProject)}&isSuper=${isSuper}`)
   }
 
   const handleProjectSelect = async (_project: any) => {
@@ -248,12 +248,22 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
               <div
                 className="dropdown-item"
                 onClick={() => {
-                  handleAddMinion()
+                  handleAddMinion(false)
                   setShowDropdown(false)
                 }}
               >
                 <span className="dropdown-icon">🍌</span>
                 <span className="dropdown-label">New Mission</span>
+              </div>
+              <div
+                className="dropdown-item super-option"
+                onClick={() => {
+                  handleAddMinion(true)
+                  setShowDropdown(false)
+                }}
+              >
+                <span className="dropdown-icon">👑</span>
+                <span className="dropdown-label">New Super Mission</span>
               </div>
             </div>
           )}
@@ -287,16 +297,54 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
                   <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
                   <span className="project-name-sidebar">{project.name}</span>
                 </div>
-                <button
-                  className="add-mission-btn"
-                  onClick={() => {
-                    localStorage.setItem('lastSelectedProjectPath', project.path)
-                    handleAddMinion()
-                  }}
-                  title="Add new mission"
-                >
-                  +
-                </button>
+                <div className="add-mission-dropdown">
+                  <button
+                    className="add-mission-btn"
+                    onMouseEnter={(e) => {
+                      const elem = e.currentTarget.parentElement?.querySelector('.add-mission-submenu') as HTMLElement
+                      if (elem) elem.style.display = 'block'
+                    }}
+                    onMouseLeave={(e) => {
+                      const elem = e.currentTarget.parentElement?.querySelector('.add-mission-submenu') as HTMLElement
+                      if (elem) elem.style.display = 'none'
+                    }}
+                    onClick={() => {
+                      localStorage.setItem('lastSelectedProjectPath', project.path)
+                      handleAddMinion(false)
+                    }}
+                    title="Add new mission"
+                  >
+                    +
+                  </button>
+                  <div
+                    className="add-mission-submenu"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.display = 'block'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  >
+                    <div
+                      className="add-mission-submenu-item"
+                      onClick={() => {
+                        localStorage.setItem('lastSelectedProjectPath', project.path)
+                        handleAddMinion(false)
+                      }}
+                    >
+                      Regular Mission
+                    </div>
+                    <div
+                      className="add-mission-submenu-item super-option"
+                      onClick={() => {
+                        localStorage.setItem('lastSelectedProjectPath', project.path)
+                        handleAddMinion(true)
+                      }}
+                    >
+                      <span className="super-icon">👑</span> Super Mission
+                    </div>
+                  </div>
+                </div>
                 <button
                   className="remove-project-btn"
                   onClick={(e) => handleRemoveProject(project.path, e)}

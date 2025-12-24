@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import LoadingModal from './LoadingModal'
 import './Dashboard.css'
@@ -30,6 +30,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [isCreatingPR, setIsCreatingPR] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
+  const [showMissionDropdown, setShowMissionDropdown] = useState(false)
+  const missionDropdownRef = useRef<HTMLDivElement>(null)
 
   const loadingMessages = [
     'Making sure Gru has visibility...',
@@ -96,12 +98,29 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     return () => unsubscribe()
   }, [activeProjects])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (missionDropdownRef.current && !missionDropdownRef.current.contains(event.target as Node)) {
+        setShowMissionDropdown(false)
+      }
+    }
+
+    if (showMissionDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [showMissionDropdown])
+
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     if (params.get('create') === 'true') {
       const projectPath = params.get('projectPath')
+      const isSuper = params.get('isSuper') === 'true'
       if (projectPath) {
-        setFormData(prev => ({ ...prev, projectPath }))
+        setFormData(prev => ({ ...prev, projectPath, isSuper }))
       }
       setShowCreateForm(true)
       // Clear params so it doesn't reopen on refresh
@@ -336,8 +355,36 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       <div className="dashboard-header">
         <h1>Minion Missions 🍌</h1>
         <div className="header-actions">
-          <button onClick={() => handleNewAssignment(false)}>+ New Mission</button>
-          <button className="super-btn" onClick={() => handleNewAssignment(true)}>👑 New Super Mission</button>
+          <div className="mission-dropdown-container" ref={missionDropdownRef}>
+            <button
+              className="new-mission-btn"
+              onClick={() => setShowMissionDropdown(!showMissionDropdown)}
+            >
+              + New Mission
+            </button>
+            {showMissionDropdown && (
+              <div className="mission-dropdown-menu">
+                <div
+                  className="mission-dropdown-item"
+                  onClick={() => {
+                    handleNewAssignment(false)
+                    setShowMissionDropdown(false)
+                  }}
+                >
+                  Regular Mission
+                </div>
+                <div
+                  className="mission-dropdown-item super-option"
+                  onClick={() => {
+                    handleNewAssignment(true)
+                    setShowMissionDropdown(false)
+                  }}
+                >
+                  <span className="super-icon">👑</span> Super Mission
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
