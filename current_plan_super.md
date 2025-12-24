@@ -111,11 +111,15 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
   - Add `PLANS_READY` to `SIGNAL_PATTERNS` in `TerminalService`.
   - Update `SuperAgentView` to listen for `agent:signal` and reload.
   - Verified orchestration loop: Signal -> IPC -> Frontend Refresh -> Read JSON.
+  - **Automated Testing**: Backend signal detection test and frontend integration test.
 
-- [ ] **Milestone 11: Plan Approval and Child Spawning**
-  - Implement `approvePlan` IPC.
-  - Logic to create child worktrees from approved plans.
-  - Link children via `parentAgentId`.
+- [x] **Milestone 11: Plan Approval and Child Spawning** ✅
+  - Implemented `approvePlan(projectPath, superAgentId, planId)` in `AgentService`.
+  - Creates child worktrees with `parentAgentId` linked to super minion.
+  - Updates `.pending-plans.json` status to `'approved'`.
+  - Writes `.children-status.json` for super minion monitoring.
+  - Wired frontend `SuperAgentView` to call IPC on approval button click.
+  - **Automated Testing**: Comprehensive backend unit tests for approval flow.
 
 - [ ] **Milestone 12: End-to-End Verification**
   - Full loop with real Claude session.
@@ -124,14 +128,48 @@ The `AgentService` will not store the `children[]` array in the config. Instead:
 
 ## Testing Strategy
 
-| Milestone | Testing Type | Plan |
-|-----------|--------------|------|
-| **1-2** | Unit / Manual | Verify types and UI scaffolding. |
-| **3-4** | Component | Verify components react to props. |
-| **5-6** | Integration | Verify sidebar tree and routing. |
-| **7** | Integration | Verify creation logic and persistence. |
-| **8** | Component | Mock IPC and verify `SuperAgentView` renders real data. |
-| **9** | Manual | Verify rules file content. |
-| **10** | Integration | Manually drop `.pending-plans.json` and verify UI detection. |
-| **11** | Integration | Approve plan manually and verify child creation. |
-| **12** | E2E | Real Claude session. |
+| Milestone | Testing Type | Plan | Status |
+|-----------|--------------|------|--------|
+| **1-2** | Unit / Manual | Verify types and UI scaffolding. | ✅ Complete |
+| **3-4** | Component | Verify components react to props. | ✅ Complete |
+| **5-6** | Integration | Verify sidebar tree and routing. | ✅ Complete |
+| **7** | Integration | Verify creation logic and persistence. | ✅ Complete |
+| **8** | Component | Mock IPC and verify `SuperAgentView` renders real data. | ✅ Complete |
+| **9** | Manual | Verify rules file content. | ✅ Complete |
+| **10** | Automated | Backend signal detection + frontend integration tests. | ✅ Complete |
+| **11** | Automated | Backend plan approval unit tests. | ✅ Complete |
+| **12** | E2E | Real Claude session. | 🔄 Pending |
+
+---
+
+## Summary
+
+### Completed Implementation
+All core functionality for Super Minions is now complete:
+
+**✅ Type System & UI**
+- Recursive `SuperAgentInfo` type with child agents
+- `SuperAgentView` with collapsible terminal and grid layout
+- Reusable `ChildStatusCard` and `PlanApproval` components
+- Sidebar integration with 👑 icon and expandable children
+- Sleek modern styling
+
+**✅ Backend Orchestration**
+- `createSuperAssignment()` - Super minion creation with budget
+- `getSuperAgentDetails()` - Runtime child assembly from `parentAgentId`
+- `approvePlan()` - Plan approval → child spawning → status tracking
+- File-based communication via `.pending-plans.json` and `.children-status.json`
+
+**✅ Signal Protocol**
+- `PLANS_READY` signal detection in `TerminalService`
+- Automatic UI refresh on signal emission
+- Frontend/backend signal integration
+
+**✅ Testing**
+- 20+ automated tests covering types, components, services, and integrations
+- Full test coverage for approval flow and signal detection
+
+### Remaining Work
+- **M12**: End-to-end verification with a real Claude agent session
+- Plan rejection UI (currently stubbed)
+- Recursive super-children (super minion spawning another super minion)
