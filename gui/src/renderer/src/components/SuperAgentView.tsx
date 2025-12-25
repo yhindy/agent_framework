@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
+import PlainTerminal from './PlainTerminal'
+import TestEnvTerminal from './TestEnvTerminal'
 import ChildStatusCard from './ChildStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
@@ -20,6 +22,15 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
 
+  // Tab management
+  const [activeTab, setActiveTab] = useState<string>('orchestration')
+  const [plainTerminals, setPlainTerminals] = useState<string[]>([])
+  const [terminalCounter, setTerminalCounter] = useState(0)
+
+  // Test environment management
+  const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
+  const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
+
   const loadAgent = async () => {
     if (!agentId) return
     try {
@@ -34,7 +45,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
 
   useEffect(() => {
     loadAgent()
-    
+    loadTestEnvConfig()
+    loadTestEnvStatus()
+
     // Listen for updates
     const unsubscribeList = window.electronAPI.onAgentListUpdate(() => {
       loadAgent()
@@ -47,10 +60,26 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         loadAgent()
       }
     })
-    
+
+    // Listen for test env lifecycle events
+    const unsubscribeStarted = window.electronAPI.onTestEnvStarted((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
+    const unsubscribeStopped = window.electronAPI.onTestEnvStopped((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
+    const unsubscribeExited = window.electronAPI.onTestEnvExited((id) => {
+      if (id === agentId) loadTestEnvStatus()
+    })
+
     return () => {
       unsubscribeList()
       unsubscribeSignals()
+      unsubscribeStarted()
+      unsubscribeStopped()
+      unsubscribeExited()
     }
   }, [agentId])
 
@@ -98,6 +127,75 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     console.log('Rejected plan:', planId)
   }
 
+  // Test environment functions
+  const loadTestEnvConfig = async () => {
+    if (!agentId) return
+    try {
+      const config = await window.electronAPI.getTestEnvConfig(agentId)
+      setTestEnvCommands(config.defaultCommands || [])
+    } catch (error) {
+      console.error('Error loading test env config:', error)
+    }
+  }
+
+  const loadTestEnvStatus = async () => {
+    if (!agentId) return
+    try {
+      const statuses = await window.electronAPI.getTestEnvStatus(agentId)
+      setTestEnvStatuses(statuses)
+    } catch (error) {
+      console.error('Error loading test env status:', error)
+    }
+  }
+
+  const handleStartTestEnv = async (commandId: string) => {
+    if (!agentId) return
+    try {
+      await window.electronAPI.startTestEnv(agentId, commandId)
+      await loadTestEnvStatus()
+      setActiveTab(commandId)
+    } catch (error: any) {
+      alert('Error starting test environment: ' + error.message)
+    }
+  }
+
+  const handleStopTestEnv = async (commandId: string) => {
+    if (!agentId) return
+    try {
+      await window.electronAPI.stopTestEnv(agentId, commandId)
+      await loadTestEnvStatus()
+    } catch (error: any) {
+      alert('Error stopping test environment: ' + error.message)
+    }
+  }
+
+  const getTestEnvStatus = (commandId: string): boolean => {
+    const status = testEnvStatuses.find(s => s.commandId === commandId)
+    return status?.isRunning || false
+  }
+
+  // Plain terminal functions
+  const handleAddTerminal = () => {
+    const newCounter = terminalCounter + 1
+    const newTerminalId = `terminal-${newCounter}`
+    setPlainTerminals([...plainTerminals, newTerminalId])
+    setTerminalCounter(newCounter)
+    setActiveTab(newTerminalId)
+  }
+
+  const handleCloseTerminal = (terminalId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    // Filter out the closed terminal
+    const updatedTerminals = plainTerminals.filter(id => id !== terminalId)
+    setPlainTerminals(updatedTerminals)
+
+    // Switch to orchestration tab if we closed the active tab
+    if (activeTab === terminalId) {
+      setActiveTab('orchestration')
+    }
+  }
+
   if (error) {
     return (
       <div className="super-agent-view">
@@ -141,12 +239,102 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       <div className="super-content">
         <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' ? 'full-screen' : ''}`}>
           <div className="section-header" onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
-            <h3>{isTerminalCollapsed ? '▶' : '▼'} Super Minion Terminal</h3>
-            <span className="section-hint">{isTerminalCollapsed ? 'Click to expand orchestration logs' : 'Orchestration logs'}</span>
+            <h3>{isTerminalCollapsed ? '▶' : '▼'} Terminals & Test Environments</h3>
+            <span className="section-hint">{isTerminalCollapsed ? 'Click to expand' : 'Orchestration, test environments, and shells'}</span>
           </div>
           {!isTerminalCollapsed && (
-            <div className="terminal-wrapper">
-              <Terminal agentId={agent.agentId} />
+            <div className="tab-section">
+              <div className="unified-tabs">
+                {/* Orchestration Terminal Tab */}
+                <div
+                  className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('orchestration')}
+                >
+                  <span className="tab-icon">👑</span>
+                  <span className="tab-name">Orchestration</span>
+                </div>
+
+                {/* Test Environment Tabs */}
+                {testEnvCommands.map(cmd => {
+                  const isRunning = getTestEnvStatus(cmd.id)
+                  return (
+                    <div
+                      key={cmd.id}
+                      className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
+                      onClick={() => setActiveTab(cmd.id)}
+                    >
+                      <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
+                      <span className="tab-name">{cmd.name}</span>
+                      {cmd.port && <span className="tab-port">:{cmd.port}</span>}
+                      {isRunning ? (
+                        <button
+                          className="tab-action stop"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStopTestEnv(cmd.id)
+                          }}
+                        >
+                          ⬛
+                        </button>
+                      ) : (
+                        <button
+                          className="tab-action start"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStartTestEnv(cmd.id)
+                          }}
+                        >
+                          ▶
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Plain Terminal Tabs */}
+                {plainTerminals.map((terminalId, index) => (
+                  <div
+                    key={terminalId}
+                    className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
+                    onClick={() => setActiveTab(terminalId)}
+                  >
+                    <span className="tab-icon">⌨️</span>
+                    <span className="tab-name">Terminal {index + 1}</span>
+                    <button
+                      className="tab-action close"
+                      onClick={(e) => handleCloseTerminal(terminalId, e)}
+                      title="Close terminal"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add Terminal Button */}
+                <div
+                  className="unified-tab add-tab"
+                  onClick={handleAddTerminal}
+                  title="Add new terminal"
+                >
+                  <span className="tab-icon">➕</span>
+                </div>
+              </div>
+
+              <div className="unified-terminal-container">
+                {activeTab === 'orchestration' && (
+                  <Terminal agentId={agent.agentId} />
+                )}
+                {plainTerminals.map(terminalId => (
+                  activeTab === terminalId && (
+                    <PlainTerminal key={terminalId} agentId={agent.agentId} terminalId={terminalId} />
+                  )
+                ))}
+                {testEnvCommands.map(cmd => (
+                  activeTab === cmd.id && (
+                    <TestEnvTerminal key={cmd.id} agentId={agent.agentId} commandId={cmd.id} />
+                  )
+                ))}
+              </div>
             </div>
           )}
         </div>
