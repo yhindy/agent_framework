@@ -234,12 +234,23 @@ export class TerminalService {
     // Spawn PTY
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
+    // Create a clean environment object for node-pty
+    // node-pty/posix_spawn can fail if env has non-string values or special properties
+    const spawnEnv: Record<string, string> = {}
+    for (const key in process.env) {
+      if (process.env.hasOwnProperty(key) && typeof process.env[key] === 'string') {
+        spawnEnv[key] = process.env[key]!
+      }
+    }
+    spawnEnv.TERM = 'xterm-256color'
+    spawnEnv.COLORTERM = 'truecolor'
+
     const terminal = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: 80,
       rows: 30,
       cwd: worktreePath,
-      env: process.env as any
+      env: spawnEnv
     })
 
     // Store terminal session
@@ -571,14 +582,53 @@ export class TerminalService {
 
     // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
-    
-    const terminal = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 30,
+
+    // Debug logging to understand spawn failures
+    console.log('[TerminalService] Starting plain terminal:', {
+      fullTerminalId,
+      shell,
+      shellExists: existsSync(shell),
       cwd: worktreePath,
-      env: process.env as any
+      cwdExists: existsSync(worktreePath),
+      platform: process.platform,
+      SHELL: process.env.SHELL,
+      hasProcessEnv: !!process.env,
+      envKeys: Object.keys(process.env).length
     })
+
+    // Create a clean environment object for node-pty
+    // node-pty/posix_spawn can fail if env has non-string values or special properties
+    // Filter to only include own string properties
+    const spawnEnv: Record<string, string> = {}
+    for (const key in process.env) {
+      if (process.env.hasOwnProperty(key) && typeof process.env[key] === 'string') {
+        spawnEnv[key] = process.env[key]!
+      }
+    }
+    // Ensure critical terminal variables are set
+    spawnEnv.TERM = 'xterm-256color'
+    spawnEnv.COLORTERM = 'truecolor'
+
+    let terminal: pty.IPty
+    try {
+      terminal = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 30,
+        cwd: worktreePath,
+        env: spawnEnv
+      })
+    } catch (error) {
+      console.error('[TerminalService] Failed to spawn plain terminal:', {
+        error,
+        shell,
+        cwd: worktreePath,
+        platform: process.platform,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      })
+      throw new Error(`Failed to spawn terminal shell "${shell}": ${error instanceof Error ? error.message : String(error)}`)
+    }
 
     // Store terminal session
     const session: PlainTerminalSession = {

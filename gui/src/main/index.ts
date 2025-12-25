@@ -354,8 +354,15 @@ function setupIPC(): void {
 
   // Plain terminal handlers
   ipcMain.handle('plainTerminal:start', async (_event, agentId: string, terminalId: string) => {
-    const projectPath = await findProjectForAgent(agentId)
-    return services!.terminal.startPlainTerminal(projectPath, agentId, terminalId)
+    console.log('[IPC] plainTerminal:start called with:', { agentId, terminalId })
+    try {
+      const projectPath = await findProjectForAgent(agentId)
+      console.log('[IPC] Found project path for agent:', { agentId, projectPath })
+      return services!.terminal.startPlainTerminal(projectPath, agentId, terminalId)
+    } catch (error) {
+      console.error('[IPC] Failed to start plain terminal:', error)
+      throw error
+    }
   })
 
   ipcMain.on('plainTerminal:input', (_event, terminalId: string, data: string) => {
