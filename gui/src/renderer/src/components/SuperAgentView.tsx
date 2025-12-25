@@ -139,7 +139,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       </div>
 
       <div className="super-content">
-        <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''}`}>
+        <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' ? 'full-screen' : ''}`}>
           <div className="section-header" onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
             <h3>{isTerminalCollapsed ? '▶' : '▼'} Super Minion Terminal</h3>
             <span className="section-hint">{isTerminalCollapsed ? 'Click to expand orchestration logs' : 'Orchestration logs'}</span>
@@ -151,29 +151,31 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           )}
         </div>
 
-        <div className="super-grid">
-          <div className="children-section">
-            <h3>Active Children ({agent.children.length})</h3>
-            <div className="child-cards">
-              {agent.children.map(child => (
-                <ChildStatusCard 
-                  key={child.id} 
-                  child={child} 
-                  onClick={() => navigate(`/workspace/agent/${child.agentId}`)} 
-                />
-              ))}
-              {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
+        {agent.mode !== 'planning' && (
+          <div className="super-grid">
+            <div className="children-section">
+              <h3>Active Children ({agent.children.length})</h3>
+              <div className="child-cards">
+                {agent.children.map(child => (
+                  <ChildStatusCard
+                    key={child.id}
+                    child={child}
+                    onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
+                  />
+                ))}
+                {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
+              </div>
+            </div>
+
+            <div className="plans-section">
+              <PlanApproval
+                plans={agent.pendingPlans.filter(p => p.status === 'pending')}
+                onApprove={handleApprovePlan}
+                onReject={handleRejectPlan}
+              />
             </div>
           </div>
-
-          <div className="plans-section">
-            <PlanApproval 
-              plans={agent.pendingPlans.filter(p => p.status === 'pending')}
-              onApprove={handleApprovePlan}
-              onReject={handleRejectPlan}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       <ConfirmModal
