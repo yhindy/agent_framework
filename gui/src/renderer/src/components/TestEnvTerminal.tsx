@@ -92,6 +92,9 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
       terminal.write(chunk)
     }
 
+    // Scroll to bottom after replaying cached content
+    terminal.scrollToBottom()
+
     // Register this as an active terminal for live output
     activeTerminals.set(key, terminal)
 
@@ -99,6 +102,12 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
     terminal.onData((data) => {
       window.electronAPI.sendTestEnvInput(agentId, commandId, data)
     })
+
+    // Handle focus to scroll to bottom
+    const handleFocus = () => {
+      terminal.scrollToBottom()
+    }
+    terminalRef.current?.addEventListener('focus', handleFocus, true)
 
     // Handle window resize
     const handleResize = () => {
@@ -121,6 +130,7 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
     return () => {
       // Unregister active terminal
       activeTerminals.delete(key)
+      terminalRef.current?.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
       terminal.dispose()
     }

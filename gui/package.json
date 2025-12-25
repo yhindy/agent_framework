@@ -18,7 +18,8 @@
     "@electron-toolkit/utils": "^3.0.0",
     "chokidar": "^3.6.0",
     "electron-store": "^8.2.0",
-    "node-pty": "^1.0.0"
+    "node-pty": "^1.0.0",
+    "vitest": "^4.0.16"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",

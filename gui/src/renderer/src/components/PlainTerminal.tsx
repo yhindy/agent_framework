@@ -93,6 +93,9 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
       terminal.write(chunk)
     }
 
+    // Scroll to bottom after replaying cached content
+    terminal.scrollToBottom()
+
     // Register this as the active terminal for live output
     activeTerminal = { terminalId: fullTerminalId, terminal }
 
@@ -100,6 +103,12 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
     terminal.onData((data) => {
       window.electronAPI.sendPlainTerminalInput(fullTerminalId, data)
     })
+
+    // Handle focus to scroll to bottom
+    const handleFocus = () => {
+      terminal.scrollToBottom()
+    }
+    terminalRef.current?.addEventListener('focus', handleFocus, true)
 
     // Handle window resize
     const handleResize = () => {
@@ -124,6 +133,7 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
       if (activeTerminal && activeTerminal.terminalId === fullTerminalId) {
         activeTerminal = null
       }
+      terminalRef.current?.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
       terminal.dispose()
       // Note: We don't stop the backend terminal here to preserve the session
@@ -131,10 +141,13 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
   }, [agentId, terminalId, fullTerminalId])
 
   return (
-    <div 
-      ref={terminalRef} 
-      className="terminal-container" 
-      onClick={() => activeTerminal?.terminal.focus()}
+    <div
+      ref={terminalRef}
+      className="terminal-container"
+      onClick={() => {
+        activeTerminal?.terminal.focus()
+        activeTerminal?.terminal.scrollToBottom()
+      }}
     />
   )
 }
