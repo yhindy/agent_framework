@@ -8,7 +8,8 @@
       "Bash(npm run typecheck:*)",
       "Bash(find:*)",
       "Bash(cat:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

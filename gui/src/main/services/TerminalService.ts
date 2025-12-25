@@ -215,7 +215,7 @@ export class TerminalService {
           if (model) args.push('--model', model)
         } else {
           // Create new session with specific ID
-          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo)
+          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, agentInfo)
           args.push('--session-id', sessionId)
         }
         break
@@ -307,7 +307,7 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean): string[] {
+  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean, agentInfo?: any): string[] {
     const args: string[] = []
 
     // Add model if specified
@@ -319,9 +319,24 @@ export class TerminalService {
       // Use Claude's plan permission mode - shows plan before executing
       args.push('--permission-mode', 'plan')
 
+      // For super minions, load the rules file as system prompt
+      const isSuperMinion = agentInfo?.isSuperMinion === true
+      if (isSuperMinion) {
+        // The super-minion-rules.md file is copied to the worktree during setup
+        // Path is relative to the working directory where claude command will be run
+        args.push('--system-prompt-file', 'super-minion-rules.md')
+      }
+
       if (prompt) {
-        // Prefix with planning instructions
-        const planPrompt = `Create a plan for: ${prompt}`
+        // Include budget info in the planning prompt
+        const minionBudget = agentInfo?.minionBudget || 5
+
+        let planPrompt: string
+        if (isSuperMinion) {
+          planPrompt = `You have a budget of ${minionBudget} child minions. Create a plan for: ${prompt}`
+        } else {
+          planPrompt = `Create a plan for: ${prompt}`
+        }
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }
     } else if (mode === 'dev') {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSuperMinion, AgentInfo, SuperAgentInfo } from '../types/ProjectConfig'
+import { isSuperMinion, AgentInfo, SuperAgentInfo, ChildPlan } from '../types/ProjectConfig'
 
 describe('Super Minion Types', () => {
   it('identifies a super minion correctly', () => {
@@ -57,6 +57,68 @@ describe('Super Minion Types', () => {
 
     expect(childAgent.parentAgentId).toBe('super-1')
     expect(isSuperMinion(childAgent)).toBe(false)
+  })
+})
+
+describe('ChildPlan Type', () => {
+  it('should allow optional branch field', () => {
+    const plan: ChildPlan = {
+      id: 'test-1',
+      shortName: 'test-task',
+      branch: 'feature/custom-branch',
+      description: 'Test plan',
+      prompt: 'Do something',
+      estimatedComplexity: 'small',
+      status: 'pending'
+    }
+    expect(plan.branch).toBe('feature/custom-branch')
+  })
+
+  it('should work without branch field', () => {
+    const plan: ChildPlan = {
+      id: 'test-1',
+      shortName: 'test-task',
+      description: 'Test plan',
+      prompt: 'Do something',
+      estimatedComplexity: 'small',
+      status: 'pending'
+    }
+    expect(plan.branch).toBeUndefined()
+  })
+
+  it('should allow childAgentId after approval', () => {
+    const plan: ChildPlan = {
+      id: 'test-1',
+      shortName: 'test-task',
+      description: 'Test plan',
+      prompt: 'Do something',
+      estimatedComplexity: 'small',
+      status: 'approved',
+      childAgentId: 'project-abc123'
+    }
+    expect(plan.childAgentId).toBe('project-abc123')
+  })
+
+  it('should support all status values', () => {
+    const statusValues: ChildPlan['status'][] = [
+      'pending',
+      'approved',
+      'rejected',
+      'in_progress',
+      'completed',
+      'failed'
+    ]
+
+    for (const status of statusValues) {
+      const plan: ChildPlan = {
+        id: 'test-1',
+        shortName: 'test-task',
+        description: 'Test plan',
+        prompt: 'Do something',
+        status
+      }
+      expect(plan.status).toBe(status)
+    }
   })
 })
 
