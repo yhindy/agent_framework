@@ -87,6 +87,9 @@ function Terminal({ agentId }: TerminalProps) {
       terminal.write(chunk)
     }
 
+    // Scroll to bottom after replaying cached content
+    terminal.scrollToBottom()
+
     // Register this as the active terminal for live output
     activeTerminal = { agentId, terminal }
 
@@ -94,6 +97,12 @@ function Terminal({ agentId }: TerminalProps) {
     terminal.onData((data) => {
       window.electronAPI.sendTerminalInput(agentId, data)
     })
+
+    // Handle focus to scroll to bottom
+    const handleFocus = () => {
+      terminal.scrollToBottom()
+    }
+    terminalRef.current?.addEventListener('focus', handleFocus, true)
 
     // Handle window resize
     const handleResize = () => {
@@ -118,6 +127,7 @@ function Terminal({ agentId }: TerminalProps) {
       if (activeTerminal && activeTerminal.agentId === agentId) {
         activeTerminal = null
       }
+      terminalRef.current?.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
       terminal.dispose()
     }
