@@ -34,8 +34,9 @@ function App() {
   }
 
   const handleProjectAdd = () => {
-    // This will be implemented in Sidebar with a modal
-    // For now, we pass it down but implementation moves to Sidebar
+    // Refresh active projects list when a new project is added
+    console.log('[App] Project added, refreshing state')
+    refreshState()
   }
 
   if (loading) {

@@ -24,70 +24,55 @@ function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
 
   const handleSelectFolder = async () => {
     try {
+      console.log('[ProjectPicker] Opening folder selection dialog')
       // Use electron dialog to select folder
       const input = document.createElement('input')
       input.type = 'file'
       input.webkitdirectory = true as any
-      
+
       input.onchange = async (e: any) => {
         const files = e.target.files
         if (files && files.length > 0) {
-          // This path logic is tricky with file inputs. 
-          // Usually files[0].path gives full path to a file. 
-          // If we selected a directory, modern browsers/Electron might behave differently.
-          // Assuming `files[0].path` works (Electron specific)
-          // But with directory selection, we might get the first file inside.
-          // Let's rely on standard behavior if possible or what worked before.
-          // Assuming the previous logic worked for the user environment.
-          
-          // Actually, 'webkitdirectory' makes files list all files in directory.
-          // We can take the path of the first file and get dirname? 
-          // Or usually file.path on Electron returns absolute path.
-          
-          // Better logic: The previous code did: files[0].path.split('/').slice(0, -1).join('/')
-          // But if files[0] IS inside the dir, taking parent is correct?
-          // If the dir is empty, we might get nothing?
-          
-          // Let's assume the previous logic works for now.
+          console.log('[ProjectPicker] Folder selected, extracting path')
           const file = files[0]
-          // If 'path' property exists (Electron), use it.
           const fullPath = (file as any).path
           if (fullPath) {
-             // If we selected /Users/me/proj, files[0] might be /Users/me/proj/README.md
-             // So dirname is /Users/me/proj.
-             // But if we selected /Users/me/proj and it has subdirs...
-             // Let's try to get the project path more robustly if possible.
-             // The previous code: split('/').slice(0, -1) assumes we want the parent of the first file found.
-             // This is generally correct for recursive directory selection.
-             // Note: Windows paths use backslashes. This split('/') is fragile.
-             
-             // However, I won't change the path logic unless asked, to minimize risk.
-             // I'll stick to the existing implementation but wrap it.
              const path = fullPath.substring(0, fullPath.lastIndexOf(window.navigator.platform.startsWith('Win') ? '\\' : '/'))
+             console.log('[ProjectPicker] Extracted project path:', path)
              await selectProject(path)
+          } else {
+            console.warn('[ProjectPicker] Could not extract path from selected file')
           }
         }
       }
-      
+
       input.click()
     } catch (err: any) {
-      setError(err.message)
+      const errorMsg = err.message || 'Failed to open folder selection'
+      console.error('[ProjectPicker] Error in folder selection:', errorMsg)
+      setError(errorMsg)
     }
   }
 
   const selectProject = async (path: string) => {
     try {
+      console.log('[ProjectPicker] Selecting project:', path)
       setError('')
       const project = await window.electronAPI.selectProject(path)
-      
+      console.log('[ProjectPicker] Project selected successfully, needs install:', project.needsInstall)
+
       if (project.needsInstall) {
+        console.log('[ProjectPicker] Showing install modal for:', path)
         setPendingPath(path)
         setShowInstallModal(true)
       } else {
+        console.log('[ProjectPicker] Project ready, calling onProjectSelect')
         onProjectSelect(project)
       }
     } catch (err: any) {
-      setError(err.message)
+      const errorMsg = err.message || 'Failed to select project'
+      console.error('[ProjectPicker] Error selecting project:', errorMsg)
+      setError(errorMsg)
     }
   }
 
@@ -95,11 +80,15 @@ function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
     if (!pendingPath) return
 
     try {
+      console.log('[ProjectPicker] Installing framework for:', pendingPath)
       setIsInstalling(true)
       const project = await window.electronAPI.installFramework(pendingPath)
+      console.log('[ProjectPicker] Framework installed successfully')
       onProjectSelect(project)
     } catch (err: any) {
-      setError(err.message)
+      const errorMsg = err.message || 'Failed to install framework'
+      console.error('[ProjectPicker] Error installing framework:', errorMsg)
+      setError(errorMsg)
     } finally {
       setIsInstalling(false)
       setShowInstallModal(false)

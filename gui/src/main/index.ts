@@ -92,24 +92,42 @@ function setupIPC(): void {
 
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
-    // Legacy wrapper calling addProject
-    const project = services!.project.addProject(projectPath)
-    if (!project.needsInstall) {
-      services!.fileWatcher.watchProject(projectPath)
+    try {
+      console.log('[IPC] Handling project:select for:', projectPath)
+      // Legacy wrapper calling addProject
+      const project = services!.project.addProject(projectPath)
+      console.log('[IPC] Project selected successfully:', projectPath)
+
+      if (!project.needsInstall) {
+        services!.fileWatcher.watchProject(projectPath)
+        console.log('[IPC] Started watching project:', projectPath)
+      }
+      return project
+    } catch (error: any) {
+      console.error('[IPC] Error in project:select:', error.message)
+      throw error
     }
-    return project
   })
 
   ipcMain.handle('project:add', async (_event, projectPath: string) => {
-    const project = services!.project.addProject(projectPath)
-    if (!project.needsInstall) {
-      // If it became the current project (e.g. was first one), watch it
-      const current = services!.project.getCurrentProject()
-      if (current?.path === projectPath) {
-        services!.fileWatcher.watchProject(projectPath)
+    try {
+      console.log('[IPC] Handling project:add for:', projectPath)
+      const project = services!.project.addProject(projectPath)
+      console.log('[IPC] Project added successfully:', projectPath)
+
+      if (!project.needsInstall) {
+        // If it became the current project (e.g. was first one), watch it
+        const current = services!.project.getCurrentProject()
+        if (current?.path === projectPath) {
+          services!.fileWatcher.watchProject(projectPath)
+          console.log('[IPC] Started watching project:', projectPath)
+        }
       }
+      return project
+    } catch (error: any) {
+      console.error('[IPC] Error in project:add:', error.message)
+      throw error
     }
-    return project
   })
 
   ipcMain.handle('project:remove', async (_event, projectPath: string) => {
@@ -134,11 +152,24 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('project:install', async (_event, projectPath: string) => {
-    await services!.project.installFramework(projectPath)
-    // Re-select (add) to update state
-    const project = services!.project.addProject(projectPath)
-    services!.fileWatcher.watchProject(projectPath)
-    return project
+    try {
+      console.log('[IPC] Handling project:install for:', projectPath)
+      await services!.project.installFramework(projectPath)
+      console.log('[IPC] Framework installed successfully')
+
+      // Re-select (add) to update state
+      const project = services!.project.addProject(projectPath)
+      console.log('[IPC] Project added after installation')
+
+      services!.fileWatcher.watchProject(projectPath)
+      console.log('[IPC] Started watching project after installation')
+
+      return project
+    } catch (error: any) {
+      console.error('[IPC] Error in project:install:', error.message)
+      console.error('[IPC] Installation failed for:', projectPath)
+      throw error
+    }
   })
 
   ipcMain.handle('project:clear', async () => {
