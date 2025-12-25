@@ -221,11 +221,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
     const isCollapsed = collapsedSuperMinions.has(agent.id)
 
     const handleAgentItemClick = (e: React.MouseEvent) => {
-      if (agent.isSuperMinion) {
-        toggleSuperMinionCollapse(agent.id, e)
-      } else {
-        handleAgentClick(agent, projectPath)
-      }
+      handleAgentClick(agent, projectPath)
+    }
+
+    const handleCollapseClick = (e: React.MouseEvent) => {
+      toggleSuperMinionCollapse(agent.id, e)
     }
 
     return (
@@ -237,7 +237,16 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
         >
           <div className="agent-info">
             {agent.isSuperMinion && (
-              <span className={`super-minion-indicator ${isCollapsed ? 'collapsed' : ''}`}>
+              <span
+                className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
+                onClick={handleCollapseClick}
+                title="Toggle child agents"
+              >
+                ▼
+              </span>
+            )}
+            {agent.isSuperMinion && (
+              <span className="super-minion-indicator">
                 👑
               </span>
             )}

@@ -181,7 +181,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
           minionBudget: formData.minionBudget,
           tool: formData.tool,
           model: formData.model,
-          prompt: formData.prompt
+          prompt: formData.prompt,
+          status: 'in_progress'
         })
       } else {
         result = await window.electronAPI.createAssignmentForProject(projectPath, {
