@@ -111,7 +111,7 @@ fi
 
 # Copy environment files
 echo -e "${BLUE}📋 Copying environment files...${NC}"
-python3 << PYTHON_SCRIPT
+python3 << PYTHON_SCRIPT |
 import json
 import sys
 
@@ -151,11 +151,7 @@ except Exception as e:
     sys.stderr.write(f"Error: {e}\n")
     sys.exit(1)
 PYTHON_SCRIPT
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to parse config file${NC}"
-    exit 1
-fi | while read -r file_spec; do
+while read -r file_spec; do
     if [ -n "$file_spec" ]; then
         SRC="${file_spec%%:*}"
         DST="${file_spec##*:}"
