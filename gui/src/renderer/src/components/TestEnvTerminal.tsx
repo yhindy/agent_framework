@@ -78,59 +78,91 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.open(terminalRef.current)
-    fitAddon.fit()
+    
+    // Track if we've been disposed (must be declared before async operations)
+    let isDisposed = false
+    
+    // Store the container element reference for use in RAF callback
+    const containerElement = terminalRef.current
+    
+    // Defer terminal.open() to next frame to prevent React StrictMode issues
+    // StrictMode unmounts immediately after mount, and xterm's internal async operations
+    // from open() would fire on a disposed terminal causing "dimensions" errors
+    const rafId = requestAnimationFrame(() => {
+      if (isDisposed) return
+      
+      terminal.open(containerElement)
+      
+      try {
+        fitAddon.fit()
+      } catch (err) {
+        // Ignore fit errors on disposed terminal
+      }
+      
+      // Initialize output cache if needed
+      if (!outputCache.has(key)) {
+        outputCache.set(key, [])
+      }
 
-    // Initialize output cache if needed
-    if (!outputCache.has(key)) {
-      outputCache.set(key, [])
-    }
+      // Replay cached output to restore terminal history
+      const cachedOutput = outputCache.get(key)!
+      for (const chunk of cachedOutput) {
+        terminal.write(chunk)
+      }
 
-    // Replay cached output to restore terminal history
-    const cachedOutput = outputCache.get(key)!
-    for (const chunk of cachedOutput) {
-      terminal.write(chunk)
-    }
+      // Scroll to bottom after replaying cached content
+      terminal.scrollToBottom()
 
-    // Scroll to bottom after replaying cached content
-    terminal.scrollToBottom()
+      // Register this as an active terminal for live output
+      activeTerminals.set(key, terminal)
 
-    // Register this as an active terminal for live output
-    activeTerminals.set(key, terminal)
-
-    // Handle terminal input
-    terminal.onData((data) => {
-      window.electronAPI.sendTestEnvInput(agentId, commandId, data)
+      // Handle terminal input (must be after open)
+      terminal.onData((data) => {
+        window.electronAPI.sendTestEnvInput(agentId, commandId, data)
+      })
+      
+      // Secondary fit after layout settles
+      setTimeout(() => {
+        if (isDisposed) return
+        try {
+          fitAddon.fit()
+          if (terminal.rows && terminal.cols) {
+            window.electronAPI.resizeTestEnv(agentId, commandId, terminal.cols, terminal.rows)
+          }
+        } catch (err) {
+          // Ignore fit errors on disposed terminal
+        }
+      }, 100)
     })
 
     // Handle focus to scroll to bottom
     const handleFocus = () => {
       terminal.scrollToBottom()
     }
-    terminalRef.current?.addEventListener('focus', handleFocus, true)
+    containerElement.addEventListener('focus', handleFocus, true)
 
     // Handle window resize
     const handleResize = () => {
-      fitAddon.fit()
-      if (terminal.rows && terminal.cols) {
-        window.electronAPI.resizeTestEnv(agentId, commandId, terminal.cols, terminal.rows)
+      if (isDisposed) return
+      try {
+        fitAddon.fit()
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizeTestEnv(agentId, commandId, terminal.cols, terminal.rows)
+        }
+      } catch (err) {
+        // Ignore resize errors on disposed terminal
       }
     }
 
     window.addEventListener('resize', handleResize)
-    
-    // Initial fit
-    setTimeout(() => {
-      fitAddon.fit()
-      if (terminal.rows && terminal.cols) {
-        window.electronAPI.resizeTestEnv(agentId, commandId, terminal.cols, terminal.rows)
-      }
-    }, 100)
 
     return () => {
+      isDisposed = true
+      // Cancel pending animation frame (prevents open() from running on disposed terminal)
+      cancelAnimationFrame(rafId)
       // Unregister active terminal
       activeTerminals.delete(key)
-      terminalRef.current?.removeEventListener('focus', handleFocus, true)
+      containerElement.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
       terminal.dispose()
     }
@@ -140,4 +172,3 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
 }
 
 export default TestEnvTerminal
-

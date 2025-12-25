@@ -78,62 +78,96 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.open(terminalRef.current)
-    fitAddon.fit()
-    terminal.focus()
+    
+    // Track if we've been disposed (must be declared before async operations)
+    let isDisposed = false
+    
+    // Store the container element reference for use in RAF callback
+    const containerElement = terminalRef.current
+    
+    // Defer terminal.open() to next frame to prevent React StrictMode issues
+    // StrictMode unmounts immediately after mount, and xterm's internal async operations
+    // from open() would fire on a disposed terminal causing "dimensions" errors
+    const rafId = requestAnimationFrame(() => {
+      if (isDisposed) return
+      
+      terminal.open(containerElement)
+      
+      try {
+        fitAddon.fit()
+        terminal.focus()
+      } catch (err) {
+        // Ignore fit errors on disposed terminal
+      }
+      
+      // Initialize output cache for this terminal if needed
+      if (!outputCache.has(fullTerminalId)) {
+        outputCache.set(fullTerminalId, [])
+      }
 
-    // Initialize output cache for this terminal if needed
-    if (!outputCache.has(fullTerminalId)) {
-      outputCache.set(fullTerminalId, [])
-    }
+      // Replay cached output to restore terminal history
+      const cachedOutput = outputCache.get(fullTerminalId)!
+      for (const chunk of cachedOutput) {
+        terminal.write(chunk)
+      }
 
-    // Replay cached output to restore terminal history
-    const cachedOutput = outputCache.get(fullTerminalId)!
-    for (const chunk of cachedOutput) {
-      terminal.write(chunk)
-    }
+      // Scroll to bottom after replaying cached content
+      terminal.scrollToBottom()
 
-    // Scroll to bottom after replaying cached content
-    terminal.scrollToBottom()
+      // Register this as the active terminal for live output
+      activeTerminal = { terminalId: fullTerminalId, terminal }
 
-    // Register this as the active terminal for live output
-    activeTerminal = { terminalId: fullTerminalId, terminal }
-
-    // Handle terminal input
-    terminal.onData((data) => {
-      window.electronAPI.sendPlainTerminalInput(fullTerminalId, data)
+      // Handle terminal input (must be after open)
+      terminal.onData((data) => {
+        window.electronAPI.sendPlainTerminalInput(fullTerminalId, data)
+      })
+      
+      // Secondary fit after layout settles
+      setTimeout(() => {
+        if (isDisposed) return
+        try {
+          fitAddon.fit()
+          if (terminal.rows && terminal.cols) {
+            window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
+          }
+        } catch (err) {
+          // Ignore fit errors on disposed terminal
+        }
+      }, 100)
     })
 
     // Handle focus to scroll to bottom
     const handleFocus = () => {
       terminal.scrollToBottom()
     }
-    terminalRef.current?.addEventListener('focus', handleFocus, true)
+    containerElement.addEventListener('focus', handleFocus, true)
 
     // Handle window resize
     const handleResize = () => {
-      fitAddon.fit()
-      if (terminal.rows && terminal.cols) {
-        window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
+      if (isDisposed) return
+      try {
+        fitAddon.fit()
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
+        }
+      } catch (err) {
+        // Ignore resize errors on disposed terminal
       }
     }
 
     window.addEventListener('resize', handleResize)
-    
-    // Initial fit
-    setTimeout(() => {
-      fitAddon.fit()
-      if (terminal.rows && terminal.cols) {
-        window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
-      }
-    }, 100)
 
     return () => {
+      isDisposed = true
+      
+      // Cancel pending animation frame (prevents open() from running on disposed terminal)
+      cancelAnimationFrame(rafId)
+      
       // Clear active terminal if it's this one
       if (activeTerminal && activeTerminal.terminalId === fullTerminalId) {
         activeTerminal = null
       }
-      terminalRef.current?.removeEventListener('focus', handleFocus, true)
+      containerElement.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
       terminal.dispose()
       // Note: We don't stop the backend terminal here to preserve the session
@@ -153,4 +187,3 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
 }
 
 export default PlainTerminal
-
