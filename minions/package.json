@@ -1,0 +1,12 @@
+{
+  "name": "minions",
+  "version": "1.0.0",
+  "description": "Core minion framework - agent workers for parallel coding tasks",
+  "private": true,
+  "scripts": {
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

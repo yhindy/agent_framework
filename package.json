@@ -5,16 +5,18 @@
   "main": "index.js",
   "private": true,
   "workspaces": [
-    "gui"
+    "gui",
+    "minions"
   ],
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test -w gui && npm run test -w minions",
     "gui:dev": "npm run dev -w gui",
     "gui:build": "npm run build -w gui",
-    "gui:test": "npm run test -w gui"
+    "gui:test": "npm run test -w gui",
+    "minions:test": "npm run test -w minions"
   },
   "repository": {
     "type": "git",

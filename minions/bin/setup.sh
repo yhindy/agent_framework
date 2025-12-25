@@ -111,12 +111,47 @@ fi
 
 # Copy environment files
 echo -e "${BLUE}📋 Copying environment files...${NC}"
-python3 -c "import sys, json; 
-data = json.load(open('$CONFIG_FILE'))
+python3 << PYTHON_SCRIPT |
+import json
+import sys
+
 try:
-  for item in data['setup']['filesToCopy']:
-    print(f\"{item['source']}:{item['destination']}\")
-except: pass" | while read -r file_spec; do
+    with open("$CONFIG_FILE", "r") as f:
+        data = json.load(f)
+
+    files_to_copy = data.get('setup', {}).get('filesToCopy', [])
+
+    if not isinstance(files_to_copy, list):
+        sys.stderr.write(f"Error: filesToCopy must be an array, got {type(files_to_copy).__name__}\n")
+        sys.exit(1)
+
+    for entry in files_to_copy:
+        if not isinstance(entry, str):
+            sys.stderr.write(f"Error: Each filesToCopy entry must be a string, got {type(entry).__name__}\n")
+            sys.exit(1)
+
+        # Parse entry: "source" or "source:destination"
+        if ':' in entry:
+            parts = entry.split(':', 1)
+            source = parts[0]
+            destination = parts[1]
+        else:
+            source = destination = entry
+
+        # Output in format that bash can parse
+        print(f"{source}:{destination}")
+
+except json.JSONDecodeError as e:
+    sys.stderr.write(f"Error: Failed to parse JSON config: {e}\n")
+    sys.exit(1)
+except KeyError:
+    # filesToCopy not defined, that's OK
+    pass
+except Exception as e:
+    sys.stderr.write(f"Error: {e}\n")
+    sys.exit(1)
+PYTHON_SCRIPT
+while read -r file_spec; do
     if [ -n "$file_spec" ]; then
         SRC="${file_spec%%:*}"
         DST="${file_spec##*:}"
