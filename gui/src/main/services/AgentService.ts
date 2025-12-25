@@ -20,6 +20,13 @@ interface AgentSession {
   isSuperMinion?: boolean
   parentAgentId?: string
   isBaseBranchAgent?: boolean
+
+  // Session persistence fields
+  claudeSessionId?: string
+  claudeSessionActive?: boolean
+  isWaitingForInput?: boolean
+  prompt?: string
+  model?: string
 }
 
 export class AgentService {
@@ -121,7 +128,12 @@ export class AgentService {
               mode: agentInfo.mode,
               tool: agentInfo.tool,
               isSuperMinion: (agentInfo as any).isSuperMinion,
-              parentAgentId: agentInfo.parentAgentId
+              parentAgentId: agentInfo.parentAgentId,
+              claudeSessionId: agentInfo.claudeSessionId,
+              claudeSessionActive: agentInfo.claudeSessionActive,
+              isWaitingForInput: agentInfo.isWaitingForInput,
+              prompt: agentInfo.prompt,
+              model: agentInfo.model
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -133,6 +145,11 @@ export class AgentService {
             session.lastActivity = agentInfo.lastActivity
             session.isSuperMinion = (agentInfo as any).isSuperMinion
             session.parentAgentId = agentInfo.parentAgentId
+            session.claudeSessionId = agentInfo.claudeSessionId
+            session.claudeSessionActive = agentInfo.claudeSessionActive
+            session.isWaitingForInput = agentInfo.isWaitingForInput
+            session.prompt = agentInfo.prompt
+            session.model = agentInfo.model
           }
 
           agents.push(session)

@@ -58,11 +58,15 @@ function initializeServices(): void {
 
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
+  const terminalService = new TerminalService(mainWindow)
+
+  // Set AgentService reference in TerminalService for persistence
+  terminalService.setAgentService(agentService)
 
   services = {
     project: projectService,
     agent: agentService,
-    terminal: new TerminalService(mainWindow),
+    terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow)
   }
@@ -98,6 +102,54 @@ function initializeServices(): void {
           }
         })
         .catch(err => console.error(`Failed to ensure base agent for ${project.path}:`, err))
+
+      // NEW: Auto-resume existing Claude sessions on app startup
+      services.agent.listAgents(project.path)
+        .then(agents => {
+          for (const agent of agents) {
+            // Only auto-resume Claude sessions marked as active
+            if (agent.claudeSessionActive && agent.tool === 'claude') {
+              // Stagger resumes to avoid overwhelming
+              const delay = 500 + Math.random() * 2000
+
+              setTimeout(async () => {
+                try {
+                  await services!.terminal.startAgent(
+                    project.path,
+                    agent.id,
+                    agent.tool || 'claude',
+                    agent.mode || 'dev',
+                    agent.prompt,
+                    agent.model,
+                    false
+                  )
+
+                  mainWindow?.webContents.send('agents:updated')
+
+                  // Restore waiting notification if was waiting
+                  if (agent.isWaitingForInput) {
+                    mainWindow?.webContents.send('agent:waitingForInput',
+                      agent.id,
+                      'Claude is waiting for input'
+                    )
+                  }
+                } catch (error) {
+                  console.error(`Failed to resume agent ${agent.id}:`, error)
+
+                  // Mark session inactive on resume failure
+                  try {
+                    await services!.agent.updateAgentInfo(agent.worktreePath, {
+                      claudeSessionActive: false
+                    })
+                  } catch (err) {
+                    console.error('Failed to mark session inactive:', err)
+                  }
+                }
+              }, delay)
+            }
+          }
+        })
+        .catch(err => console.error(`Failed to auto-resume agents for ${project.path}:`, err))
     }
   }
 

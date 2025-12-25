@@ -18,6 +18,13 @@ export interface AgentInfo {
   hasUnread?: boolean
   parentAgentId?: string  // Set if this is a child of a super minion
   isBaseBranchAgent?: boolean  // Set for the base branch agent
+
+  // Session persistence fields
+  claudeSessionId?: string        // UUID of the Claude session for resume functionality
+  claudeSessionActive?: boolean   // Is session known to be active and resumable?
+  claudeLastSeen?: string        // Last time we saw output from Claude
+  isWaitingForInput?: boolean    // Persisted waiting state for notification restoration
+  lastOutputSnapshot?: string    // Last ~500 chars of output for resume detection
 }
 
 export interface ChildPlan {

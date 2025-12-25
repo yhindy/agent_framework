@@ -65,11 +65,37 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
   }, [showDropdown, openSubmenuProject])
 
   useEffect(() => {
-    loadAllAgents()
+    // Load agents and initialize waiting states from persisted data
+    const loadAgentsAndStates = async () => {
+      const agentsByProj: AgentsByProject = {}
+      const waiting = new Set<string>()
+
+      for (const project of activeProjects) {
+        try {
+          const agents = await window.electronAPI.listAgentsForProject(project.path)
+          agentsByProj[project.path] = agents
+
+          // Initialize waiting states from .agent-info (restored after app restart)
+          for (const agent of agents) {
+            if ((agent as any).isWaitingForInput) {
+              waiting.add(agent.id)
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to load agents for ${project.path}:`, err)
+          agentsByProj[project.path] = []
+        }
+      }
+
+      setAgentsByProject(agentsByProj)
+      setWaitingAgents(waiting)
+    }
+
+    loadAgentsAndStates()
 
     // Listen for agent updates
     const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
-      loadAllAgents()
+      loadAgentsAndStates()
     })
 
     // Listen for waiting state changes
