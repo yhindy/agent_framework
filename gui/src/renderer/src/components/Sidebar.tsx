@@ -36,7 +36,9 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
   const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [openSubmenuProject, setOpenSubmenuProject] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const submenuRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
   const currentPath = location.pathname
 
   // Close dropdown when clicking outside
@@ -45,15 +47,21 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false)
       }
+      if (openSubmenuProject) {
+        const submenuRef = submenuRefsMap.current.get(openSubmenuProject)
+        if (submenuRef && !submenuRef.contains(event.target as Node)) {
+          setOpenSubmenuProject(null)
+        }
+      }
     }
 
-    if (showDropdown) {
+    if (showDropdown || openSubmenuProject) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
-  }, [showDropdown])
+  }, [showDropdown, openSubmenuProject])
 
   useEffect(() => {
     loadAllAgents()
@@ -304,20 +312,20 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
                   <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
                   <span className="project-name-sidebar">{project.name}</span>
                 </div>
-                <div className="add-mission-dropdown">
+                <div
+                  className="add-mission-dropdown"
+                  ref={(el) => {
+                    if (el) {
+                      submenuRefsMap.current.set(project.path, el)
+                    }
+                  }}
+                >
                   <button
                     className="add-mission-btn"
-                    onMouseEnter={(e) => {
-                      const elem = e.currentTarget.parentElement?.querySelector('.add-mission-submenu') as HTMLElement
-                      if (elem) elem.style.display = 'block'
-                    }}
-                    onMouseLeave={(e) => {
-                      const elem = e.currentTarget.parentElement?.querySelector('.add-mission-submenu') as HTMLElement
-                      if (elem) elem.style.display = 'none'
-                    }}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       localStorage.setItem('lastSelectedProjectPath', project.path)
-                      handleAddMinion(false)
+                      setOpenSubmenuProject(openSubmenuProject === project.path ? null : project.path)
                     }}
                     title="Add new mission"
                   >
@@ -325,27 +333,26 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
                   </button>
                   <div
                     className="add-mission-submenu"
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.display = 'block'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
+                    style={{ display: openSubmenuProject === project.path ? 'block' : 'none' }}
                   >
                     <div
                       className="add-mission-submenu-item"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         localStorage.setItem('lastSelectedProjectPath', project.path)
                         handleAddMinion(false)
+                        setOpenSubmenuProject(null)
                       }}
                     >
                       Regular Mission
                     </div>
                     <div
                       className="add-mission-submenu-item super-option"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         localStorage.setItem('lastSelectedProjectPath', project.path)
                         handleAddMinion(true)
+                        setOpenSubmenuProject(null)
                       }}
                     >
                       <span className="super-icon">👑</span> Super Mission
