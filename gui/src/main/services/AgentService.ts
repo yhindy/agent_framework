@@ -215,7 +215,7 @@ export class AgentService {
 
   async findProjectForAssignment(activeProjectPaths: string[], assignmentId: string): Promise<string> {
     for (const projectPath of activeProjectPaths) {
-      const { assignments } = this.getAssignments(projectPath)
+      const { assignments } = await this.getAssignments(projectPath)
       if (assignments.some(a => a.id === assignmentId)) {
         return projectPath
       }
