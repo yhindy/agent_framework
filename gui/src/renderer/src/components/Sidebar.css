@@ -117,8 +117,8 @@
   justify-content: space-between;
   padding: 8px 12px;
   margin-bottom: 4px;
-  background: #1f2222;
-  border-left: 3px solid #4a5568;
+  background: #1c1e1e;
+  border-left: 3px solid #424c5d;
   color: #858585;
   font-weight: 600;
   font-size: 11px;
@@ -127,7 +127,7 @@
 }
 
 .project-header:hover {
-  background: #252828;
+  background: #222525;
 }
 
 .project-header-content {
