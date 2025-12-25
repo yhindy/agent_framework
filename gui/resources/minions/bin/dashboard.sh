@@ -38,8 +38,20 @@ echo ""
 if [ ! -d "$GUI_DIR/node_modules" ]; then
     echo -e "${YELLOW}📦 Installing dependencies...${NC}"
     cd "$GUI_DIR" && npm install
+
+    # Rebuild native modules after install
+    echo -e "${YELLOW}🔧 Rebuilding native modules for Electron...${NC}"
+    cd "$GUI_DIR" && npm run rebuild
+fi
+
+# Check if node-pty needs rebuilding (check for marker file)
+REBUILD_MARKER="$GUI_DIR/node_modules/.node-pty-rebuilt"
+if [ ! -f "$REBUILD_MARKER" ]; then
+    echo -e "${YELLOW}🔧 Rebuilding node-pty for Electron...${NC}"
+    cd "$GUI_DIR" && npm run rebuild && touch "$REBUILD_MARKER"
 fi
 
 # Run the dashboard
+echo -e "${GREEN}✅ Starting dashboard...${NC}"
 cd "$GUI_DIR" && npm run dev
 
