@@ -3,6 +3,9 @@ import * as pty from 'node-pty'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { execSync } from 'child_process'
+import { v5 as uuidv5 } from 'uuid'
+import { AgentInfo } from './types/ProjectConfig'
+import { AgentService } from './AgentService'
 
 // Simple ANSI strip function to avoid ESM issues
 function stripAnsi(str: string): string {
@@ -14,6 +17,11 @@ interface TerminalSession {
   agentId: string
   tool: string
   mode: string
+  worktreePath: string        // NEW: Store for persistence operations
+  projectPath?: string        // NEW: Store for resume failure recovery
+  prompt?: string             // NEW: Store for restart
+  model?: string              // NEW: Store for restart
+  yolo?: boolean              // NEW: Store for restart
   idleTimer?: NodeJS.Timeout
   isWaiting?: boolean
   lastInputTime: number
@@ -73,6 +81,10 @@ export class TerminalService {
   private terminals: Map<string, TerminalSession>
   private plainTerminals: Map<string, PlainTerminalSession>
   private mainWindow: BrowserWindow
+  private agentService?: AgentService
+
+  // Namespace UUID for agent sessions
+  private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
 
   constructor(mainWindow: BrowserWindow) {
     this.terminals = new Map()
@@ -82,6 +94,35 @@ export class TerminalService {
 
   setWindow(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
+  }
+
+  setAgentService(agentService: AgentService): void {
+    this.agentService = agentService
+  }
+
+  private generateSessionId(agentId: string, worktreePath: string): string {
+    // Create deterministic UUID from agentId + path
+    // This ensures same agent always gets same session ID
+    const input = `${agentId}:${worktreePath}`
+    return uuidv5(input, this.AGENT_SESSION_NAMESPACE)
+  }
+
+  private async readAgentInfo(worktreePath: string): Promise<AgentInfo | null> {
+    if (!this.agentService) return null
+    return this.agentService.readAgentInfo(worktreePath)
+  }
+
+  private async updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): Promise<void> {
+    if (!this.agentService) {
+      console.warn('AgentService not set, cannot persist state')
+      return
+    }
+
+    try {
+      this.agentService.updateAgentInfo(worktreePath, updates)
+    } catch (error) {
+      console.error('Failed to update agent info:', error)
+    }
   }
 
   // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
@@ -149,6 +190,17 @@ export class TerminalService {
       }
     }
 
+    // Generate deterministic session ID
+    const sessionId = this.generateSessionId(agentId, worktreePath)
+
+    // Read agent info to check for existing session
+    const agentInfo = await this.readAgentInfo(worktreePath)
+
+    let isResume = false
+    if (agentInfo?.claudeSessionActive && agentInfo?.claudeSessionId && tool === 'claude') {
+      isResume = true
+    }
+
     // Determine command based on tool
     let command: string
     let args: string[]
@@ -156,7 +208,16 @@ export class TerminalService {
     switch (tool) {
       case 'claude':
         command = 'claude'
-        args = this.getClaudeArgs(mode, agentId, prompt, model, yolo)
+
+        if (isResume) {
+          // Resume existing session
+          args = ['--resume', sessionId]
+          if (model) args.push('--model', model)
+        } else {
+          // Create new session with specific ID
+          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo)
+          args.push('--session-id', sessionId)
+        }
         break
       case 'cursor-cli':
         command = 'cursor'
@@ -172,7 +233,7 @@ export class TerminalService {
 
     // Spawn PTY
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
-    
+
     const terminal = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: 80,
@@ -187,15 +248,36 @@ export class TerminalService {
       agentId,
       tool,
       mode,
+      worktreePath,  // NEW: Store for persistence operations
+      projectPath,   // NEW: Store for resume failure recovery
+      prompt,        // NEW: Store for restart
+      model,         // NEW: Store for restart
+      yolo,          // NEW: Store for restart
       lastInputTime: 0,
       outputBuffer: '',
-      claudeStarted: false,
-      lastWorkingTime: 0
+      claudeStarted: isResume,  // Already started if resuming
+      lastWorkingTime: 0,
+      isWaiting: agentInfo?.isWaitingForInput ?? false  // Restore persisted waiting state
     }
+
+    // Mark if we're attempting to resume (for error detection)
+    if (isResume) {
+      (session as any)._attemptingResume = true
+    }
+
     this.terminals.set(agentId, session)
 
     // Send the command to the terminal
     terminal.write(`${command} ${args.join(' ')}\r`)
+
+    // Persist session ID immediately
+    if (tool === 'claude') {
+      await this.updateAgentInfo(worktreePath, {
+        claudeSessionId: sessionId,
+        claudeSessionActive: true,
+        claudeLastSeen: new Date().toISOString()
+      })
+    }
 
     // Handle output
     terminal.onData((data) => {
@@ -204,6 +286,11 @@ export class TerminalService {
 
     // Handle exit
     terminal.onExit(() => {
+      // Mark session as inactive on exit
+      if (tool === 'claude' && worktreePath) {
+        this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
+          .catch(err => console.error('Failed to mark session inactive:', err))
+      }
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')
     })
@@ -274,13 +361,52 @@ export class TerminalService {
 
     // Update output buffer (keep last 2000 chars for pattern detection across chunks)
     session.outputBuffer = (session.outputBuffer + data).slice(-2000)
-    
+
+    // Check for resume failures and fall back to fresh start
+    const stripped = stripAnsi(data)
+    if ((session as any)._attemptingResume && (
+      stripped.includes('Session not found') ||
+      stripped.includes('Could not resume') ||
+      stripped.includes('Error resuming session')
+    )) {
+      console.warn(`Resume failed for ${agentId}, attempting fresh start...`)
+
+      // Mark that we're not resuming anymore
+      ;(session as any)._attemptingResume = false
+
+      // Clear session state
+      if (session.worktreePath) {
+        this.updateAgentInfo(session.worktreePath, {
+          claudeSessionActive: false,
+          claudeSessionId: undefined
+        }).catch(err => console.error('Failed to clear session:', err))
+      }
+
+      // Kill current PTY and restart fresh
+      session.pty.kill()
+      this.terminals.delete(agentId)
+
+      // Restart without resume (use stored values)
+      if (session.projectPath) {
+        this.startAgent(
+          session.projectPath,
+          agentId,
+          session.tool,
+          session.mode,
+          session.prompt,
+          session.model,
+          session.yolo
+        ).catch(err => console.error(`Failed to restart agent ${agentId}:`, err))
+      }
+
+      return
+    }
+
     // Check if Claude UI has started (look for Claude Code header)
     if (!session.claudeStarted && session.outputBuffer.includes('Claude Code')) {
       session.claudeStarted = true
     }
 
-    const stripped = stripAnsi(data)
     // Check for working patterns in the CURRENT CHUNK only (not buffer - buffer retains old patterns)
     const isWorkingNow = this.isClaudeWorking(stripped)
 
@@ -294,6 +420,14 @@ export class TerminalService {
       if (session.isWaiting) {
         session.isWaiting = false
         this.mainWindow.webContents.send('agent:resumedWork', agentId)
+
+        // Persist resumed state
+        if (session.worktreePath) {
+          this.updateAgentInfo(session.worktreePath, {
+            isWaitingForInput: false,
+            claudeLastSeen: new Date().toISOString()
+          })
+        }
       }
       return // Don't process further - Claude is working
     }
@@ -333,6 +467,15 @@ export class TerminalService {
         // Claude is idle - emit waiting event
         session.isWaiting = true
         this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+
+        // Persist waiting state
+        if (session.worktreePath) {
+          this.updateAgentInfo(session.worktreePath, {
+            isWaitingForInput: true,
+            lastOutputSnapshot: session.outputBuffer.slice(-500),
+            claudeLastSeen: new Date().toISOString()
+          })
+        }
       }, 2000) // 2 seconds of no working indicators
     }
   }
