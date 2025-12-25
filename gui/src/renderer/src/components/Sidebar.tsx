@@ -22,6 +22,7 @@ interface AgentSession {
   projectPath?: string  // Added to track which project the agent belongs to
   isSuperMinion?: boolean
   parentAgentId?: string
+  isBaseBranchAgent?: boolean
 }
 
 interface AgentsByProject {
@@ -204,7 +205,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
     return (
       <div key={agent.id} className="agent-item-container">
         <div
-          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''}`}
+          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''}`}
           onClick={handleAgentItemClick}
           style={{ paddingLeft: `${depth * 12 + 12}px` }}
         >
@@ -214,8 +215,9 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
                 👑
               </span>
             )}
-            {!agent.isSuperMinion && <span className="agent-icon"></span>}
-            <div className="agent-id">{agent.id}</div>
+            {agent.isBaseBranchAgent && <span className="agent-icon">🏠</span>}
+            {!agent.isSuperMinion && !agent.isBaseBranchAgent && <span className="agent-icon"></span>}
+            <div className="agent-id">{agent.isBaseBranchAgent ? `${agent.assignmentId?.split('-').pop()} (Base)` : agent.id}</div>
             {isWaiting && (
               <div className="attention-badge" title="Waiting for input">!</div>
             )}
@@ -290,12 +292,18 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
           const agents = agentsByProject[project.path] || []
           const isCollapsed = collapsedProjects.has(project.path)
           
-          // Sort agents: waiting first, then by id
+          // Sort agents: base first, then waiting, then by id
           const sortedAgents = [...agents].sort((a, b) => {
+            // Base branch agents always first
+            if (a.isBaseBranchAgent && !b.isBaseBranchAgent) return -1
+            if (!a.isBaseBranchAgent && b.isBaseBranchAgent) return 1
+
+            // Then waiting agents
             const aWaiting = waitingAgents.has(a.id)
             const bWaiting = waitingAgents.has(b.id)
             if (aWaiting && !bWaiting) return -1
             if (!aWaiting && bWaiting) return 1
+
             return a.id.localeCompare(b.id)
           })
 

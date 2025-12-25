@@ -131,15 +131,22 @@ export class TerminalService {
     this.stopAgent(agentId)
 
     // Determine worktree path
-    const projectName = projectPath.split('/').pop() || 'project'
     let worktreePath: string
-    
-    // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(projectPath, '..', agentId)
+
+    // Base branch agents work in the main project directory
+    if (agentId.endsWith('-base')) {
+      worktreePath = projectPath
     } else {
-      // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
-      worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+      // Regular agents use worktrees
+      const projectName = projectPath.split('/').pop() || 'project'
+
+      // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+      if (agentId.startsWith(`${projectName}-`)) {
+        worktreePath = join(projectPath, '..', agentId)
+      } else {
+        // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
+        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+      }
     }
 
     // Determine command based on tool
@@ -403,13 +410,20 @@ export class TerminalService {
     }
 
     // Determine worktree path
-    const projectName = projectPath.split('/').pop() || 'project'
     let worktreePath: string
-    
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(projectPath, '..', agentId)
+
+    // Base branch agents work in the main project directory
+    if (agentId.endsWith('-base')) {
+      worktreePath = projectPath
     } else {
-      worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+      // Regular agents use worktrees
+      const projectName = projectPath.split('/').pop() || 'project'
+
+      if (agentId.startsWith(`${projectName}-`)) {
+        worktreePath = join(projectPath, '..', agentId)
+      } else {
+        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
+      }
     }
 
     // Spawn PTY with a plain shell

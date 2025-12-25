@@ -23,6 +23,7 @@ interface Assignment {
   mode: string
   prUrl?: string
   prStatus?: string
+  isBaseBranchAgent?: boolean
 }
 
 interface AgentSession {
@@ -462,9 +463,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
             </button>
           )}
 
-          {assignment && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
-            <button 
-              onClick={handleCreatePRClick} 
+          {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
+            <button
+              onClick={handleCreatePRClick}
               className="success"
               disabled={isCreatingPR}
             >
@@ -472,15 +473,17 @@ function AgentView({ activeProjects }: AgentViewProps) {
             </button>
           )}
 
-          <div className="cleanup-dropdown">
-            <button className="cleanup-button">Cleanup ▾</button>
-            <div className="cleanup-menu">
-              <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
-              <button onClick={() => handleCleanupClick('teardown')} className="danger-text">
-                Teardown
-              </button>
+          {assignment && !assignment.isBaseBranchAgent && (
+            <div className="cleanup-dropdown">
+              <button className="cleanup-button">Cleanup ▾</button>
+              <div className="cleanup-menu">
+                <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
+                <button onClick={() => handleCleanupClick('teardown')} className="danger-text">
+                  Teardown
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

@@ -17,6 +17,7 @@ export interface AgentInfo {
   lastActivity: string
   hasUnread?: boolean
   parentAgentId?: string  // Set if this is a child of a super minion
+  isBaseBranchAgent?: boolean  // Set for the base branch agent
 }
 
 export interface ChildPlan {

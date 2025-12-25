@@ -19,6 +19,7 @@ interface AgentSession {
   tool?: string
   isSuperMinion?: boolean
   parentAgentId?: string
+  isBaseBranchAgent?: boolean
 }
 
 export class AgentService {
@@ -57,6 +58,44 @@ export class AgentService {
     const agents: AgentSession[] = []
 
     try {
+      // Get base agent if it exists
+      const baseInfoPath = join(projectPath, '.minions-base-info')
+      if (existsSync(baseInfoPath)) {
+        try {
+          const content = readFileSync(baseInfoPath, 'utf-8')
+          const baseAgentInfo = JSON.parse(content) as AgentInfo
+          if (baseAgentInfo.isBaseBranchAgent) {
+            let session = this.sessions.get(baseAgentInfo.agentId)
+            if (!session) {
+              session = {
+                id: baseAgentInfo.agentId,
+                assignmentId: baseAgentInfo.id,
+                worktreePath: projectPath,
+                terminalPid: null,
+                hasUnread: baseAgentInfo.hasUnread || false,
+                lastActivity: baseAgentInfo.lastActivity,
+                mode: baseAgentInfo.mode,
+                tool: baseAgentInfo.tool,
+                isSuperMinion: false,
+                parentAgentId: baseAgentInfo.parentAgentId,
+                isBaseBranchAgent: true
+              }
+              this.sessions.set(baseAgentInfo.agentId, session)
+            } else {
+              session.assignmentId = baseAgentInfo.id
+              session.mode = baseAgentInfo.mode
+              session.tool = baseAgentInfo.tool
+              session.hasUnread = baseAgentInfo.hasUnread || session.hasUnread
+              session.lastActivity = baseAgentInfo.lastActivity
+              session.isBaseBranchAgent = true
+            }
+            agents.push(session)
+          }
+        } catch (error) {
+          console.error('Error reading base agent info:', error)
+        }
+      }
+
       // Get worktrees from git
       const { stdout } = await execAsync('git worktree list --porcelain', { cwd: projectPath })
 
@@ -572,6 +611,20 @@ export class AgentService {
     const assignments: AgentInfo[] = []
 
     try {
+      // Add base branch agent if it exists
+      const baseInfoPath = join(projectPath, '.minions-base-info')
+      if (existsSync(baseInfoPath)) {
+        try {
+          const content = readFileSync(baseInfoPath, 'utf-8')
+          const baseAgentInfo = JSON.parse(content) as AgentInfo
+          if (baseAgentInfo.isBaseBranchAgent) {
+            assignments.push(baseAgentInfo)
+          }
+        } catch (error) {
+          console.error('Error reading base agent info:', error)
+        }
+      }
+
       // Get worktrees from git
       const { stdout } = await execAsync('git worktree list --porcelain', { cwd: projectPath })
 
@@ -971,6 +1024,106 @@ export class AgentService {
     } catch (error: any) {
       console.error('[AgentService] Failed to check PR status:', error)
       throw new Error(`Failed to check PR status: ${error.message}`)
+    }
+  }
+
+  async ensureBaseBranchAgent(projectPath: string): Promise<AgentInfo> {
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+    const baseBranch = await this.getDefaultBranch(projectPath, projectPath)
+    const baseAgentId = `${projectName}-base`
+
+    const baseInfoPath = join(projectPath, '.minions-base-info')
+
+    // Check if base agent already exists
+    if (existsSync(baseInfoPath)) {
+      try {
+        const content = readFileSync(baseInfoPath, 'utf-8')
+        const info = JSON.parse(content) as AgentInfo
+        if (info.isBaseBranchAgent && info.agentId === baseAgentId) {
+          console.log(`[AgentService] Base agent already exists: ${baseAgentId}`)
+          return info
+        }
+      } catch (error) {
+        console.log(`[AgentService] Corrupted base agent info, recreating: ${error}`)
+      }
+    }
+
+    // Create new base agent info
+    const agentInfo: AgentInfo = {
+      id: `${baseAgentId}-${Date.now()}`,
+      agentId: baseAgentId,
+      branch: baseBranch,
+      project: projectName,
+      feature: `Base Branch (${baseBranch})`,
+      status: 'active',
+      tool: 'claude',
+      mode: 'dev',
+      prompt: `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the main branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`,
+      model: 'opus',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+      isBaseBranchAgent: true
+    }
+
+    writeFileSync(baseInfoPath, JSON.stringify(agentInfo, null, 2))
+    console.log(`[AgentService] Created base branch agent: ${baseAgentId}`)
+
+    return agentInfo
+  }
+
+  isBaseBranchAgentMissing(projectPath: string): boolean {
+    const baseInfoPath = join(projectPath, '.minions-base-info')
+    if (!existsSync(baseInfoPath)) {
+      return true
+    }
+
+    try {
+      const content = readFileSync(baseInfoPath, 'utf-8')
+      const info = JSON.parse(content) as AgentInfo
+      return !info.isBaseBranchAgent
+    } catch {
+      return true
+    }
+  }
+
+  getAgentPath(projectPath: string, agentInfo: AgentInfo): string {
+    if (agentInfo.isBaseBranchAgent) {
+      return projectPath
+    }
+
+    const config = this.getProjectConfig(projectPath)
+    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+
+    if (agentInfo.agentId.startsWith(`${projectName}-`)) {
+      return join(dirname(projectPath), agentInfo.agentId)
+    } else {
+      return join(dirname(projectPath), `${projectName}-${agentInfo.agentId}`)
+    }
+  }
+
+  // Helper method to track if base agent was just created (for auto-start logic)
+  private baseAgentJustCreated: Set<string> = new Set()
+
+  wasBaseAgentJustCreated(agentId: string): boolean {
+    const wasJustCreated = this.baseAgentJustCreated.has(agentId)
+    this.baseAgentJustCreated.delete(agentId)
+    return wasJustCreated
+  }
+
+  async ensureBaseBranchAgentWithStartup(projectPath: string): Promise<{ agentInfo: AgentInfo, shouldStartClaude: boolean }> {
+    const baseInfoPath = join(projectPath, '.minions-base-info')
+    const isNewAgent = !existsSync(baseInfoPath)
+
+    const agentInfo = await this.ensureBaseBranchAgent(projectPath)
+
+    if (isNewAgent) {
+      this.baseAgentJustCreated.add(agentInfo.agentId)
+    }
+
+    return {
+      agentInfo,
+      shouldStartClaude: isNewAgent && agentInfo.prompt !== undefined
     }
   }
 }

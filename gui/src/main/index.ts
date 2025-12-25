@@ -56,9 +56,12 @@ function createWindow(): void {
 function initializeServices(): void {
   if (!mainWindow) return
 
+  const agentService = new AgentService()
+  const projectService = new ProjectService(agentService)
+
   services = {
-    project: new ProjectService(),
-    agent: new AgentService(),
+    project: projectService,
+    agent: agentService,
     terminal: new TerminalService(mainWindow),
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow)
@@ -69,6 +72,33 @@ function initializeServices(): void {
   for (const project of activeProjects) {
     services.agent.migrateAssignments(project.path)
       .catch(err => console.error(`Failed to migrate assignments for ${project.path}:`, err))
+
+    // Ensure base branch agent exists for projects with framework installed
+    if (!project.needsInstall) {
+      services.agent.ensureBaseBranchAgentWithStartup(project.path)
+        .then(result => {
+          // Auto-start Claude for newly created base agents
+          if (result.shouldStartClaude && result.agentInfo.prompt) {
+            setTimeout(async () => {
+              try {
+                await services!.terminal.startAgent(
+                  project.path,
+                  result.agentInfo.agentId,
+                  result.agentInfo.tool || 'claude',
+                  result.agentInfo.mode || 'dev',
+                  result.agentInfo.prompt,
+                  result.agentInfo.model,
+                  false
+                )
+                mainWindow?.webContents.send('agents:updated')
+              } catch (error) {
+                console.error('Failed to auto-start base agent Claude:', error)
+              }
+            }, 2000)
+          }
+        })
+        .catch(err => console.error(`Failed to ensure base agent for ${project.path}:`, err))
+    }
   }
 
   // Set up IPC handlers
@@ -95,7 +125,7 @@ function setupIPC(): void {
     try {
       console.log('[IPC] Handling project:select for:', projectPath)
       // Legacy wrapper calling addProject
-      const project = services!.project.addProject(projectPath)
+      const project = await services!.project.addProject(projectPath)
       console.log('[IPC] Project selected successfully:', projectPath)
 
       if (!project.needsInstall) {
@@ -112,7 +142,7 @@ function setupIPC(): void {
   ipcMain.handle('project:add', async (_event, projectPath: string) => {
     try {
       console.log('[IPC] Handling project:add for:', projectPath)
-      const project = services!.project.addProject(projectPath)
+      const project = await services!.project.addProject(projectPath)
       console.log('[IPC] Project added successfully:', projectPath)
 
       if (!project.needsInstall) {
@@ -143,6 +173,31 @@ function setupIPC(): void {
     services!.project.switchProject(projectPath)
     const current = services!.project.getCurrentProject()
     if (current && !current.needsInstall) {
+      // Ensure base agent exists
+      try {
+        const result = await services!.agent.ensureBaseBranchAgentWithStartup(current.path)
+        // Auto-start Claude for newly created base agents
+        if (result.shouldStartClaude && result.agentInfo.prompt) {
+          setTimeout(async () => {
+            try {
+              await services!.terminal.startAgent(
+                current.path,
+                result.agentInfo.agentId,
+                result.agentInfo.tool || 'claude',
+                result.agentInfo.mode || 'dev',
+                result.agentInfo.prompt,
+                result.agentInfo.model,
+                false
+              )
+              mainWindow?.webContents.send('agents:updated')
+            } catch (error) {
+              console.error('Failed to auto-start base agent Claude on project switch:', error)
+            }
+          }, 2000)
+        }
+      } catch (error) {
+        console.error('Error ensuring base branch agent on project switch:', error)
+      }
       services!.fileWatcher.watchProject(current.path)
     }
   })
@@ -158,7 +213,7 @@ function setupIPC(): void {
       console.log('[IPC] Framework installed successfully')
 
       // Re-select (add) to update state
-      const project = services!.project.addProject(projectPath)
+      const project = await services!.project.addProject(projectPath)
       console.log('[IPC] Project added after installation')
 
       services!.fileWatcher.watchProject(projectPath)
@@ -411,17 +466,25 @@ function setupIPC(): void {
     // Find the project this agent belongs to by searching all active projects
     const activeProjects = services!.project.getActiveProjects()
     let projectPath: string | null = null
-    
+    let agent: any = null
+
     for (const project of activeProjects) {
       const agents = await services!.agent.listAgents(project.path)
-      if (agents.some(a => a.id === agentId)) {
+      const found = agents.find(a => a.id === agentId)
+      if (found) {
         projectPath = project.path
+        agent = found
         break
       }
     }
-    
+
     if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
-    
+
+    // Prevent teardown of base branch agents
+    if (agent && agent.isBaseBranchAgent) {
+      throw new Error('Cannot teardown base branch agent')
+    }
+
     // Stop agent if running
     try {
       await services!.terminal.stopAgent(agentId)
@@ -447,17 +510,25 @@ function setupIPC(): void {
     // Find the project this agent belongs to by searching all active projects
     const activeProjects = services!.project.getActiveProjects()
     let projectPath: string | null = null
-    
+    let agent: any = null
+
     for (const project of activeProjects) {
       const agents = await services!.agent.listAgents(project.path)
-      if (agents.some(a => a.id === agentId)) {
+      const found = agents.find(a => a.id === agentId)
+      if (found) {
         projectPath = project.path
+        agent = found
         break
       }
     }
-    
+
     if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
-    
+
+    // Prevent unassign of base branch agents
+    if (agent && agent.isBaseBranchAgent) {
+      throw new Error('Cannot unassign base branch agent')
+    }
+
     await services!.agent.unassignAgent(projectPath, agentId)
     
     // Trigger updates
