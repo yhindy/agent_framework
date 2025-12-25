@@ -460,3 +460,29 @@
   flex: 1;
   overflow-y: auto;
 }
+
+/* Base branch agent styling - darker grey */
+.agent-item.base-branch {
+  background: #1f2222 !important;
+  border-left: 3px solid #4a5568;
+  color: #e0e0e0 !important;
+}
+
+.agent-item.base-branch:hover {
+  background: #252828 !important;
+}
+
+.agent-item.base-branch.active {
+  background: #2d3436 !important;
+  border-left-color: #718096;
+  color: #ffffff !important;
+}
+
+.agent-item.base-branch.waiting {
+  background: #252828 !important;
+  animation: pulse-waiting 2s ease-in-out infinite;
+}
+
+.agent-item.base-branch.waiting:hover {
+  background: #2d3436 !important;
+}

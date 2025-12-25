@@ -2,6 +2,7 @@ import Store from 'electron-store'
 import { join, basename } from 'path'
 import { existsSync, cpSync, readFileSync, writeFileSync } from 'fs'
 import { app } from 'electron'
+import { AgentService } from './AgentService'
 
 export interface ProjectState {
   path: string
@@ -18,8 +19,9 @@ interface StoreSchema {
 
 export class ProjectService {
   private store: Store<StoreSchema>
+  private agentService: AgentService | null = null
 
-  constructor() {
+  constructor(agentService?: AgentService) {
     this.store = new Store<StoreSchema>({
       defaults: {
         currentProjectPath: null,
@@ -28,7 +30,12 @@ export class ProjectService {
       }
     })
 
+    this.agentService = agentService || null
     this.validateActiveProjects()
+  }
+
+  setAgentService(agentService: AgentService): void {
+    this.agentService = agentService
   }
 
   // Validate active projects on startup (robustness)
@@ -48,11 +55,11 @@ export class ProjectService {
   }
 
   // Legacy method wrapper for backward compatibility/single-project logic replacement
-  selectProject(projectPath: string): ProjectState {
+  async selectProject(projectPath: string): Promise<ProjectState> {
     return this.addProject(projectPath)
   }
 
-  addProject(projectPath: string): ProjectState {
+  async addProject(projectPath: string): Promise<ProjectState> {
     console.log('[ProjectService] Adding project:', projectPath)
 
     // Validate project path
@@ -104,6 +111,16 @@ export class ProjectService {
       const filtered = recent.filter((p) => p.path !== projectPath)
       this.store.set('recentProjects', [project, ...filtered].slice(0, 10))
       console.log('[ProjectService] Updated recent projects list')
+
+      // Ensure base branch agent exists (if not needing install)
+      if (this.agentService && !needsInstall) {
+        try {
+          await this.agentService.ensureBaseBranchAgent(projectPath)
+          console.log('[ProjectService] Base branch agent ensured for project')
+        } catch (error) {
+          console.error('[ProjectService] Error ensuring base branch agent:', error)
+        }
+      }
 
       console.log('[ProjectService] Successfully added project:', projectPath)
       return project
@@ -207,18 +224,31 @@ export class ProjectService {
       // Add to .gitignore
       console.log('[ProjectService] Updating .gitignore...')
       const gitignorePath = join(projectPath, '.gitignore')
-      const ignoreContent = '\n# Agent Framework\n.agent-info\n'
+      const ignoreContent = '\n# Agent Framework\n.agent-info\n.minions-base-info\n'
       if (existsSync(gitignorePath)) {
         const currentIgnore = readFileSync(gitignorePath, 'utf-8')
         if (!currentIgnore.includes('.agent-info')) {
           writeFileSync(gitignorePath, currentIgnore + ignoreContent)
-          console.log('[ProjectService] Added .agent-info to .gitignore')
+          console.log('[ProjectService] Added .agent-info and .minions-base-info to .gitignore')
+        } else if (!currentIgnore.includes('.minions-base-info')) {
+          writeFileSync(gitignorePath, currentIgnore + '\n.minions-base-info\n')
+          console.log('[ProjectService] Added .minions-base-info to .gitignore')
         } else {
-          console.log('[ProjectService] .agent-info already in .gitignore')
+          console.log('[ProjectService] Agent files already in .gitignore')
         }
       } else {
         writeFileSync(gitignorePath, ignoreContent)
-        console.log('[ProjectService] Created .gitignore with .agent-info')
+        console.log('[ProjectService] Created .gitignore with agent files')
+      }
+
+      // Ensure base branch agent exists after framework installation
+      if (this.agentService) {
+        try {
+          await this.agentService.ensureBaseBranchAgent(projectPath)
+          console.log('[ProjectService] Base branch agent ensured after installation')
+        } catch (error) {
+          console.error('[ProjectService] Error ensuring base branch agent after installation:', error)
+        }
       }
 
       console.log('[ProjectService] Framework installation completed successfully')
