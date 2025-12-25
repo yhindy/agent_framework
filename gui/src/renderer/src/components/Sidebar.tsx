@@ -28,7 +28,7 @@ interface AgentsByProject {
   [projectPath: string]: AgentSession[]
 }
 
-function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) {
+function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: SidebarProps) {
   const location = useLocation()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
@@ -159,9 +159,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove }: SidebarProps) 
   }
 
   const handleProjectSelect = async (_project: any) => {
-    // Project has been added, refresh state
+    // Project has been added to the store, notify parent to refresh
+    console.log('[Sidebar] Project selected, notifying parent to refresh')
     setShowAddModal(false)
-    // Parent will handle refresh via onProjectAdd if needed
+    // Trigger parent refresh callback
+    onProjectAdd()
   }
 
   const handleRemoveProject = (projectPath: string, e: React.MouseEvent) => {
