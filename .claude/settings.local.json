@@ -9,6 +9,7 @@
       "Bash(find:*)",
       "Bash(cat:*)",
       "Bash(ls:*)",
+      "Bash(npx tsc:*)",
       "Bash(timeout 15 npm run dev:*)"
     ]
   }

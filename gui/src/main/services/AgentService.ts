@@ -501,6 +501,12 @@ export class AgentService {
       throw new Error('Plan is not in pending status')
     }
 
+    // 3.5. Check budget
+    const superDetails = await this.getSuperAgentDetails(projectPath, superAgentId)
+    if (superDetails.children.length >= superDetails.minionBudget) {
+      throw new Error(`Budget exceeded: already have ${superDetails.children.length}/${superDetails.minionBudget} children`)
+    }
+
     // 4. Create child agent
     const childAssignment = {
       branch: plan.shortName,
@@ -512,6 +518,9 @@ export class AgentService {
     }
 
     const childAgent = await this.createAssignment(projectPath, childAssignment)
+
+    // 4.5. Set childAgentId on the plan
+    plan.childAgentId = childAgent.agentId
 
     // 5. Update child's .agent-info to set parentAgentId
     const config = this.getProjectConfig(projectPath)

@@ -195,6 +195,10 @@ if [ -d "$RULES_SRC" ]; then
         cp "$RULES_SRC/orchestrator_signals.md" "$RULES_DST/"
         echo "   Copied orchestrator_signals.md"
     fi
+    if [ -f "$RULES_SRC/super-minion-rules.md" ]; then
+        cp "$RULES_SRC/super-minion-rules.md" "$WORKTREE_PATH/"
+        echo "   Copied super-minion-rules.md"
+    fi
     # Also copy agent rules if they exist
     if [ -f "$RULES_SRC/agent-rules.mdc" ]; then
         mkdir -p "$WORKTREE_PATH/.cursor/rules"

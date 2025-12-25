@@ -30,11 +30,12 @@ export interface AgentInfo {
 export interface ChildPlan {
   id: string
   shortName: string
-  branch: string
+  branch?: string
   description: string
   prompt: string
   estimatedComplexity?: 'small' | 'medium' | 'large'
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'in_progress' | 'completed' | 'failed'
+  childAgentId?: string
 }
 
 export interface SuperAgentInfo extends AgentInfo {
