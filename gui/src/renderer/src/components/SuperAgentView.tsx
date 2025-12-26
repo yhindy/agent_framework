@@ -6,6 +6,8 @@ import TestEnvTerminal from './TestEnvTerminal'
 import ChildStatusCard from './ChildStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
+import LoadingModal from './LoadingModal'
+import { usePRCreation } from '../hooks/usePRCreation'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
 
@@ -30,6 +32,18 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   // Test environment management
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
+
+  // PR management
+  const {
+    showPRConfirm,
+    setShowPRConfirm,
+    autoCommit,
+    setAutoCommit,
+    isCreatingPR,
+    prMessages,
+    handleCreatePRClick,
+    handleConfirmCreatePR: handleConfirmCreatePRHook
+  } = usePRCreation()
 
   const loadAgent = async () => {
     if (!agentId) return
@@ -125,6 +139,11 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const handleRejectPlan = async (planId: string) => {
     // TODO: Implement plan rejection
     console.log('Rejected plan:', planId)
+  }
+
+  const handleConfirmCreatePR = async () => {
+    if (!agent) return
+    await handleConfirmCreatePRHook(agent.agentId, loadAgent)
   }
 
   // Test environment functions
@@ -223,6 +242,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           <h2>👑 {agent.agentId} <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span></h2>
         </div>
         <div className="agent-actions">
+          <button onClick={handleCreatePRClick} className="success" disabled={isCreatingPR}>
+            {isCreatingPR ? 'Creating PR...' : 'Make PR'}
+          </button>
           <button onClick={handleOpenCursor}>Open in Cursor</button>
           <button className="danger" onClick={handleStop}>Stop</button>
           <button className="danger" onClick={() => setShowTeardownConfirm(true)}>Cleanup</button>
@@ -375,6 +397,51 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         onConfirm={handleTeardown}
         onCancel={() => setShowTeardownConfirm(false)}
         isLoading={isTearingDown}
+      />
+
+      {showPRConfirm && agent && (
+        <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Create Pull Request</h2>
+            <p>
+              This will push the branch and create a PR on GitHub for:
+            </p>
+            <div className="merge-info">
+              <div><strong>Super Minion:</strong> {agent.agentId}</div>
+              <div><strong>Feature:</strong> {agent.feature}</div>
+            </div>
+            <div className="form-group checkbox-group" style={{ marginTop: '16px' }}>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={autoCommit}
+                  onChange={(e) => setAutoCommit(e.target.checked)}
+                />
+                <span className="checkbox-text">Auto-commit uncommitted changes</span>
+              </label>
+              <div className="form-hint">
+                If checked, any uncommitted changes will be automatically committed before creating the PR.
+              </div>
+            </div>
+            <p className="warning-text">
+              The branch will be pushed to origin and a pull request will be created
+              using the GitHub CLI. You can then review and merge it on GitHub.
+            </p>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowPRConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={handleConfirmCreatePR}>
+                Create PR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <LoadingModal
+        isOpen={isCreatingPR}
+        messages={prMessages}
       />
     </div>
   )
