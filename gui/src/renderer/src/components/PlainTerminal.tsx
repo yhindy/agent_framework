@@ -192,6 +192,8 @@ function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTermina
         if (terminal.rows && terminal.cols) {
           window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
         }
+        // Auto-scroll to bottom after resize so user sees latest output
+        terminal.scrollToBottom()
       } catch (err) {
         // Ignore resize errors on disposed terminal
       }
