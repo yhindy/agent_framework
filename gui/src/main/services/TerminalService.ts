@@ -333,9 +333,9 @@ export class TerminalService {
 
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `You have a budget of ${minionBudget} child minions. Create a plan for: ${prompt}`
+          planPrompt = `You have a budget of ${minionBudget} child minions. Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         } else {
-          planPrompt = `Create a plan for: ${prompt}`
+          planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }

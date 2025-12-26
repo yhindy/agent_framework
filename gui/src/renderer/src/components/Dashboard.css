@@ -407,7 +407,7 @@
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
   cursor: pointer;
   user-select: none;
   flex-wrap: nowrap;

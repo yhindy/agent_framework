@@ -81,7 +81,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     model: 'haiku',
     mode: 'planning',
     status: 'pending',
-    yolo: false,
+    yolo: true,
     isSuper: false,
     minionBudget: 3
   })
