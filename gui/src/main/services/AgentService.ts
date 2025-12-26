@@ -439,7 +439,7 @@ export class AgentService {
 
     // 4. Read pending plans from .pending-plans.json
     let pendingPlans: ChildPlan[] = []
-    
+
     const plansPath = join(session.worktreePath, '.pending-plans.json')
     if (existsSync(plansPath)) {
       try {
@@ -452,6 +452,13 @@ export class AgentService {
       } catch (error) {
         console.error('Error reading .pending-plans.json:', error)
       }
+    }
+
+    // 5. Auto-transition from planning to dev mode when plans are ready
+    // This is more robust than relying on signals - it's based on actual file state
+    if (pendingPlans.length > 0 && agentInfo.mode === 'planning') {
+      agentInfo.mode = 'dev'
+      this.updateAgentInfo(session.worktreePath, { mode: 'dev' })
     }
 
     return {

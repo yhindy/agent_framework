@@ -20,6 +20,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
+  const [isGridCollapsed, setIsGridCollapsed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
@@ -259,7 +260,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       </div>
 
       <div className="super-content">
-        <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' ? 'full-screen' : ''}`}>
+        <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' || isGridCollapsed ? 'full-screen' : ''}`}>
           <div className="section-header" onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
             <h3>{isTerminalCollapsed ? '▶' : '▼'} Terminals & Test Environments</h3>
             <span className="section-hint">{isTerminalCollapsed ? 'Click to expand' : 'Orchestration, test environments, and shells'}</span>
@@ -362,28 +363,43 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         </div>
 
         {agent.mode !== 'planning' && (
-          <div className="super-grid">
-            <div className="children-section">
-              <h3>Active Children ({agent.children.length})</h3>
-              <div className="child-cards">
-                {agent.children.map(child => (
-                  <ChildStatusCard
-                    key={child.id}
-                    child={child}
-                    onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
-                  />
-                ))}
-                {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
-              </div>
+          <div className={`collapsible-section ${isGridCollapsed ? 'collapsed' : ''}`}>
+            <div className="section-header" onClick={() => setIsGridCollapsed(!isGridCollapsed)}>
+              <h3>{isGridCollapsed ? '▶' : '▼'} Children & Plans</h3>
+              <span className="section-hint">
+                {isGridCollapsed ? 'Click to expand' : `${agent.children.length} active, ${agent.pendingPlans.filter(p => p.status === 'pending').length} pending`}
+              </span>
             </div>
+            {!isGridCollapsed && (
+              <div className="super-grid">
+                <div className="children-section-wrapper">
+                  <h3>Active Children ({agent.children.length})</h3>
+                  <div className="children-section">
+                    <div className="child-cards">
+                      {agent.children.map(child => (
+                        <ChildStatusCard
+                          key={child.id}
+                          child={child}
+                          onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
+                        />
+                      ))}
+                      {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
+                    </div>
+                  </div>
+                </div>
 
-            <div className="plans-section">
-              <PlanApproval
-                plans={agent.pendingPlans.filter(p => p.status === 'pending')}
-                onApprove={handleApprovePlan}
-                onReject={handleRejectPlan}
-              />
-            </div>
+                <div className="plans-section-wrapper">
+                  <h3>Proposed Plans ({agent.pendingPlans.filter(p => p.status === 'pending').length})</h3>
+                  <div className="plans-section">
+                    <PlanApproval
+                      plans={agent.pendingPlans.filter(p => p.status === 'pending')}
+                      onApprove={handleApprovePlan}
+                      onReject={handleRejectPlan}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -89,9 +89,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
+  padding: 16px;
 }
 
-.children-section h3 {
+.children-section-wrapper h3,
+.plans-section-wrapper h3 {
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 16px;
@@ -99,6 +101,14 @@
   border-bottom: 2px solid #4ec9b0;
   padding-bottom: 8px;
   letter-spacing: 0.5px;
+}
+
+.children-section-wrapper {
+  min-height: 0;
+}
+
+.children-section {
+  /* Inner container for the actual child cards */
 }
 
 .child-cards {
@@ -113,6 +123,14 @@
   font-size: 13px;
   text-align: center;
   padding: 32px;
+}
+
+.plans-section-wrapper {
+  min-height: 0;
+}
+
+.plans-section {
+  /* Inner container for the actual plan approval component */
 }
 
 /* Tab Section Styles */
