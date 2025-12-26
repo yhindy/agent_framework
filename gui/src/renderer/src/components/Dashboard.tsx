@@ -79,7 +79,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     prompt: '',
     tool: 'claude',
     model: 'haiku',
-    mode: 'dev',
+    mode: 'planning',
     status: 'pending',
     yolo: false,
     isSuper: false,
