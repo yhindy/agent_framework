@@ -5,6 +5,7 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import LoadingModal from './LoadingModal'
+import { usePRCreation } from '../hooks/usePRCreation'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -51,22 +52,20 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [activeTab, setActiveTab] = useState<string>('agent')
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
-  const [showPRConfirm, setShowPRConfirm] = useState(false)
-  const [autoCommit, setAutoCommit] = useState(true)
-  const [isCreatingPR, setIsCreatingPR] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
 
-  const prMessages = [
-    'Stuffing code into a rocket...',
-    'Learning to speak Human for the PR description...',
-    'Bribing the CI/CD pipeline with bananas...',
-    'Checking for accidentally committed secret cookie recipes...',
-    'Pushing code to the moon...',
-    'Summoning the code review council (Kevin, Stuart, and Bob)...',
-    'Crossing fingers and toes...'
-  ]
+  const {
+    showPRConfirm,
+    setShowPRConfirm,
+    autoCommit,
+    setAutoCommit,
+    isCreatingPR,
+    prMessages,
+    handleCreatePRClick,
+    handleConfirmCreatePR: handleConfirmCreatePRHook
+  } = usePRCreation()
 
   const teardownMessages = [
     'Returning minion to the break room...',
@@ -311,32 +310,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }
 
-  const handleCreatePRClick = () => {
-    setAutoCommit(true)
-    setShowPRConfirm(true)
-  }
-
   const handleConfirmCreatePR = async () => {
     if (!assignment) return
-
-    try {
-      setIsCreatingPR(true)
-      setShowPRConfirm(false)
-
-      console.log('[AgentView] Creating PR for:', assignment.id, 'autoCommit:', autoCommit)
-      const result = await window.electronAPI.createPullRequest(assignment.id, autoCommit)
-      
-      // Show success with link
-      alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
-      window.open(result.url, '_blank')
-      
-      // Reload agent data to reflect new status
-      loadAgentData()
-    } catch (error: any) {
-      alert(`Failed to create PR: ${error.message}`)
-    } finally {
-      setIsCreatingPR(false)
-    }
+    await handleConfirmCreatePRHook(assignment.id, loadAgentData)
   }
 
   const handleAddTerminal = () => {
