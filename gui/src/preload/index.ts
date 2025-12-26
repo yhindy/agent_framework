@@ -25,6 +25,7 @@ const api = {
   approvePlan: (superAgentId: string, planId: string) => ipcRenderer.invoke('agents:approvePlan', superAgentId, planId),
   teardownAgent: (agentId: string, force: boolean) => ipcRenderer.invoke('agents:teardown', agentId, force),
   unassignAgent: (agentId: string) => ipcRenderer.invoke('agents:unassign', agentId),
+  saveUIState: (agentId: string, uiState: any) => ipcRenderer.invoke('agents:saveUIState', agentId, uiState),
 
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>

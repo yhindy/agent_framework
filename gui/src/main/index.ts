@@ -501,6 +501,11 @@ function setupIPC(): void {
     return services!.agent.updateAssignment(projectPath, assignmentId, updates)
   })
 
+  ipcMain.handle('agents:saveUIState', async (_event, agentId: string, uiState: any) => {
+    const projectPath = await findProjectForAgent(agentId)
+    return services!.agent.saveUIState(projectPath, agentId, uiState)
+  })
+
   ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
     const projectPath = await findProjectForAssignment(assignmentId)
 

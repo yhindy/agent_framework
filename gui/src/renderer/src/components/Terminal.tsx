@@ -6,6 +6,8 @@ import './Terminal.css'
 
 interface TerminalProps {
   agentId: string
+  autoFocus?: boolean
+  onMount?: () => void
 }
 
 // Cache terminal OUTPUT (not XTerm instances - they can't be re-attached to DOM)
@@ -34,7 +36,7 @@ function initGlobalOutputListener() {
   })
 }
 
-function Terminal({ agentId }: TerminalProps) {
+function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -113,6 +115,21 @@ function Terminal({ agentId }: TerminalProps) {
 
       // Register this as the active terminal for live output
       activeTerminal = { agentId, terminal }
+
+      // Auto-focus if requested (for restoring focus after navigation)
+      if (autoFocus) {
+        setTimeout(() => {
+          if (!isDisposed) {
+            terminal.focus()
+            terminal.scrollToBottom()
+          }
+        }, 100)
+      }
+
+      // Call mount callback if provided
+      if (onMount) {
+        onMount()
+      }
       
       // Handle terminal input (must be after open)
       terminal.onData((data) => {
