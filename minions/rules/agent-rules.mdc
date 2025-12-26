@@ -1,0 +1,172 @@
+---
+alwaysApply: true
+---
+# AI Agent Development Guidelines
+
+This document defines rules and processes for AI agents working on this codebase. Following these guidelines ensures code quality and enables parallel development without conflicts.
+
+---
+
+## Core Principles
+
+1. **Test Before Commit** - Untested code should never be committed
+2. **Stay in Your Lane** - Only modify files in your assignment's allowlist
+3. **Small Commits** - One feature/fix per commit
+4. **Document Blockers** - If stuck, document the issue clearly
+
+---
+
+## Before Starting Any Task
+
+1. **Read Your Assignment**
+   ```bash
+   cat docs/agents/assignments/agent-X-*.md
+   ```
+   Understand requirements and file boundaries.
+
+2. **Check for Existing Patterns**
+   - Review similar code in the codebase
+   - Follow established conventions
+
+3. **Verify Your Branch**
+   ```bash
+   git branch --show-current
+   ```
+   Make sure you're on the correct feature branch.
+
+---
+
+## Commit Rules
+
+### Format
+```
+[area] brief description
+
+- Detail 1
+- Detail 2
+```
+
+### Common Areas
+- `[feat]` - New features
+- `[fix]` - Bug fixes
+- `[refactor]` - Code refactoring
+- `[test]` - Tests
+- `[docs]` - Documentation
+- `[style]` - Formatting, linting
+- `[chore]` - Maintenance tasks
+
+### Examples
+```
+[feat] add user profile page
+
+- Create ProfileCard component
+- Add profile route
+- Connect to user API
+
+[fix] resolve login redirect issue
+
+- Fix redirect URL encoding
+- Add error handling for invalid tokens
+```
+
+### Rules
+- One feature/fix per commit
+- All tests must pass before committing
+- Never commit:
+  - API keys or secrets
+  - Generated files (build/, dist/, node_modules/)
+  - IDE-specific files (.idea/, .vscode/)
+  - Environment files with real credentials
+
+---
+
+## Testing Requirements
+
+- **Run tests before every commit**
+- **Add tests for new functionality**
+- **Don't break existing tests**
+
+```bash
+# Example test commands (adjust for your project)
+npm test
+pytest
+go test ./...
+```
+
+---
+
+## Branch Strategy
+
+```
+main (protected)
+  └── feature branches
+        ├── feature/agent-1/user-profile
+        ├── feature/agent-2/search-api
+        └── ...
+```
+
+### Rules
+- `main` - Production-ready code only
+- `feature/*` - Individual work branches
+- PRs require passing CI before merge
+- Squash merge to keep history clean
+
+---
+
+## When Stuck
+
+1. Check existing code for patterns
+2. Review related tests
+3. Check your assignment file for context
+4. Document the blocker clearly in your progress log
+
+---
+
+## When Changing Shared Code
+
+If you need to modify code outside your allowlist:
+
+1. Document why the change is necessary
+2. Keep changes minimal
+3. Note it in your progress log
+4. Expect extra review scrutiny
+
+---
+
+## Communication Protocol
+
+### Progress Updates
+Update your assignment's Progress Log section after each work session.
+
+### Questions
+Add questions to the Questions/Blockers section of your assignment file.
+
+### Discovering Bugs
+1. Document the bug clearly
+2. Add failing test if possible
+3. Fix in separate commit
+4. Note in progress log
+
+---
+
+## Quick Reference
+
+### Git Commands
+```bash
+git status              # Check current state
+git add -A              # Stage all changes
+git commit -m "..."     # Commit with message
+git push                # Push to remote
+git pull origin main    # Get latest from main
+```
+
+### Common Tasks
+```bash
+# Create feature branch
+git checkout -b feature/agent-1/my-feature
+
+# Rebase on main if needed
+git fetch origin
+git rebase origin/main
+```
+
