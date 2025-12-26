@@ -3,7 +3,7 @@ import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { app } from 'electron'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -27,6 +27,9 @@ interface AgentSession {
   isWaitingForInput?: boolean
   prompt?: string
   model?: string
+
+  // UI state persistence
+  uiState?: UIState
 }
 
 export class AgentService {
@@ -133,7 +136,8 @@ export class AgentService {
               claudeSessionActive: agentInfo.claudeSessionActive,
               isWaitingForInput: agentInfo.isWaitingForInput,
               prompt: agentInfo.prompt,
-              model: agentInfo.model
+              model: agentInfo.model,
+              uiState: agentInfo.uiState
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -150,6 +154,7 @@ export class AgentService {
             session.isWaitingForInput = agentInfo.isWaitingForInput
             session.prompt = agentInfo.prompt
             session.model = agentInfo.model
+            session.uiState = agentInfo.uiState
           }
 
           agents.push(session)
@@ -730,6 +735,24 @@ export class AgentService {
     if (session) {
       session.assignmentId = null
       session.mode = 'idle'
+    }
+  }
+
+  async saveUIState(projectPath: string, agentId: string, uiState: UIState): Promise<void> {
+    const agents = await this.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
+
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found`)
+    }
+
+    // Update the .agent-info file with UI state
+    this.updateAgentInfo(agent.worktreePath, { uiState })
+
+    // Also update the in-memory session
+    const session = this.sessions.get(agentId)
+    if (session) {
+      session.uiState = uiState
     }
   }
   private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {

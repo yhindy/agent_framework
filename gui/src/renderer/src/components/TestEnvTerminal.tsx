@@ -7,6 +7,8 @@ import './Terminal.css'
 interface TestEnvTerminalProps {
   agentId: string
   commandId: string
+  autoFocus?: boolean
+  onMount?: () => void
 }
 
 // Cache terminal OUTPUT per agent+command
@@ -38,7 +40,7 @@ function initGlobalOutputListener() {
   })
 }
 
-function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
+function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const key = `${agentId}:${commandId}`
 
@@ -118,6 +120,21 @@ function TestEnvTerminal({ agentId, commandId }: TestEnvTerminalProps) {
 
       // Register this as an active terminal for live output
       activeTerminals.set(key, terminal)
+
+      // Auto-focus if requested (for restoring focus after navigation)
+      if (autoFocus) {
+        setTimeout(() => {
+          if (!isDisposed) {
+            terminal.focus()
+            terminal.scrollToBottom()
+          }
+        }, 100)
+      }
+
+      // Call mount callback if provided
+      if (onMount) {
+        onMount()
+      }
 
       // Handle terminal input (must be after open)
       terminal.onData((data) => {

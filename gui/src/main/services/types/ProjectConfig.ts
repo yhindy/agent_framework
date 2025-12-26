@@ -1,3 +1,11 @@
+// UI state for terminal and tab restoration
+export interface UIState {
+  lastActiveTab: string          // e.g., 'agent', 'terminal-2', 'test-dev'
+  plainTerminals: string[]       // e.g., ['terminal-1', 'terminal-2', 'terminal-5']
+  terminalCounter: number        // Next terminal ID number
+  lastFocusTime: string          // ISO timestamp of last focus change
+}
+
 // AgentInfo represents the full state stored in .agent-info file in each worktree
 export interface AgentInfo {
   id: string
@@ -25,6 +33,9 @@ export interface AgentInfo {
   claudeLastSeen?: string        // Last time we saw output from Claude
   isWaitingForInput?: boolean    // Persisted waiting state for notification restoration
   lastOutputSnapshot?: string    // Last ~500 chars of output for resume detection
+
+  // UI state persistence for terminal/tab restoration
+  uiState?: UIState
 }
 
 export interface ChildPlan {

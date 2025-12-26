@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
@@ -6,6 +6,7 @@ import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import LoadingModal from './LoadingModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { debounce } from '../utils/debounce'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -55,6 +56,20 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [isTearingDown, setIsTearingDown] = useState(false)
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
+
+  // Track if we've auto-focused on initial load
+  const hasAutoFocused = useRef(false)
+
+  // Debounced save for UI state
+  const saveUIStateDebounced = useRef(
+    debounce(async (agentId: string, uiState: any) => {
+      try {
+        await window.electronAPI.saveUIState(agentId, uiState)
+      } catch (err) {
+        console.error('Failed to save UI state:', err)
+      }
+    }, 1000)
+  ).current
 
   const {
     showPRConfirm,
@@ -118,6 +133,27 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }, [agentId])
 
+  // Save UI state when it changes
+  useEffect(() => {
+    if (!agentId) return
+
+    const uiState = {
+      lastActiveTab: activeTab,
+      plainTerminals,
+      terminalCounter,
+      lastFocusTime: new Date().toISOString()
+    }
+
+    saveUIStateDebounced(agentId, uiState)
+  }, [activeTab, plainTerminals, terminalCounter, agentId, saveUIStateDebounced])
+
+  // Cleanup debounced save on unmount
+  useEffect(() => {
+    return () => {
+      saveUIStateDebounced.cancel()
+    }
+  }, [saveUIStateDebounced])
+
   const loadAgentData = async () => {
     if (!agentId) return
 
@@ -149,6 +185,24 @@ function AgentView({ activeProjects }: AgentViewProps) {
       setCurrentTool(assignmentData.tool)
       setCurrentModel(assignmentData.model || 'opus')
       setCurrentMode(assignmentData.mode)
+    }
+
+    // Restore UI state if available
+    if (agentData?.uiState) {
+      const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = agentData.uiState
+
+      // Validate terminal counter against saved terminals
+      const maxTerminalNum = Math.max(
+        ...savedTerminals.map(id => parseInt(id.split('-')[1]) || 0),
+        0
+      )
+      const restoredCounter = Math.max(savedCounter, maxTerminalNum)
+
+      // Validate active tab exists (wait for test env commands to be loaded)
+      // For now just restore, validation will happen when rendering
+      setPlainTerminals(savedTerminals)
+      setTerminalCounter(restoredCounter)
+      setActiveTab(lastActiveTab)
     }
   }
 
@@ -578,17 +632,33 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 </div>
               </div>
             ) : (
-              agentId && <Terminal agentId={agentId} />
+              agentId && <Terminal
+                agentId={agentId}
+                autoFocus={!hasAutoFocused.current}
+                onMount={() => { hasAutoFocused.current = true }}
+              />
             )
           )}
           {plainTerminals.map(terminalId => (
             activeTab === terminalId && agentId && (
-              <PlainTerminal key={terminalId} agentId={agentId} terminalId={terminalId} />
+              <PlainTerminal
+                key={terminalId}
+                agentId={agentId}
+                terminalId={terminalId}
+                autoFocus={!hasAutoFocused.current}
+                onMount={() => { hasAutoFocused.current = true }}
+              />
             )
           ))}
           {testEnvCommands.map(cmd => (
             activeTab === cmd.id && agentId && (
-              <TestEnvTerminal key={cmd.id} agentId={agentId} commandId={cmd.id} />
+              <TestEnvTerminal
+                key={cmd.id}
+                agentId={agentId}
+                commandId={cmd.id}
+                autoFocus={!hasAutoFocused.current}
+                onMount={() => { hasAutoFocused.current = true }}
+              />
             )
           ))}
         </div>

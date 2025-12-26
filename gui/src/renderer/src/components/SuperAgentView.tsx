@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
@@ -8,6 +8,7 @@ import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
 import LoadingModal from './LoadingModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { debounce } from '../utils/debounce'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
 
@@ -34,6 +35,20 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
 
+  // Track if we've auto-focused on initial load
+  const hasAutoFocused = useRef(false)
+
+  // Debounced save for UI state
+  const saveUIStateDebounced = useRef(
+    debounce(async (agentId: string, uiState: any) => {
+      try {
+        await window.electronAPI.saveUIState(agentId, uiState)
+      } catch (err) {
+        console.error('Failed to save UI state:', err)
+      }
+    }, 1000)
+  ).current
+
   // PR management
   const {
     showPRConfirm,
@@ -52,6 +67,22 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       setError(null)
       const details = await window.electronAPI.getSuperAgentDetails(agentId)
       setAgent(details)
+
+      // Restore UI state if available
+      if (details?.uiState) {
+        const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = details.uiState
+
+        // Validate terminal counter against saved terminals
+        const maxTerminalNum = Math.max(
+          ...savedTerminals.map((id: string) => parseInt(id.split('-')[1]) || 0),
+          0
+        )
+        const restoredCounter = Math.max(savedCounter, maxTerminalNum)
+
+        setPlainTerminals(savedTerminals)
+        setTerminalCounter(restoredCounter)
+        setActiveTab(lastActiveTab)
+      }
     } catch (err: any) {
       console.error('Failed to load super agent details:', err)
       setError(err.message || 'Failed to load super agent')
@@ -97,6 +128,27 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       unsubscribeExited()
     }
   }, [agentId])
+
+  // Save UI state when it changes
+  useEffect(() => {
+    if (!agentId) return
+
+    const uiState = {
+      lastActiveTab: activeTab,
+      plainTerminals,
+      terminalCounter,
+      lastFocusTime: new Date().toISOString()
+    }
+
+    saveUIStateDebounced(agentId, uiState)
+  }, [activeTab, plainTerminals, terminalCounter, agentId, saveUIStateDebounced])
+
+  // Cleanup debounced save on unmount
+  useEffect(() => {
+    return () => {
+      saveUIStateDebounced.cancel()
+    }
+  }, [saveUIStateDebounced])
 
   const handleOpenCursor = async () => {
     if (agent) {
@@ -345,16 +397,32 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
 
               <div className="unified-terminal-container">
                 {activeTab === 'orchestration' && (
-                  <Terminal agentId={agent.agentId} />
+                  <Terminal
+                    agentId={agent.agentId}
+                    autoFocus={!hasAutoFocused.current}
+                    onMount={() => { hasAutoFocused.current = true }}
+                  />
                 )}
                 {plainTerminals.map(terminalId => (
                   activeTab === terminalId && (
-                    <PlainTerminal key={terminalId} agentId={agent.agentId} terminalId={terminalId} />
+                    <PlainTerminal
+                      key={terminalId}
+                      agentId={agent.agentId}
+                      terminalId={terminalId}
+                      autoFocus={!hasAutoFocused.current}
+                      onMount={() => { hasAutoFocused.current = true }}
+                    />
                   )
                 ))}
                 {testEnvCommands.map(cmd => (
                   activeTab === cmd.id && (
-                    <TestEnvTerminal key={cmd.id} agentId={agent.agentId} commandId={cmd.id} />
+                    <TestEnvTerminal
+                      key={cmd.id}
+                      agentId={agent.agentId}
+                      commandId={cmd.id}
+                      autoFocus={!hasAutoFocused.current}
+                      onMount={() => { hasAutoFocused.current = true }}
+                    />
                   )
                 ))}
               </div>

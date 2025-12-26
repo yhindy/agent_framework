@@ -7,6 +7,8 @@ import './Terminal.css'
 interface PlainTerminalProps {
   agentId: string
   terminalId: string
+  autoFocus?: boolean
+  onMount?: () => void
 }
 
 // Cache terminal OUTPUT (not XTerm instances - they can't be re-attached to DOM)
@@ -35,7 +37,7 @@ function initGlobalOutputListener() {
   })
 }
 
-function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
+function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const fullTerminalId = `${agentId}-${terminalId}`
 
@@ -119,6 +121,21 @@ function PlainTerminal({ agentId, terminalId }: PlainTerminalProps) {
 
       // Register this as the active terminal for live output
       activeTerminal = { terminalId: fullTerminalId, terminal }
+
+      // Auto-focus if requested (for restoring focus after navigation)
+      if (autoFocus) {
+        setTimeout(() => {
+          if (!isDisposed) {
+            terminal.focus()
+            terminal.scrollToBottom()
+          }
+        }, 100)
+      }
+
+      // Call mount callback if provided
+      if (onMount) {
+        onMount()
+      }
 
       // Handle terminal input (must be after open)
       terminal.onData((data) => {
