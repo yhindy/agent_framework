@@ -13,3 +13,19 @@
   overflow-y: auto;
 }
 
+/* Ensure cursor is always visible - fix for block cursor in vim normal mode */
+.terminal-container .xterm-cursor-layer {
+  z-index: 10;
+}
+
+/* Make block cursor more visible by ensuring proper rendering */
+.terminal-container .xterm-cursor-block {
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* Ensure cursor outline is visible */
+.terminal-container .xterm-cursor-outline {
+  outline: 1px solid #ffffff !important;
+}
+

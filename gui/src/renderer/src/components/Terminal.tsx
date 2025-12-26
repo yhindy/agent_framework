@@ -46,12 +46,15 @@ function Terminal({ agentId }: TerminalProps) {
     // Always create a fresh terminal (XTerm can't be re-attached to a new DOM element)
     const terminal = new XTerm({
       cursorBlink: true,
+      cursorStyle: 'block',
+      cursorInactiveStyle: 'outline', // Show outline cursor when unfocused so it's always visible
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
         cursor: '#ffffff',
+        cursorAccent: '#000000', // Text color inside block cursor for contrast
         black: '#000000',
         red: '#cd3131',
         green: '#0dbc79',
@@ -113,6 +116,13 @@ function Terminal({ agentId }: TerminalProps) {
       
       // Handle terminal input (must be after open)
       terminal.onData((data) => {
+        // Filter out focus reporting sequences that xterm.js sends but shouldn't go to PTY
+        // \x1b[I = Focus In, \x1b[O = Focus Out (CSI I and CSI O)
+        // These sequences confuse applications like vim and claude code
+        if (data === '\x1b[I' || data === '\x1b[O') {
+          return // Don't send focus sequences to PTY
+        }
+        
         window.electronAPI.sendTerminalInput(agentId, data)
       })
       
