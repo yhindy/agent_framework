@@ -1,6 +1,7 @@
 {
   "appId": "com.minion-laboratory.app",
   "productName": "Minion Laboratory",
+  "icon": "icon.png",
   "directories": {
     "output": "dist"
   },
@@ -16,14 +17,17 @@
   ],
   "mac": {
     "category": "public.app-category.developer-tools",
-    "target": ["dmg"]
+    "target": ["dmg"],
+    "icon": "icon.icns"
   },
   "win": {
-    "target": ["nsis"]
+    "target": ["nsis"],
+    "icon": "icon.ico"
   },
   "linux": {
     "target": ["AppImage"],
-    "category": "Development"
+    "category": "Development",
+    "icon": "icon.png"
   }
 }
 

@@ -1,11 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ProjectService } from './services/ProjectService'
 import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
 let services: {
@@ -17,11 +21,16 @@ let services: {
 } | null = null
 
 function createWindow(): void {
+  // Always use PNG for BrowserWindow icon (cross-platform compatibility)
+  const resourcesPath = join(__dirname, '../../resources')
+  const iconPath = join(resourcesPath, 'icon.png')
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     show: false,
     autoHideMenuBar: true,
+    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -678,7 +687,19 @@ function setupIPC(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.agent-orchestrator')
+  app.setName('Minion Laboratory')
+  electronApp.setAppUserModelId('com.minion-laboratory.app')
+
+  // Set app icon for menu bar/dock on macOS
+  if (process.platform === 'darwin') {
+    try {
+      const resourcesPath = join(__dirname, '../../resources')
+      const iconPath = join(resourcesPath, 'icon.png')
+      app.dock.setIcon(iconPath)
+    } catch (error) {
+      console.warn('Failed to set dock icon:', error)
+    }
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
