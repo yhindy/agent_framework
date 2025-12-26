@@ -182,6 +182,21 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
 
     window.addEventListener('resize', handleResize)
 
+    // Handle container resize (when parent elements expand/collapse)
+    const resizeObserver = new ResizeObserver(() => {
+      if (isDisposed) return
+      try {
+        fitAddon.fit()
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizeTestEnv(agentId, commandId, terminal.cols, terminal.rows)
+        }
+      } catch (err) {
+        // Ignore resize errors on disposed terminal
+      }
+    })
+
+    resizeObserver.observe(containerElement)
+
     return () => {
       isDisposed = true
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
@@ -190,6 +205,7 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
       activeTerminals.delete(key)
       containerElement.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       terminal.dispose()
     }
   }, [agentId, commandId, key])

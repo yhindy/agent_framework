@@ -184,18 +184,34 @@ function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTermina
 
     window.addEventListener('resize', handleResize)
 
+    // Handle container resize (when parent elements expand/collapse)
+    const resizeObserver = new ResizeObserver(() => {
+      if (isDisposed) return
+      try {
+        fitAddon.fit()
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizePlainTerminal(fullTerminalId, terminal.cols, terminal.rows)
+        }
+      } catch (err) {
+        // Ignore resize errors on disposed terminal
+      }
+    })
+
+    resizeObserver.observe(containerElement)
+
     return () => {
       isDisposed = true
-      
+
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
-      
+
       // Clear active terminal if it's this one
       if (activeTerminal && activeTerminal.terminalId === fullTerminalId) {
         activeTerminal = null
       }
       containerElement.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       terminal.dispose()
       // Note: We don't stop the backend terminal here to preserve the session
     }

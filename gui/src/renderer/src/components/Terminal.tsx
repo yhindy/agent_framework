@@ -178,18 +178,34 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
 
     window.addEventListener('resize', handleResize)
 
+    // Handle container resize (when parent elements expand/collapse)
+    const resizeObserver = new ResizeObserver(() => {
+      if (isDisposed) return
+      try {
+        fitAddon.fit()
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizeTerminal(agentId, terminal.cols, terminal.rows)
+        }
+      } catch (err) {
+        // Ignore resize errors on disposed terminal
+      }
+    })
+
+    resizeObserver.observe(containerElement)
+
     return () => {
       isDisposed = true
-      
+
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
-      
+
       // Clear active terminal if it's this one
       if (activeTerminal && activeTerminal.agentId === agentId) {
         activeTerminal = null
       }
       containerElement.removeEventListener('focus', handleFocus, true)
       window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       terminal.dispose()
     }
   }, [agentId])

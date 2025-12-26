@@ -26,6 +26,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  min-height: 0; /* Allow flex children to shrink below content size */
 }
 
 .collapsible-section {
@@ -78,11 +79,13 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0; /* Critical for proper flex sizing */
 }
 
 .collapsible-section.full-screen .terminal-wrapper {
   flex: 1;
   height: auto;
+  min-height: 0;
 }
 
 .super-grid {
@@ -145,6 +148,7 @@
 .collapsible-section.full-screen .tab-section {
   flex: 1;
   height: auto;
+  min-height: 0;
 }
 
 /* Unified Tab Interface (reused from AgentView) */
