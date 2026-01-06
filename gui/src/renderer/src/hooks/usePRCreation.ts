@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useLoadingSnackbar } from './useLoadingSnackbar'
 
 export const usePRCreation = () => {
   const [showPRConfirm, setShowPRConfirm] = useState(false)
   const [autoCommit, setAutoCommit] = useState(true)
   const [isCreatingPR, setIsCreatingPR] = useState(false)
+  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   const prMessages = [
     'Stuffing code into a rocket...',
@@ -21,12 +23,18 @@ export const usePRCreation = () => {
   }
 
   const handleConfirmCreatePR = async (agentId: string, onSuccess: () => void) => {
+    const snackbarId = showLoading({
+      title: 'Creating Pull Request...',
+      messages: prMessages
+    })
     try {
       setIsCreatingPR(true)
       setShowPRConfirm(false)
 
       console.log('[usePRCreation] Creating PR for:', agentId, 'autoCommit:', autoCommit)
       const result = await window.electronAPI.createPullRequest(agentId, autoCommit)
+
+      hideLoading(snackbarId)
 
       // Show success with link
       alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
@@ -35,6 +43,7 @@ export const usePRCreation = () => {
       // Call the callback to reload data
       onSuccess()
     } catch (error: any) {
+      hideLoading(snackbarId)
       alert(`Failed to create PR: ${error.message}`)
     } finally {
       setIsCreatingPR(false)

@@ -4,8 +4,8 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
-import LoadingModal from './LoadingModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import './AgentView.css'
 
@@ -53,9 +53,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [activeTab, setActiveTab] = useState<string>('agent')
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
-  const [isTearingDown, setIsTearingDown] = useState(false)
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
+  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
@@ -321,22 +321,26 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const handleConfirmCleanup = async () => {
     if (!agentId) return
 
+    let snackbarId: string | undefined
     try {
       setShowCleanupModal(false)
-      
+
       if (cleanupAction === 'teardown') {
-        setIsTearingDown(true)
+        snackbarId = showLoading({
+          title: 'Archiving Mission...',
+          messages: teardownMessages
+        })
         await window.electronAPI.teardownAgent(agentId, false)
-        setIsTearingDown(false)
+        hideLoading(snackbarId)
       } else {
         await window.electronAPI.unassignAgent(agentId)
       }
-      
+
       // Navigate back to home
       navigate('/workspace')
     } catch (error: any) {
-      setIsTearingDown(false)
-      
+      if (snackbarId) hideLoading(snackbarId)
+
       // Check if error is due to uncommitted changes
       if (cleanupAction === 'teardown' && error.message.includes('uncommitted changes')) {
         setTeardownError(error.message)
@@ -350,16 +354,19 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const handleForceTeardown = async () => {
     if (!agentId) return
 
+    const snackbarId = showLoading({
+      title: 'Force Archiving Mission...',
+      messages: teardownMessages
+    })
     try {
       setShowForceModal(false)
-      setIsTearingDown(true)
       await window.electronAPI.teardownAgent(agentId, true)
-      setIsTearingDown(false)
-      
+      hideLoading(snackbarId)
+
       // Navigate back to home
       navigate('/workspace')
     } catch (error: any) {
-      setIsTearingDown(false)
+      hideLoading(snackbarId)
       alert(`Error during force teardown: ${error.message}`)
     }
   }
@@ -730,17 +737,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         </div>
       )}
 
-      <LoadingModal
-        isOpen={isCreatingPR}
-        messages={prMessages}
-        title="Creating Pull Request..."
-      />
-
-      <LoadingModal
-        isOpen={isTearingDown}
-        messages={teardownMessages}
-        title="Archiving Mission..."
-      />
     </div>
   )
 }

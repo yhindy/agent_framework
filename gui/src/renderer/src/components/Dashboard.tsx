@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import LoadingModal from './LoadingModal'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -28,10 +28,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [isCreatingPR, setIsCreatingPR] = useState(false)
-  const [isTearingDown, setIsTearingDown] = useState(false)
   const [showMissionDropdown, setShowMissionDropdown] = useState(false)
   const missionDropdownRef = useRef<HTMLDivElement>(null)
+  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   const loadingMessages = [
     'Making sure Gru has visibility...',
@@ -161,6 +160,10 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   }
 
   const handleCreateAssignment = async () => {
+    const snackbarId = showLoading({
+      title: 'Deploying Minion...',
+      messages: loadingMessages
+    })
     try {
       setIsCreating(true)
 
@@ -168,8 +171,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       const feature = formData.tool === 'cursor' ? `Cursor Session: ${formData.shortName}` : formData.prompt
 
       // Determine project path (if single project, use that, otherwise use selected)
-      const projectPath = activeProjects.length === 1 
-        ? activeProjects[0].path 
+      const projectPath = activeProjects.length === 1
+        ? activeProjects[0].path
         : formData.projectPath
 
       // Backend will auto-generate agentId and construct full branch name
@@ -200,6 +203,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       const agentId = result.agentId  // Use the auto-generated agentId from backend
       setShowCreateForm(false)
       setIsCreating(false)
+      hideLoading(snackbarId)
 
       // Navigate to the new agent view
       if (formData.isSuper) {
@@ -229,6 +233,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       }, 1500)
     } catch (error: any) {
       setIsCreating(false)
+      hideLoading(snackbarId)
       alert('Error creating assignment: ' + error.message)
     }
   }
@@ -242,21 +247,24 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const handleConfirmCreatePR = async () => {
     if (!selectedAssignmentForPR) return
 
+    const snackbarId = showLoading({
+      title: 'Creating Pull Request...',
+      messages: prMessages
+    })
     try {
       setCreatingPRFor(prev => new Set(prev).add(selectedAssignmentForPR.id))
       setShowPRConfirm(false)
-      setIsCreatingPR(true)
 
       console.log('[Dashboard] Creating PR for:', selectedAssignmentForPR.id, 'autoCommit:', autoCommit)
       const result = await window.electronAPI.createPullRequest(selectedAssignmentForPR.id, autoCommit)
-      
-      setIsCreatingPR(false)
-      
+
+      hideLoading(snackbarId)
+
       // Show success with link
       alert(`Pull Request created successfully!\n\n${result.url}\n\nOpening in browser...`)
       window.open(result.url, '_blank')
     } catch (error: any) {
-      setIsCreatingPR(false)
+      hideLoading(snackbarId)
       alert(`Failed to create PR: ${error.message}`)
     } finally {
       setCreatingPRFor(prev => {
@@ -298,13 +306,16 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       return
     }
 
+    const snackbarId = showLoading({
+      title: 'Archiving Mission...',
+      messages: teardownMessages
+    })
     try {
-      setIsTearingDown(true)
       await window.electronAPI.teardownAgent(assignment.agentId, false)
-      setIsTearingDown(false)
+      hideLoading(snackbarId)
       alert('Mission archived and worktree removed.')
     } catch (error: any) {
-      setIsTearingDown(false)
+      hideLoading(snackbarId)
       alert(`Failed to archive: ${error.message}`)
     }
   }
@@ -770,23 +781,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         </div>
       )}
 
-      <LoadingModal
-        isOpen={isCreating}
-        messages={loadingMessages}
-        title="Deploying Minion..."
-      />
-
-      <LoadingModal
-        isOpen={isCreatingPR}
-        messages={prMessages}
-        title="Creating Pull Request..."
-      />
-
-      <LoadingModal
-        isOpen={isTearingDown}
-        messages={teardownMessages}
-        title="Archiving Mission..."
-      />
     </div>
   )
 }
