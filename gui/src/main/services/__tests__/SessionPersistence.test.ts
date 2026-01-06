@@ -489,15 +489,6 @@ describe('Session Persistence', () => {
       expect(command).toContain('opus')
     })
 
-    it('preserves existing signal detection', async () => {
-      await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
-
-      const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-      dataHandler('===SIGNAL:PLANS_READY===\n')
-
-      expect(mockWebContents.send).toHaveBeenCalledWith('agent:signal', 'agent-1', 'PLANS_READY')
-    })
-
     it('handles input/output correctly with session persistence', async () => {
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 

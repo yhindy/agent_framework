@@ -99,14 +99,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       loadAgent()
     })
 
-    // Listen for signals (e.g. PLANS_READY)
-    const unsubscribeSignals = window.electronAPI.onAgentSignal((signalingAgentId, signal) => {
-      if (signalingAgentId === agentId) {
-        console.log(`Received signal ${signal} from ${signalingAgentId}, reloading...`)
-        loadAgent()
-      }
-    })
-
     // Listen for test env lifecycle events
     const unsubscribeStarted = window.electronAPI.onTestEnvStarted((id) => {
       if (id === agentId) loadTestEnvStatus()
@@ -122,7 +114,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
 
     return () => {
       unsubscribeList()
-      unsubscribeSignals()
       unsubscribeStarted()
       unsubscribeStopped()
       unsubscribeExited()

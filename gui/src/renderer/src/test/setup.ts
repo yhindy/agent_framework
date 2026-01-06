@@ -6,7 +6,6 @@ Object.defineProperty(window, 'electronAPI', {
   value: {
     listAgentsForProject: vi.fn(),
     getAssignmentsForProject: vi.fn(),
-    onAgentSignal: vi.fn(() => vi.fn()),
     onAgentListUpdate: vi.fn(() => vi.fn()),
     onTestEnvStarted: vi.fn(() => vi.fn()),
     onTestEnvStopped: vi.fn(() => vi.fn()),
@@ -31,6 +30,8 @@ Object.defineProperty(window, 'electronAPI', {
     onAssignmentsUpdate: vi.fn(() => vi.fn()),
     onAgentWaitingForInput: vi.fn(() => vi.fn()),
     onAgentResumedWork: vi.fn(() => vi.fn()),
+    onPlainTerminalWaitingForInput: vi.fn(() => vi.fn()),
+    onPlainTerminalResumedWork: vi.fn(() => vi.fn()),
   }
 })
 

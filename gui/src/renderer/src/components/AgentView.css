@@ -113,24 +113,6 @@
   background: #23d18b;
 }
 
-.signal-message {
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.signal-message.info {
-  background: rgba(14, 99, 156, 0.2);
-  color: #4fc3f7;
-  border-bottom: 1px solid #0e639c;
-}
-
-.signal-message.warning {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ffb74d;
-  border-bottom: 1px solid #ff9800;
-}
-
 .agent-content {
   flex: 1;
   overflow: hidden;

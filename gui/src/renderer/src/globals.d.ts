@@ -38,6 +38,8 @@ declare global {
       sendPlainTerminalInput: (terminalId: string, data: string) => void
       resizePlainTerminal: (terminalId: string, cols: number, rows: number) => void
       onPlainTerminalOutput: (callback: (terminalId: string, data: string) => void) => () => void
+      onPlainTerminalWaitingForInput: (callback: (terminalId: string, promptText: string) => void) => () => void
+      onPlainTerminalResumedWork: (callback: (terminalId: string) => void) => () => void
 
       // Assignment APIs
       getAssignments: () => Promise<any>
@@ -63,7 +65,6 @@ declare global {
       onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => () => void
 
       // Event listeners
-      onAgentSignal: (callback: (agentId: string, signal: string) => void) => () => void
       onAgentListUpdate: (callback: () => void) => () => void
       onAssignmentsUpdate: (callback: () => void) => () => void
       onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => void

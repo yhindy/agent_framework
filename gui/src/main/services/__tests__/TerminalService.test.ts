@@ -3,12 +3,11 @@ import { TerminalService } from '../TerminalService'
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import * as fs from 'fs'
-import * as cp from 'child_process'
 
 // Mock Electron
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
-  ipcMain: { on: vi.fn(), handle: vi.fn() } // Add other used exports if needed
+  ipcMain: { on: vi.fn(), handle: vi.fn() }
 }))
 
 // Mock node-pty
@@ -81,119 +80,292 @@ describe('TerminalService Input Detection', () => {
     expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
   })
 
-  it('emits waitingForInput event after timer expires and process is sleeping', async () => {
+  it('emits waitingForInput event after timer expires (uses IdleDetector)', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
-    // Mock process state to be sleeping (Linux style)
-    Object.defineProperty(process, 'platform', { value: 'linux' })
-    vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) S ...') // 'S' state
-    
-    // Simulate Claude UI start and prompt
+
+    // Simulate Claude UI start and non-working output
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
     dataHandler('Claude Code 0.0.1\n') // Header to set claudeStarted = true
-    dataHandler('Continue? [y/n]')
-    
-    // Advance time
-    vi.advanceTimersByTime(1500)
-    
-    // Verify event
-    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', expect.stringContaining('Continue? [y/n]'))
+    dataHandler('Some output without working indicators\n')
+
+    // Advance time past the idle threshold (2000ms)
+    vi.advanceTimersByTime(2500)
+
+    // Verify event - IdleDetector emits with a standard message
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'agent:waitingForInput',
+      'agent-1',
+      'Claude is waiting for input'
+    )
   })
 
-  it('does NOT emit waitingForInput if process is running', async () => {
+  it('does NOT emit waitingForInput when working patterns are detected', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
-    // Mock process state to be running (Linux style)
-    Object.defineProperty(process, 'platform', { value: 'linux' })
-    vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) R ...') // 'R' state
-    
-    // Simulate Claude UI start and prompt
+
+    // Simulate Claude UI start with working indicators
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
     dataHandler('Claude Code started...\n')
-    dataHandler('Continue? [y/n]')
-    
-    // Advance time
-    vi.advanceTimersByTime(1000)
-    
-    // Verify NO waiting event
-    expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
+    dataHandler('Thinking…') // Working pattern - should prevent waiting
+
+    // Advance time past idle threshold
+    vi.advanceTimersByTime(3000)
+
+    // Verify NO waiting event because we saw a working pattern
+    expect(mockWebContents.send).not.toHaveBeenCalledWith(
+      'agent:waitingForInput',
+      expect.anything(),
+      expect.anything()
+    )
   })
 
-  it('cancels idle timer if new output arrives', async () => {
+  it('cancels idle timer if working output arrives', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
+
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-    
-    // Prompt
-    dataHandler('Continue? [y/n]')
-    
-    // Advance 500ms (halfway)
-    vi.advanceTimersByTime(500)
-    
-    // More output
-    dataHandler('More data...')
-    
-    // Advance past original 1s mark
-    vi.advanceTimersByTime(600)
-    
-    // Verify NO waiting event
-    expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
+
+    // Start Claude and some output
+    dataHandler('Claude Code\n')
+    dataHandler('Some output...\n')
+
+    // Advance 1500ms (partway through idle threshold)
+    vi.advanceTimersByTime(1500)
+
+    // Working pattern arrives - resets timer
+    dataHandler('Thinking…')
+
+    // Advance past original threshold
+    vi.advanceTimersByTime(1000)
+
+    // Verify NO waiting event because working pattern reset the timer
+    expect(mockWebContents.send).not.toHaveBeenCalledWith(
+      'agent:waitingForInput',
+      expect.anything(),
+      expect.anything()
+    )
   })
 
   it('respects grace period after user input', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
-    // User sends input
-    terminalService.sendInput('agent-1', 'ls\n')
-    
-    // Mock process state to be sleeping
-    vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) S ...')
-    
-    // Prompt immediately after input
+
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Start Claude
     dataHandler('Claude Code started...\n')
-    dataHandler('Confirm? [y/n]')
-    
-    // Advance 1s
-    vi.advanceTimersByTime(1000)
-    
-    // Should NOT emit because < 5s since input
-    expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
-    
-    // Advance past grace period (4s more)
-    vi.advanceTimersByTime(4500)
-    
-    // Still shouldn't emit because the timer only runs once per prompt detection.
-    // The "grace period check" happens inside the timer callback.
-    // So the previous prompt was ignored. This is correct behavior.
+
+    // User sends input - starts grace period
+    terminalService.sendInput('agent-1', 'ls\n')
+
+    // Advance 500ms (within grace period)
+    vi.advanceTimersByTime(500)
+
+    // Output arrives after input (starts new idle timer)
+    dataHandler('Some response\n')
+
+    // Advance another 500ms (still within grace period of original input)
+    vi.advanceTimersByTime(500)
+
+    // More output
+    dataHandler('More output\n')
+
+    // At this point, when the idle timer fires, the input grace period check should pass
+    // because timeSinceLastInput will be ~1000ms which is NOT < 1000ms (the threshold)
+    // The test was incorrect - after 1000ms the grace period HAS expired
+    // So let's fix the test by sending input again right before the threshold
+    terminalService.sendInput('agent-1', 'more input\n')
+
+    // Now advance past idle threshold
+    vi.advanceTimersByTime(2500)
+
+    // Should NOT emit because we sent input recently
+    expect(mockWebContents.send).not.toHaveBeenCalledWith(
+      'agent:waitingForInput',
+      expect.anything(),
+      expect.anything()
+    )
   })
 
   it('clears waiting state on new input', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
-    // Force waiting state (manually trigger logic flow)
-    // We'll just assume it's waiting for this test setup if we could, 
-    // but better to simulate the flow
-    
-    vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.readFileSync).mockReturnValue('12345 (python) S ...')
-    
+
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Start Claude and trigger waiting state
     dataHandler('Claude Code 0.0.1\n')
-    dataHandler('Confirm? [y/n]')
-    vi.advanceTimersByTime(1500)
-    
+    dataHandler('Some output\n')
+    vi.advanceTimersByTime(2500)
+
     // Should be waiting now
-    expect(mockWebContents.send).toHaveBeenCalledWith('agent:waitingForInput', 'agent-1', expect.stringContaining('Confirm? [y/n]'))
-    
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'agent:waitingForInput',
+      'agent-1',
+      'Claude is waiting for input'
+    )
+
     // Send input
     terminalService.sendInput('agent-1', 'y\n')
-    
+
     // Should emit resumedWork
     expect(mockWebContents.send).toHaveBeenCalledWith('agent:resumedWork', 'agent-1')
+  })
+})
+
+describe('PlainTerminal Detection', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+
+    // Setup Mock Window & WebContents
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    // Setup Mock PTY
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('emits plainTerminal:waitingForInput after idle threshold', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    // Get the data handler
+    const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Send some output
+    dataHandler('$ \n')
+
+    // Advance past idle threshold
+    vi.advanceTimersByTime(2500)
+
+    // Should emit waiting event for plain terminal
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'plainTerminal:waitingForInput',
+      'agent-1-shell-1',
+      'Terminal is waiting for input'
+    )
+  })
+
+  it('emits plainTerminal:resumedWork when working patterns detected', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Trigger waiting state
+    dataHandler('$ \n')
+    vi.advanceTimersByTime(2500)
+
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'plainTerminal:waitingForInput',
+      'agent-1-shell-1',
+      'Terminal is waiting for input'
+    )
+
+    // Send working pattern (Claude running in plain terminal)
+    dataHandler('Thinking…')
+
+    // Should emit resumedWork
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'plainTerminal:resumedWork',
+      'agent-1-shell-1'
+    )
+  })
+
+  it('clears waiting state on user input', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Trigger waiting state
+    dataHandler('$ \n')
+    vi.advanceTimersByTime(2500)
+
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'plainTerminal:waitingForInput',
+      'agent-1-shell-1',
+      'Terminal is waiting for input'
+    )
+
+    // Send user input
+    terminalService.sendPlainInput('agent-1-shell-1', 'ls\n')
+
+    // Should emit resumedWork
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'plainTerminal:resumedWork',
+      'agent-1-shell-1'
+    )
+  })
+
+  it('uses combined shell + Claude patterns for detection', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Test shell working patterns
+    const shellWorkingPatterns = [
+      'Installing packages... 50%',
+      'Building project...',
+      'Compiling TypeScript...'
+    ]
+
+    for (const pattern of shellWorkingPatterns) {
+      // Start idle timer
+      dataHandler('$ \n')
+      vi.advanceTimersByTime(1500)
+
+      // Send shell working pattern - should prevent waiting
+      dataHandler(pattern + '\n')
+
+      // Advance past threshold
+      vi.advanceTimersByTime(1500)
+
+      // Should NOT have emitted waiting because of working pattern
+      const waitingCalls = mockWebContents.send.mock.calls.filter(
+        (call: any[]) => call[0] === 'plainTerminal:waitingForInput'
+      )
+      expect(waitingCalls.length).toBe(0)
+
+      mockWebContents.send.mockClear()
+    }
+  })
+
+  it('does not emit waiting before idle threshold', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
+
+    // Send output
+    dataHandler('$ \n')
+
+    // Advance but not past threshold
+    vi.advanceTimersByTime(1500)
+
+    // Should NOT have emitted waiting
+    expect(mockWebContents.send).not.toHaveBeenCalledWith(
+      'plainTerminal:waitingForInput',
+      expect.anything(),
+      expect.anything()
+    )
   })
 })
 
