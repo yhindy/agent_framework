@@ -51,6 +51,20 @@ const api = {
     return () => ipcRenderer.removeListener('plainTerminal:output', subscription)
   },
 
+  // Plain Terminal Waiting Events
+  onPlainTerminalWaitingForInput: (callback: (terminalId: string, promptText: string) => void) => {
+    const subscription = (_event: any, terminalId: string, promptText: string) =>
+      callback(terminalId, promptText)
+    ipcRenderer.on('plainTerminal:waitingForInput', subscription)
+    return () => ipcRenderer.removeListener('plainTerminal:waitingForInput', subscription)
+  },
+
+  onPlainTerminalResumedWork: (callback: (terminalId: string) => void) => {
+    const subscription = (_event: any, terminalId: string) => callback(terminalId)
+    ipcRenderer.on('plainTerminal:resumedWork', subscription)
+    return () => ipcRenderer.removeListener('plainTerminal:resumedWork', subscription)
+  },
+
   // Assignment APIs
   getAssignments: () => ipcRenderer.invoke('assignments:get'),
   getAssignmentsForProject: (projectPath: string) => ipcRenderer.invoke('assignments:getForProject', projectPath),
@@ -66,13 +80,6 @@ const api = {
   checkDependencies: () => ipcRenderer.invoke('dependencies:check'),
 
   // Event listeners
-  onAgentSignal: (callback: (agentId: string, signal: string) => void) => {
-    const subscription = (_event: any, agentId: string, signal: string) =>
-      callback(agentId, signal)
-    ipcRenderer.on('agent:signal', subscription)
-    return () => ipcRenderer.removeListener('agent:signal', subscription)
-  },
-
   onAgentListUpdate: (callback: () => void) => {
     const subscription = () => callback()
     ipcRenderer.on('agents:updated', subscription)

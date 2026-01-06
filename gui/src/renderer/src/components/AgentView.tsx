@@ -45,7 +45,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [currentTool, setCurrentTool] = useState('claude')
   const [currentModel, setCurrentModel] = useState('haiku')
   const [currentMode, setCurrentMode] = useState('idle')
-  const [signalMessage, setSignalMessage] = useState<string>('')
   const [showCleanupModal, setShowCleanupModal] = useState(false)
   const [cleanupAction, setCleanupAction] = useState<'teardown' | 'unassign'>('unassign')
   const [showForceModal, setShowForceModal] = useState(false)
@@ -99,13 +98,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     loadTestEnvConfig()
     loadTestEnvStatus()
 
-    // Listen for signals
-    const unsubscribeSignal = window.electronAPI.onAgentSignal((id, signal) => {
-      if (id === agentId) {
-        handleSignal(signal)
-      }
-    })
-
     // Listen for agent updates
     const unsubscribeUpdate = window.electronAPI.onAgentListUpdate(() => {
       loadAgentData()
@@ -125,7 +117,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     })
 
     return () => {
-      unsubscribeSignal()
       unsubscribeUpdate()
       unsubscribeStarted()
       unsubscribeStopped()
@@ -249,23 +240,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const getTestEnvStatus = (commandId: string): boolean => {
     const status = testEnvStatuses.find(s => s.commandId === commandId)
     return status?.isRunning || false
-  }
-
-  const handleSignal = (signal: string) => {
-    const messages: Record<string, string> = {
-      PLAN_READY: '✓ Plan is ready for review',
-      DEV_COMPLETED: '✓ Development completed',
-      BLOCKER: '⚠️ Minion is blocked and needs attention',
-      QUESTION: '? Minion has a question',
-      WORKING: '⟳ Minion is working...'
-    }
-
-    setSignalMessage(messages[signal] || signal)
-
-    // Auto-clear after 5 seconds for non-critical signals
-    if (!['BLOCKER', 'QUESTION'].includes(signal)) {
-      setTimeout(() => setSignalMessage(''), 5000)
-    }
   }
 
   const handleStopAgent = async () => {
@@ -541,11 +515,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         </div>
       )}
 
-      {signalMessage && (
-        <div className={`signal-message ${signalMessage.includes('⚠️') ? 'warning' : 'info'}`}>
-          {signalMessage}
-        </div>
-      )}
 
       <div className="agent-content">
         <div className="unified-tabs">

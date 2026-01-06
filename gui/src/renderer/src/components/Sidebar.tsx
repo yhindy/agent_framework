@@ -33,6 +33,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
   const location = useLocation()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
+  const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
@@ -111,10 +112,25 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       })
     })
 
+    // Listen for plain terminal waiting state changes
+    const unsubPlainWaiting = window.electronAPI.onPlainTerminalWaitingForInput((terminalId) => {
+      setWaitingPlainTerminals(prev => new Set([...prev, terminalId]))
+    })
+
+    const unsubPlainResumed = window.electronAPI.onPlainTerminalResumedWork((terminalId) => {
+      setWaitingPlainTerminals(prev => {
+        const next = new Set(prev)
+        next.delete(terminalId)
+        return next
+      })
+    })
+
     return () => {
       unsubscribe()
       unsubWaiting()
       unsubResumed()
+      unsubPlainWaiting()
+      unsubPlainResumed()
     }
   }, [activeProjects])
 
@@ -215,7 +231,10 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
 
   const renderAgent = (agent: AgentSession, projectPath: string, depth = 0) => {
     const isActive = activeAgentId === agent.id
-    const isWaiting = waitingAgents.has(agent.id)
+    const isAgentWaiting = waitingAgents.has(agent.id)
+    // Check if any plain terminal for this agent is waiting (terminalId format: `${agentId}-${terminalId}`)
+    const hasWaitingPlainTerminal = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${agent.id}-`))
+    const isWaiting = isAgentWaiting || hasWaitingPlainTerminal
     const isCursor = agent.tool === 'cursor'
     const showSpinner = !isCursor && agent.terminalPid && !isWaiting
     const isCollapsed = collapsedSuperMinions.has(agent.id)
@@ -333,9 +352,15 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
             if (a.isBaseBranchAgent && !b.isBaseBranchAgent) return -1
             if (!a.isBaseBranchAgent && b.isBaseBranchAgent) return 1
 
-            // Then waiting agents
-            const aWaiting = waitingAgents.has(a.id)
-            const bWaiting = waitingAgents.has(b.id)
+            // Then waiting agents (check both agent waiting and plain terminal waiting)
+            const aAgentWaiting = waitingAgents.has(a.id)
+            const aPlainWaiting = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${a.id}-`))
+            const aWaiting = aAgentWaiting || aPlainWaiting
+
+            const bAgentWaiting = waitingAgents.has(b.id)
+            const bPlainWaiting = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${b.id}-`))
+            const bWaiting = bAgentWaiting || bPlainWaiting
+
             if (aWaiting && !bWaiting) return -1
             if (!aWaiting && bWaiting) return 1
 
