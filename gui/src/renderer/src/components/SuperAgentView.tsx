@@ -6,8 +6,8 @@ import TestEnvTerminal from './TestEnvTerminal'
 import ChildStatusCard from './ChildStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
-import LoadingModal from './LoadingModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
@@ -25,6 +25,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
+  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Tab management
   const [activeTab, setActiveTab] = useState<string>('orchestration')
@@ -162,13 +163,29 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     }
   }
 
+  const teardownMessages = [
+    'Returning minion to the break room...',
+    'Cleaning up banana peels from the workspace...',
+    'Shredding incriminating documents...',
+    'Wiping fingerprints from the keyboard...',
+    'Returning stolen shrink rays...',
+    'Escaping before Gru finds out...',
+    'Restocking the vending machine...'
+  ]
+
   const handleTeardown = async () => {
     if (!agent) return
     setIsTearingDown(true)
+    const snackbarId = showLoading({
+      title: 'Archiving Super Mission...',
+      messages: teardownMessages
+    })
     try {
       await window.electronAPI.teardownAgent(agent.agentId, true) // Force teardown
+      hideLoading(snackbarId)
       navigate('/workspace')
     } catch (err) {
+      hideLoading(snackbarId)
       console.error('Failed to teardown:', err)
       setError('Failed to cleanup agent')
       setShowTeardownConfirm(false)
@@ -523,10 +540,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         </div>
       )}
 
-      <LoadingModal
-        isOpen={isCreatingPR}
-        messages={prMessages}
-      />
     </div>
   )
 }
