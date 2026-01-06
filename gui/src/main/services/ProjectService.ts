@@ -221,6 +221,24 @@ export class ProjectService {
         console.warn('[ProjectService] config.sh not found at:', configPath)
       }
 
+      // Configure project name in config.json
+      console.log('[ProjectService] Configuring project name in config.json...')
+      const configJsonPath = join(minionsDest, 'config.json')
+
+      if (existsSync(configJsonPath)) {
+        try {
+          const configJson = JSON.parse(readFileSync(configJsonPath, 'utf-8'))
+          configJson.project = configJson.project || {}
+          configJson.project.name = projectName
+          writeFileSync(configJsonPath, JSON.stringify(configJson, null, 2))
+          console.log('[ProjectService] Updated config.json with project name:', projectName)
+        } catch (e) {
+          console.warn('[ProjectService] Failed to update config.json:', e)
+        }
+      } else {
+        console.warn('[ProjectService] config.json not found at:', configJsonPath)
+      }
+
       // Add to .gitignore
       console.log('[ProjectService] Updating .gitignore...')
       const gitignorePath = join(projectPath, '.gitignore')

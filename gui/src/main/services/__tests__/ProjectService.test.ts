@@ -180,7 +180,7 @@ describe('ProjectService Multi-Repo', () => {
 
   it('installFramework updates project files', async () => {
     const projectPath = '/path/to/myrepo'
-    
+
     // Mock fs for installFramework
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
@@ -192,14 +192,89 @@ describe('ProjectService Multi-Repo', () => {
       }
       return ''
     })
-    
+
     await projectService.installFramework(projectPath)
-    
+
     // Verify config.sh was updated
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('config.sh'),
       expect.stringContaining('PROJECT_NAME="myrepo"')
     )
+  })
+
+  it('installFramework updates config.json with correct project name', async () => {
+    const projectPath = '/path/to/newproject'
+
+    // Mock fs for installFramework
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
+      if (path.includes('config.json')) {
+        return JSON.stringify({
+          project: { name: 'agent_framework', defaultBaseBranch: 'main' },
+          setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+          assignments: [],
+          testEnvironments: []
+        })
+      }
+      if (path.includes('config.sh')) {
+        return 'PROJECT_NAME="default"'
+      }
+      if (path.includes('.gitignore')) {
+        return ''
+      }
+      return ''
+    })
+
+    await projectService.installFramework(projectPath)
+
+    // Find the config.json write call
+    const writeFileCalls = vi.mocked(fs.writeFileSync).mock.calls
+    const configJsonCall = writeFileCalls.find(call =>
+      typeof call[0] === 'string' && call[0].includes('config.json')
+    )
+
+    expect(configJsonCall).toBeDefined()
+    expect(configJsonCall![1]).toContain('"name": "newproject"')
+  })
+
+  it('installFramework creates unique base agent ID based on project name from config.json', async () => {
+    const projectPath = '/path/to/uniqueproject'
+
+    // Track the config.json content after it's written
+    let writtenConfigJson: any = null
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
+      if (path.includes('config.json')) {
+        // Return the written config if available, otherwise the original template
+        if (writtenConfigJson) {
+          return JSON.stringify(writtenConfigJson)
+        }
+        return JSON.stringify({
+          project: { name: 'agent_framework', defaultBaseBranch: 'main' },
+          setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+          assignments: [],
+          testEnvironments: []
+        })
+      }
+      if (path.includes('config.sh')) {
+        return 'PROJECT_NAME="default"'
+      }
+      return ''
+    })
+
+    vi.mocked(fs.writeFileSync).mockImplementation((path: any, content: any) => {
+      if (typeof path === 'string' && path.includes('config.json')) {
+        writtenConfigJson = JSON.parse(content)
+      }
+    })
+
+    await projectService.installFramework(projectPath)
+
+    // Verify config.json was updated with unique project name
+    expect(writtenConfigJson).toBeDefined()
+    expect(writtenConfigJson.project.name).toBe('uniqueproject')
+    expect(writtenConfigJson.project.name).not.toBe('agent_framework')
   })
 })
 
