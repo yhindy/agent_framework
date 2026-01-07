@@ -287,6 +287,16 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     }
   }
 
+  const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
+    navigator.clipboard.writeText(text)
+    // Provide quick visual feedback on the element itself
+    if (e?.currentTarget) {
+      const element = e.currentTarget
+      element.classList.add('copy-flash')
+      setTimeout(() => element.classList.remove('copy-flash'), 300)
+    }
+  }
+
   if (error) {
     return (
       <div className="super-agent-view">
@@ -310,23 +320,40 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   return (
     <div className="super-agent-view">
       <div className="agent-header">
-        <div className="agent-title">
-          <h2>👑 {agent.agentId} <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span></h2>
-        </div>
-        <div className="agent-actions">
-          <button onClick={handleCreatePRClick} className="success" disabled={isCreatingPR}>
-            {isCreatingPR ? 'Creating PR...' : 'Make PR'}
-          </button>
-          <button onClick={handleOpenCursor}>Open in Cursor</button>
-          <button className="danger" onClick={handleStop}>Stop</button>
-          <button className="danger" onClick={() => setShowTeardownConfirm(true)}>Cleanup</button>
-        </div>
-      </div>
+        <div className="agent-header-left">
+          <div className="agent-title">
+            <h2>
+              👑 {agent.agentId}
+              <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span>
+            </h2>
+          </div>
 
-      <div className="agent-info-bar">
-        <div className="info-item">
-          <span className="info-label">Main Mission:</span>
-          <span className="info-value">{agent.feature}</span>
+          <div className="info-badge mission-badge" title={`${agent.feature} (click to copy)`}>
+            <span className="info-badge-label">Mission:</span>
+            <span
+              className="info-badge-value copyable"
+              onClick={(e) => handleCopyToClipboard(agent.feature, e as any)}
+              role="button"
+              tabIndex={0}
+            >
+              {agent.feature}
+            </span>
+          </div>
+        </div>
+
+        <div className="agent-actions">
+          <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
+            {isCreatingPR ? 'Creating...' : 'Make PR'}
+          </button>
+          <button onClick={handleOpenCursor} className="compact-button">
+            Cursor
+          </button>
+          <button className="danger compact-button" onClick={handleStop}>
+            Stop
+          </button>
+          <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
+            🗑️
+          </button>
         </div>
       </div>
 

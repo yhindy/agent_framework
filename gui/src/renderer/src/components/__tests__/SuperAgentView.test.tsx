@@ -80,5 +80,115 @@ describe('SuperAgentView', () => {
     })
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument()
   })
+
+  it('renders consolidated header with mission badge', async () => {
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('👑 super-1')).toBeInTheDocument()
+      expect(screen.getByText('Budget: 1/5')).toBeInTheDocument()
+      expect(screen.getByText('Mission:')).toBeInTheDocument()
+      expect(screen.getByText('Master feature')).toBeInTheDocument()
+    })
+  })
+
+  it('does not render old agent-info-bar section', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('👑 super-1')).toBeInTheDocument()
+    })
+
+    const infoBar = container.querySelector('.agent-info-bar')
+    expect(infoBar).not.toBeInTheDocument()
+  })
+
+  it('renders mission badge in agent-header-left', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Mission:')).toBeInTheDocument()
+    })
+
+    const headerLeft = container.querySelector('.agent-header-left')
+    expect(headerLeft).toBeInTheDocument()
+
+    const missionBadge = headerLeft?.querySelector('.mission-badge')
+    expect(missionBadge).toBeInTheDocument()
+    expect(missionBadge?.textContent).toContain('Mission:')
+    expect(missionBadge?.textContent).toContain('Master feature')
+  })
+
+  it('renders mission badge with title attribute for truncation', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Master feature')).toBeInTheDocument()
+    })
+
+    const badgeValue = container.querySelector('.mission-badge .info-badge-value')
+    expect(badgeValue).toHaveAttribute('title', 'Master feature')
+  })
+
+  it('renders action buttons in agent-actions section', async () => {
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Make PR')).toBeInTheDocument()
+      expect(screen.getByText('Open in Cursor')).toBeInTheDocument()
+      expect(screen.getByText('Stop')).toBeInTheDocument()
+      expect(screen.getByText('Cleanup')).toBeInTheDocument()
+    })
+
+    // Verify they're in the actions section
+    const makePRBtn = screen.getByText('Make PR')
+    expect(makePRBtn.closest('.agent-actions')).toBeInTheDocument()
+  })
+
+  it('renders budget badge inline with agent ID', async () => {
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const budgetBadge = screen.getByText('Budget: 1/5')
+      expect(budgetBadge).toBeInTheDocument()
+      expect(budgetBadge.classList.contains('budget-badge')).toBe(true)
+    })
+  })
 })
 

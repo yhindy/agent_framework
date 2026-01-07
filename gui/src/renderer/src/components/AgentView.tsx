@@ -43,9 +43,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const navigate = useNavigate()
   const [agent, setAgent] = useState<AgentSession | null>(null)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [currentTool, setCurrentTool] = useState('claude')
-  const [currentModel, setCurrentModel] = useState('haiku')
-  const [currentMode, setCurrentMode] = useState('idle')
   const [showCleanupModal, setShowCleanupModal] = useState(false)
   const [cleanupAction, setCleanupAction] = useState<'teardown' | 'unassign'>('unassign')
   const [showForceModal, setShowForceModal] = useState(false)
@@ -179,12 +176,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     setAgent(agentData)
     setAssignment(assignmentData)
 
-    if (assignmentData) {
-      setCurrentTool(assignmentData.tool)
-      setCurrentModel(assignmentData.model || 'opus')
-      setCurrentMode(assignmentData.mode)
-    }
-
     // Restore UI state if available
     if (agentData?.uiState) {
       const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = agentData.uiState
@@ -270,27 +261,23 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }
 
-  const handleToolChange = async (tool: string) => {
-    setCurrentTool(tool)
-    // Set appropriate default model when switching tools
-    const defaultModel = tool === 'cursor-cli' ? 'auto' : 'opus'
-    setCurrentModel(defaultModel)
-    if (assignment) {
-      await window.electronAPI.updateAssignment(assignment.id, { tool, model: defaultModel })
+  const getStatusClass = (status: string): string => {
+    switch(status) {
+      case 'working': return 'working'
+      case 'pr_open': return 'pr_open'
+      case 'merged': return 'merged'
+      case 'idle': return 'idle'
+      default: return 'idle'
     }
   }
 
-  const handleModelChange = async (model: string) => {
-    setCurrentModel(model)
-    if (assignment) {
-      await window.electronAPI.updateAssignment(assignment.id, { model })
-    }
-  }
-
-  const handleModeChange = async (mode: string) => {
-    setCurrentMode(mode)
-    if (assignment) {
-      await window.electronAPI.updateAssignment(assignment.id, { mode })
+  const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
+    navigator.clipboard.writeText(text)
+    // Provide quick visual feedback on the element itself
+    if (e?.currentTarget) {
+      const element = e.currentTarget
+      element.classList.add('copy-flash')
+      setTimeout(() => element.classList.remove('copy-flash'), 300)
     }
   }
 
@@ -401,76 +388,60 @@ function AgentView({ activeProjects }: AgentViewProps) {
   return (
     <div className="agent-view">
       <div className="agent-header">
-        <div className="agent-title">
-          <h2>{agentId}</h2>
-        </div>
-
-        <div className="agent-controls">
-          <div className="control-group">
-            <label>Tool:</label>
-            <select value={currentTool} onChange={(e) => handleToolChange(e.target.value)} disabled={isRunning}>
-              <option value="claude">Claude</option>
-              <option value="cursor">Cursor</option>
-              <option value="cursor-cli">Cursor CLI</option>
-            </select>
+        <div className="agent-header-left">
+          <div className="agent-title">
+            <h2>🍌 {agentId}</h2>
           </div>
 
-          {currentTool === 'claude' && (
-            <div className="control-group">
-              <label>Model:</label>
-              <select value={currentModel} onChange={(e) => handleModelChange(e.target.value)} disabled={isRunning}>
-                <option value="haiku">Haiku</option>
-                <option value="sonnet">Sonnet</option>
-                <option value="opus">Opus</option>
-              </select>
-            </div>
-          )}
+          {assignment && (
+            <>
+              <div className="info-badge feature-badge" title={`${assignment.feature} (click to copy)`}>
+                <span className="info-badge-label">Feature:</span>
+                <span
+                  className="info-badge-value copyable"
+                  onClick={(e) => handleCopyToClipboard(assignment.feature, e as any)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {assignment.feature}
+                </span>
+              </div>
 
-          {currentTool === 'cursor-cli' && (
-            <div className="control-group">
-              <label>Model:</label>
-              <select value={currentModel} onChange={(e) => handleModelChange(e.target.value)} disabled={isRunning}>
-                <option value="composer-1">Composer 1</option>
-                <option value="auto">Auto</option>
-                <option value="sonnet-4.5">Sonnet 4.5</option>
-                <option value="sonnet-4.5-thinking">Sonnet 4.5 Thinking</option>
-                <option value="opus-4.5">Opus 4.5</option>
-                <option value="opus-4.5-thinking">Opus 4.5 Thinking</option>
-                <option value="opus-4.1">Opus 4.1</option>
-                <option value="gemini-3-pro">Gemini 3 Pro</option>
-                <option value="gemini-3-flash">Gemini 3 Flash</option>
-                <option value="gpt-5.2">GPT 5.2</option>
-                <option value="gpt-5.2-high">GPT 5.2 High</option>
-                <option value="gpt-5.1">GPT 5.1</option>
-                <option value="gpt-5.1-high">GPT 5.1 High</option>
-                <option value="gpt-5.1-codex">GPT 5.1 Codex</option>
-                <option value="gpt-5.1-codex-high">GPT 5.1 Codex High</option>
-                <option value="gpt-5.1-codex-max">GPT 5.1 Codex Max</option>
-                <option value="gpt-5.1-codex-max-high">GPT 5.1 Codex Max High</option>
-                <option value="grok">Grok</option>
-              </select>
-            </div>
-          )}
+              <div className="info-badge branch-badge" title={`${assignment.branch} (click to copy)`}>
+                <span
+                  className="info-badge-value copyable"
+                  onClick={(e) => handleCopyToClipboard(assignment.branch, e as any)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {assignment.branch}
+                </span>
+              </div>
 
-          {currentTool !== 'cursor-cli' && (
-            <div className="control-group">
-              <label>Mode:</label>
-              <select value={currentMode} onChange={(e) => handleModeChange(e.target.value)} disabled={isRunning}>
-                <option value="idle">Idle</option>
-                <option value="planning">Planning</option>
-                <option value="dev">Development</option>
-              </select>
-            </div>
+              <div className="status-badge" title={`${assignment.status} (click to copy)`}>
+                <span className={`status-dot ${getStatusClass(assignment.status)}`} />
+                <span
+                  className="copyable"
+                  onClick={(e) => handleCopyToClipboard(assignment.status, e as any)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {assignment.status}
+                </span>
+              </div>
+            </>
           )}
         </div>
 
         <div className="agent-actions">
-          {currentTool !== 'cursor' && isRunning && (
-            <button onClick={handleStopAgent} className="danger">
+          {assignment?.tool !== 'cursor' && isRunning && (
+            <button onClick={handleStopAgent} className="danger compact-button">
               Stop
             </button>
           )}
-          <button onClick={handleOpenCursor}>Open in Cursor</button>
+          <button onClick={handleOpenCursor} className="compact-button">
+            Cursor
+          </button>
 
           {assignment?.prStatus && assignment.prUrl && (
             <button
@@ -502,16 +473,16 @@ function AgentView({ activeProjects }: AgentViewProps) {
           {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
             <button
               onClick={handleCreatePRClick}
-              className="success"
+              className="success compact-button"
               disabled={isCreatingPR}
             >
-              {isCreatingPR ? 'Creating PR...' : 'Make PR'}
+              {isCreatingPR ? 'Creating...' : 'Make PR'}
             </button>
           )}
 
           {assignment && !assignment.isBaseBranchAgent && (
             <div className="cleanup-dropdown">
-              <button className="cleanup-button">Cleanup ▾</button>
+              <button className="cleanup-button compact-button icon-only">🗑️</button>
               <div className="cleanup-menu">
                 <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
                 <button onClick={() => handleCleanupClick('teardown')} className="danger-text">
@@ -523,24 +494,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         </div>
       </div>
 
-      {assignment && (
-        <div className="agent-info-bar">
-          <div className="info-item">
-            <span className="info-label">Feature:</span>
-            <span className="info-value">{assignment.feature}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Branch:</span>
-            <span className="info-value">{assignment.branch}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Status:</span>
-            <span className="info-value">{assignment.status}</span>
-          </div>
-        </div>
-      )}
-
-
       <div className="agent-content">
         <div className="unified-tabs">
           {/* Agent Terminal Tab (or Cursor placeholder) */}
@@ -550,7 +503,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
           >
             <span className="tab-icon">🍌</span>
             <span className="tab-name">
-              {currentTool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Minion Terminal'}
+              {assignment?.tool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Minion Terminal'}
             </span>
           </div>
 
@@ -624,7 +577,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
         <div className="unified-terminal-container">
           {activeTab === 'agent' && (
-            currentTool === 'cursor' && !isRunning ? (
+            assignment?.tool === 'cursor' && !isRunning ? (
               <div className="placeholder">
                 <div className="placeholder-icon">🍌</div>
                 <div className="placeholder-text">
