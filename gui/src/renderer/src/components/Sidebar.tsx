@@ -23,10 +23,25 @@ interface AgentSession {
   isSuperMinion?: boolean
   parentAgentId?: string
   isBaseBranchAgent?: boolean
+  branch?: string
 }
 
 interface AgentsByProject {
   [projectPath: string]: AgentSession[]
+}
+
+// Extract descriptive part from format: feature/project-id/branch-name -> branch-name
+function extractBranchName(branch?: string): string | null {
+  if (!branch) return null
+
+  const parts = branch.split('/')
+  if (parts.length >= 3) {
+    // Return everything after feature/project-id/
+    return parts.slice(2).join('/') // Handles nested paths
+  }
+
+  // Fallback: return full branch if format doesn't match
+  return branch
 }
 
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: SidebarProps) {
@@ -271,7 +286,15 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
             )}
             {agent.isBaseBranchAgent && <span className="agent-icon">🏠</span>}
             {!agent.isSuperMinion && !agent.isBaseBranchAgent && <span className="agent-icon"></span>}
-            <div className="agent-id">{agent.isBaseBranchAgent ? `${agent.assignmentId?.split('-').pop()} (Base)` : agent.id}</div>
+            {agent.isBaseBranchAgent ? (
+              <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
+            ) : agent.branch ? (
+              <div className="agent-branch" title={agent.branch}>
+                {extractBranchName(agent.branch)}
+              </div>
+            ) : (
+              <div className="agent-id">{agent.id}</div>
+            )}
             {isWaiting && !isActive && (
               <div className="attention-badge" title="Waiting for input">!</div>
             )}

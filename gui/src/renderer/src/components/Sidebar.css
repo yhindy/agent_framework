@@ -284,6 +284,26 @@
   font-weight: 500;
 }
 
+.agent-branch {
+  font-size: 13px;
+  font-family: 'Courier New', Courier, monospace;
+  color: #9cdcfe; /* Light blue, matches AgentView branch-badge */
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0; /* Critical for text-overflow to work */
+}
+
+.agent-item:hover .agent-branch {
+  opacity: 1;
+}
+
+.agent-item.active .agent-branch {
+  color: #b8e6ff; /* Brighter blue when active */
+}
+
 .attention-badge {
   display: flex;
   align-items: center;

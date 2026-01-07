@@ -20,6 +20,7 @@ interface AgentSession {
   isSuperMinion?: boolean
   parentAgentId?: string
   isBaseBranchAgent?: boolean
+  branch?: string
 
   // Session persistence fields
   claudeSessionId?: string
@@ -88,7 +89,8 @@ export class AgentService {
                 tool: baseAgentInfo.tool,
                 isSuperMinion: false,
                 parentAgentId: baseAgentInfo.parentAgentId,
-                isBaseBranchAgent: true
+                isBaseBranchAgent: true,
+                branch: baseAgentInfo.branch
               }
               this.sessions.set(baseAgentInfo.agentId, session)
             } else {
@@ -98,6 +100,7 @@ export class AgentService {
               session.hasUnread = baseAgentInfo.hasUnread || session.hasUnread
               session.lastActivity = baseAgentInfo.lastActivity
               session.isBaseBranchAgent = true
+              session.branch = baseAgentInfo.branch
             }
             agents.push(session)
           }
@@ -137,7 +140,8 @@ export class AgentService {
               isWaitingForInput: agentInfo.isWaitingForInput,
               prompt: agentInfo.prompt,
               model: agentInfo.model,
-              uiState: agentInfo.uiState
+              uiState: agentInfo.uiState,
+              branch: agentInfo.branch
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -155,6 +159,7 @@ export class AgentService {
             session.prompt = agentInfo.prompt
             session.model = agentInfo.model
             session.uiState = agentInfo.uiState
+            session.branch = agentInfo.branch
           }
 
           agents.push(session)
