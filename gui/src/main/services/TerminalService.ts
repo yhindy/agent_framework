@@ -173,9 +173,29 @@ export class TerminalService {
         command = 'claude'
 
         if (isResume) {
-          // Resume existing session
+          // Resume existing session - preserve original flags
           args = ['--resume', sessionId]
+
+          // Preserve model
           if (model) args.push('--model', model)
+
+          // Preserve permission mode
+          if (mode === 'planning') {
+            args.push('--permission-mode', 'plan')
+
+            // Preserve system prompt file for super minions
+            const isSuperMinion = agentInfo?.isSuperMinion === true
+            if (isSuperMinion) {
+              args.push('--system-prompt-file', 'super-minion-rules.md')
+            }
+          } else if (mode === 'dev') {
+            args.push('--permission-mode', 'acceptEdits')
+          }
+
+          // Preserve yolo mode (dangerously-skip-permissions)
+          if (yolo) {
+            args.push('--dangerously-skip-permissions')
+          }
         } else {
           // Create new session with specific ID
           args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, agentInfo)
@@ -282,12 +302,16 @@ export class TerminalService {
     // Send the command to the terminal
     terminal.write(`${command} ${args.join(' ')}\r`)
 
-    // Persist session ID immediately
+    // Persist session ID and flags immediately
     if (tool === 'claude') {
       await this.updateAgentInfo(worktreePath, {
         claudeSessionId: sessionId,
         claudeSessionActive: true,
-        claudeLastSeen: new Date().toISOString()
+        claudeLastSeen: new Date().toISOString(),
+        yolo: yolo || false,
+        mode,
+        model,
+        prompt
       })
     }
 

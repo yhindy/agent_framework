@@ -148,7 +148,7 @@ function initializeServices(): void {
                       agent.mode || 'dev',
                       agent.prompt,
                       agent.model,
-                      false
+                      agent.yolo || false  // Restore yolo flag for dangerously-skip-permissions
                     )
 
                     mainWindow?.webContents.send('agents:updated')

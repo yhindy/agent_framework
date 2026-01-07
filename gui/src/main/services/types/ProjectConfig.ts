@@ -17,6 +17,7 @@ export interface AgentInfo {
   tool: string
   model?: string
   mode: 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
+  yolo?: boolean              // Dangerously skip permissions flag
   prUrl?: string
   prStatus?: string
   prompt?: string
