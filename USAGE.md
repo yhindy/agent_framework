@@ -24,11 +24,10 @@ When the GUI opens, click **"Select Project Folder"** and choose a git repositor
 ## Step 2: Create an Agent
 
 1. Click **"+ Add Agent"** in the sidebar
-2. Enter a name (e.g., `agent-1`)
-3. Enter a branch name (e.g., `feature/agent-1/my-feature`)
-4. Click **Create**
+2. Enter a branch name (e.g., `feature/agent-1/my-feature`)
+3. Click **Create**
 
-This creates a git worktree at `../your-project-agent-1/` with an isolated working directory.
+This creates a git worktree with an isolated working directory for the agent to work in.
 
 ---
 
@@ -59,7 +58,6 @@ The GUI has built-in terminal integration. You can:
 |------|---------|
 | Claude Code | `claude "Read mission and implement"` |
 | Cursor IDE | Open the worktree folder in Cursor |
-| Aider | `aider` |
 
 ---
 
