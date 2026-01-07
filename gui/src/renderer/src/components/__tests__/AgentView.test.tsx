@@ -397,3 +397,212 @@ describe('AgentView Header Consolidation', () => {
     })
   })
 })
+
+describe('AgentView UI State Restoration', () => {
+  const mockAssignment = {
+    id: 'assign-1',
+    agentId: 'test-agent',
+    branch: 'feature/test-branch',
+    feature: 'Test Feature',
+    status: 'working',
+    tool: 'claude',
+    model: 'opus',
+    mode: 'dev',
+    isBaseBranchAgent: false
+  }
+
+  beforeEach(() => {
+    mockUseParams.mockReturnValue({ agentId: 'test-agent' })
+
+    // Setup electronAPI mock
+    global.window.electronAPI = {
+      listAgentsForProject: vi.fn(),
+      getAssignmentsForProject: vi.fn().mockResolvedValue({
+        assignments: [mockAssignment]
+      }),
+      getTestEnvConfig: vi.fn().mockResolvedValue({ defaultCommands: [] }),
+      getTestEnvStatus: vi.fn().mockResolvedValue([]),
+      openInCursor: vi.fn().mockResolvedValue(undefined),
+      stopAgent: vi.fn().mockResolvedValue(undefined),
+      saveUIState: vi.fn().mockResolvedValue(undefined),
+      onAgentListUpdate: vi.fn(() => vi.fn()),
+      onTestEnvStarted: vi.fn(() => vi.fn()),
+      onTestEnvStopped: vi.fn(() => vi.fn()),
+      onTestEnvExited: vi.fn(() => vi.fn())
+    } as any
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('defaults to "agent" tab when no UI state is saved', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      assignmentId: 'assign-1',
+      worktreePath: '/path/to/worktree',
+      terminalPid: null,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      uiState: undefined // No saved state
+    }
+
+    global.window.electronAPI.listAgentsForProject = vi.fn().mockResolvedValue([mockAgent])
+
+    const { container } = render(
+      <BrowserRouter>
+        <AgentView activeProjects={[{ path: '/test/project' }]} />
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      const agentTab = container.querySelector('.unified-tab.active')
+      expect(agentTab).toBeInTheDocument()
+      expect(agentTab?.textContent).toContain('Minion Terminal')
+    })
+  })
+
+  it('restores last active tab from saved UI state', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      assignmentId: 'assign-1',
+      worktreePath: '/path/to/worktree',
+      terminalPid: null,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      uiState: {
+        lastActiveTab: 'terminal-2',
+        plainTerminals: ['terminal-1', 'terminal-2'],
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    global.window.electronAPI.listAgentsForProject = vi.fn().mockResolvedValue([mockAgent])
+
+    const { container } = render(
+      <BrowserRouter>
+        <AgentView activeProjects={[{ path: '/test/project' }]} />
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      // Should have 2 plain terminals
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const terminal2Tab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Terminal 2'))
+      expect(terminal2Tab).toBeInTheDocument()
+      expect(terminal2Tab?.classList.contains('active')).toBe(true)
+    })
+  })
+
+  it('restores test environment tab from saved state', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      assignmentId: 'assign-1',
+      worktreePath: '/path/to/worktree',
+      terminalPid: null,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      uiState: {
+        lastActiveTab: 'test-dev',
+        plainTerminals: ['terminal-1'],
+        terminalCounter: 1,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    global.window.electronAPI.listAgentsForProject = vi.fn().mockResolvedValue([mockAgent])
+    global.window.electronAPI.getTestEnvConfig = vi.fn().mockResolvedValue({
+      defaultCommands: [{ id: 'test-dev', name: 'Dev Server', command: 'npm run dev', port: 3000 }]
+    })
+
+    const { container } = render(
+      <BrowserRouter>
+        <AgentView activeProjects={[{ path: '/test/project' }]} />
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const testEnvTab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Dev Server'))
+      expect(testEnvTab).toBeInTheDocument()
+      expect(testEnvTab?.classList.contains('active')).toBe(true)
+    })
+  })
+
+  it('falls back to "agent" when saved tab no longer exists', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      assignmentId: 'assign-1',
+      worktreePath: '/path/to/worktree',
+      terminalPid: null,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      uiState: {
+        lastActiveTab: 'terminal-5', // This terminal doesn't exist
+        plainTerminals: ['terminal-1', 'terminal-2'], // Only these exist
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    global.window.electronAPI.listAgentsForProject = vi.fn().mockResolvedValue([mockAgent])
+
+    const { container } = render(
+      <BrowserRouter>
+        <AgentView activeProjects={[{ path: '/test/project' }]} />
+      </BrowserRouter>
+    )
+
+    // Should fallback to 'agent' tab
+    await waitFor(() => {
+      const agentTab = container.querySelector('.unified-tab.active')
+      expect(agentTab).toBeInTheDocument()
+      expect(agentTab?.textContent).toContain('Minion Terminal')
+    })
+  })
+
+  it('shows loading state before UI state is restored', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      assignmentId: 'assign-1',
+      worktreePath: '/path/to/worktree',
+      terminalPid: null,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      uiState: {
+        lastActiveTab: 'terminal-2',
+        plainTerminals: ['terminal-1', 'terminal-2'],
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    // Mock slow async load
+    let resolveListAgents: any
+    const listAgentsPromise = new Promise(resolve => {
+      resolveListAgents = resolve
+    })
+    global.window.electronAPI.listAgentsForProject = vi.fn().mockReturnValue(listAgentsPromise)
+
+    const { container } = render(
+      <BrowserRouter>
+        <AgentView activeProjects={[{ path: '/test/project' }]} />
+      </BrowserRouter>
+    )
+
+    // Initially, tabs should not be rendered (activeTab is null)
+    expect(container.querySelector('.unified-tabs')).not.toBeInTheDocument()
+
+    // Resolve the promise
+    resolveListAgents([mockAgent])
+
+    // After load, tabs should appear with correct active tab
+    await waitFor(() => {
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const terminal2Tab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Terminal 2'))
+      expect(terminal2Tab).toBeInTheDocument()
+      expect(terminal2Tab?.classList.contains('active')).toBe(true)
+    })
+  })
+})
