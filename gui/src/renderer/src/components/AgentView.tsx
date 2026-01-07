@@ -5,6 +5,7 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import './AgentView.css'
@@ -77,6 +78,12 @@ function AgentView({ activeProjects }: AgentViewProps) {
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
+
+  // Auto-poll PR status if this agent has an open PR
+  usePRPolling({
+    assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
+    enabled: assignment?.status === 'pr_open' || false
+  })
 
   const teardownMessages = [
     'Returning minion to the break room...',
@@ -439,13 +446,30 @@ function AgentView({ activeProjects }: AgentViewProps) {
             📝
           </button>
 
-          {assignment && (assignment.status === 'pr_open' || assignment.status === 'merged' || assignment.status === 'closed') && assignment.prUrl && (
+          {assignment?.prStatus && assignment.prUrl && (
             <button
+              className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
               onClick={() => window.open(assignment.prUrl, '_blank')}
-              className="primary icon-button"
-              title="Open PR"
+              title="Open PR on GitHub"
             >
-              🔗
+              PR: {assignment.prStatus}
+              <span className="pr-open-icon">↗</span>
+              {assignment.status === 'pr_open' && (
+                <button
+                  className="pr-refresh-btn"
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    try {
+                      await window.electronAPI.checkPullRequestStatus(assignment.id)
+                    } catch (err: any) {
+                      console.error('Failed to refresh PR status:', err)
+                    }
+                  }}
+                  title="Refresh PR status"
+                >
+                  ↻
+                </button>
+              )}
             </button>
           )}
 

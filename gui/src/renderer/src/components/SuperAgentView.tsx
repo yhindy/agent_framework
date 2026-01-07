@@ -7,6 +7,7 @@ import ChildStatusCard from './ChildStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import './SuperAgentView.css'
@@ -61,6 +62,16 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
+
+  // Auto-poll PR status for all child agents with open PRs
+  const childPRAssignments = agent?.children
+    .filter(child => child.status === 'pr_open')
+    .map(child => child.id) || []
+
+  usePRPolling({
+    assignmentIds: childPRAssignments,
+    enabled: childPRAssignments.length > 0
+  })
 
   const loadAgent = async () => {
     if (!agentId) return
