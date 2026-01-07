@@ -29,7 +29,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Tab management
-  const [activeTab, setActiveTab] = useState<string>('orchestration')
+  const [activeTab, setActiveTab] = useState<string | null>(null)
   const [plainTerminals, setPlainTerminals] = useState<string[]>([])
   const [terminalCounter, setTerminalCounter] = useState(0)
 
@@ -94,6 +94,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         setPlainTerminals(savedTerminals)
         setTerminalCounter(restoredCounter)
         setActiveTab(lastActiveTab)
+      } else {
+        // No saved state - set default tab
+        setActiveTab('orchestration')
       }
     } catch (err: any) {
       console.error('Failed to load super agent details:', err)
@@ -152,6 +155,22 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
       saveUIStateDebounced.cancel()
     }
   }, [saveUIStateDebounced])
+
+  // Helper function to validate that a tab ID actually exists
+  const validateTab = (tabId: string, plainTerminals: string[], testEnvCommands: any[]): boolean => {
+    if (tabId === 'orchestration') return true
+    if (plainTerminals.includes(tabId)) return true
+    if (testEnvCommands.some(cmd => cmd.id === tabId)) return true
+    return false
+  }
+
+  // Validate active tab after test env commands are loaded
+  useEffect(() => {
+    if (activeTab && !validateTab(activeTab, plainTerminals, testEnvCommands)) {
+      // Tab no longer exists - fall back to 'orchestration'
+      setActiveTab('orchestration')
+    }
+  }, [activeTab, plainTerminals, testEnvCommands])
 
   const handleOpenCursor = async () => {
     if (agent) {
@@ -365,113 +384,117 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           </div>
           {!isTerminalCollapsed && (
             <div className="tab-section">
-              <div className="unified-tabs">
-                {/* Orchestration Terminal Tab */}
-                <div
-                  className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('orchestration')}
-                >
-                  <span className="tab-icon">👑</span>
-                  <span className="tab-name">Orchestration</span>
-                </div>
-
-                {/* Test Environment Tabs */}
-                {testEnvCommands.map(cmd => {
-                  const isRunning = getTestEnvStatus(cmd.id)
-                  return (
+              {activeTab && (
+                <>
+                  <div className="unified-tabs">
+                    {/* Orchestration Terminal Tab */}
                     <div
-                      key={cmd.id}
-                      className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
-                      onClick={() => setActiveTab(cmd.id)}
+                      className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('orchestration')}
                     >
-                      <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
-                      <span className="tab-name">{cmd.name}</span>
-                      {cmd.port && <span className="tab-port">:{cmd.port}</span>}
-                      {isRunning ? (
-                        <button
-                          className="tab-action stop"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStopTestEnv(cmd.id)
-                          }}
-                        >
-                          ⬛
-                        </button>
-                      ) : (
-                        <button
-                          className="tab-action start"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStartTestEnv(cmd.id)
-                          }}
-                        >
-                          ▶
-                        </button>
-                      )}
+                      <span className="tab-icon">👑</span>
+                      <span className="tab-name">Orchestration</span>
                     </div>
-                  )
-                })}
 
-                {/* Plain Terminal Tabs */}
-                {plainTerminals.map((terminalId, index) => (
-                  <div
-                    key={terminalId}
-                    className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
-                    onClick={() => setActiveTab(terminalId)}
-                  >
-                    <span className="tab-icon">⌨️</span>
-                    <span className="tab-name">Terminal {index + 1}</span>
-                    <button
-                      className="tab-action close"
-                      onClick={(e) => handleCloseTerminal(terminalId, e)}
-                      title="Close terminal"
+                    {/* Test Environment Tabs */}
+                    {testEnvCommands.map(cmd => {
+                      const isRunning = getTestEnvStatus(cmd.id)
+                      return (
+                        <div
+                          key={cmd.id}
+                          className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
+                          onClick={() => setActiveTab(cmd.id)}
+                        >
+                          <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
+                          <span className="tab-name">{cmd.name}</span>
+                          {cmd.port && <span className="tab-port">:{cmd.port}</span>}
+                          {isRunning ? (
+                            <button
+                              className="tab-action stop"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleStopTestEnv(cmd.id)
+                              }}
+                            >
+                              ⬛
+                            </button>
+                          ) : (
+                            <button
+                              className="tab-action start"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleStartTestEnv(cmd.id)
+                              }}
+                            >
+                              ▶
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {/* Plain Terminal Tabs */}
+                    {plainTerminals.map((terminalId, index) => (
+                      <div
+                        key={terminalId}
+                        className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
+                        onClick={() => setActiveTab(terminalId)}
+                      >
+                        <span className="tab-icon">⌨️</span>
+                        <span className="tab-name">Terminal {index + 1}</span>
+                        <button
+                          className="tab-action close"
+                          onClick={(e) => handleCloseTerminal(terminalId, e)}
+                          title="Close terminal"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Add Terminal Button */}
+                    <div
+                      className="unified-tab add-tab"
+                      onClick={handleAddTerminal}
+                      title="Add new terminal"
                     >
-                      ✕
-                    </button>
+                      <span className="tab-icon">➕</span>
+                    </div>
                   </div>
-                ))}
 
-                {/* Add Terminal Button */}
-                <div
-                  className="unified-tab add-tab"
-                  onClick={handleAddTerminal}
-                  title="Add new terminal"
-                >
-                  <span className="tab-icon">➕</span>
-                </div>
-              </div>
-
-              <div className="unified-terminal-container">
-                {activeTab === 'orchestration' && (
-                  <Terminal
-                    agentId={agent.agentId}
-                    autoFocus={!hasAutoFocused.current}
-                    onMount={() => { hasAutoFocused.current = true }}
-                  />
-                )}
-                {plainTerminals.map(terminalId => (
-                  activeTab === terminalId && (
-                    <PlainTerminal
-                      key={terminalId}
-                      agentId={agent.agentId}
-                      terminalId={terminalId}
-                      autoFocus={!hasAutoFocused.current}
-                      onMount={() => { hasAutoFocused.current = true }}
-                    />
-                  )
-                ))}
-                {testEnvCommands.map(cmd => (
-                  activeTab === cmd.id && (
-                    <TestEnvTerminal
-                      key={cmd.id}
-                      agentId={agent.agentId}
-                      commandId={cmd.id}
-                      autoFocus={!hasAutoFocused.current}
-                      onMount={() => { hasAutoFocused.current = true }}
-                    />
-                  )
-                ))}
-              </div>
+                  <div className="unified-terminal-container">
+                    {activeTab === 'orchestration' && (
+                      <Terminal
+                        agentId={agent.agentId}
+                        autoFocus={!hasAutoFocused.current}
+                        onMount={() => { hasAutoFocused.current = true }}
+                      />
+                    )}
+                    {plainTerminals.map(terminalId => (
+                      activeTab === terminalId && (
+                        <PlainTerminal
+                          key={terminalId}
+                          agentId={agent.agentId}
+                          terminalId={terminalId}
+                          autoFocus={!hasAutoFocused.current}
+                          onMount={() => { hasAutoFocused.current = true }}
+                        />
+                      )
+                    ))}
+                    {testEnvCommands.map(cmd => (
+                      activeTab === cmd.id && (
+                        <TestEnvTerminal
+                          key={cmd.id}
+                          agentId={agent.agentId}
+                          commandId={cmd.id}
+                          autoFocus={!hasAutoFocused.current}
+                          onMount={() => { hasAutoFocused.current = true }}
+                        />
+                      )
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -192,3 +192,190 @@ describe('SuperAgentView', () => {
   })
 })
 
+describe('SuperAgentView UI State Restoration', () => {
+  const mockBaseSuperAgent = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/super-1',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'active',
+    tool: 'claude',
+    mode: 'auto',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    minionBudget: 5,
+    children: [],
+    pendingPlans: []
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('defaults to "orchestration" tab when no UI state is saved', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: undefined // No saved state
+    }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const orchestrationTab = container.querySelector('.unified-tab.active')
+      expect(orchestrationTab).toBeInTheDocument()
+      expect(orchestrationTab?.textContent).toContain('Orchestration')
+    })
+  })
+
+  it('restores last active tab from saved UI state', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: {
+        lastActiveTab: 'terminal-2',
+        plainTerminals: ['terminal-1', 'terminal-2'],
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      // Should have 2 plain terminals
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const terminal2Tab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Terminal 2'))
+      expect(terminal2Tab).toBeInTheDocument()
+      expect(terminal2Tab?.classList.contains('active')).toBe(true)
+    })
+  })
+
+  it('restores test environment tab from saved state', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: {
+        lastActiveTab: 'test-dev',
+        plainTerminals: [],
+        terminalCounter: 0,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({
+      defaultCommands: [{ id: 'test-dev', name: 'Dev Server', command: 'npm run dev', port: 3000 }]
+    })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const testEnvTab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Dev Server'))
+      expect(testEnvTab).toBeInTheDocument()
+      expect(testEnvTab?.classList.contains('active')).toBe(true)
+    })
+  })
+
+  it('falls back to "orchestration" when saved tab no longer exists', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: {
+        lastActiveTab: 'terminal-5', // This terminal doesn't exist
+        plainTerminals: ['terminal-1', 'terminal-2'], // Only these exist
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // Should fallback to 'orchestration' tab
+    await waitFor(() => {
+      const orchestrationTab = container.querySelector('.unified-tab.active')
+      expect(orchestrationTab).toBeInTheDocument()
+      expect(orchestrationTab?.textContent).toContain('Orchestration')
+    })
+  })
+
+  it('shows loading state before UI state is restored', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: {
+        lastActiveTab: 'terminal-2',
+        plainTerminals: ['terminal-1', 'terminal-2'],
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    // Mock slow async load
+    let resolveSuperAgentDetails: any
+    const superAgentPromise = new Promise(resolve => {
+      resolveSuperAgentDetails = resolve
+    })
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockReturnValue(superAgentPromise)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // Initially, should show loading message
+    expect(screen.getByText('Loading Super Minion super-1...')).toBeInTheDocument()
+
+    // Resolve the promise
+    resolveSuperAgentDetails(mockAgent)
+
+    // After load, tabs should appear with correct active tab
+    await waitFor(() => {
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const terminal2Tab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Terminal 2'))
+      expect(terminal2Tab).toBeInTheDocument()
+      expect(terminal2Tab?.classList.contains('active')).toBe(true)
+    })
+  })
+})
+
