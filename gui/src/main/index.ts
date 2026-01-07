@@ -580,6 +580,11 @@ function setupIPC(): void {
     await services.prPolling.stopAllPolling(subscriberId)
   })
 
+  ipcMain.handle('prPolling:refreshNow', async (_event, assignmentId: string) => {
+    if (!services?.prPolling) return
+    await services.prPolling.refreshPRNow(assignmentId)
+  })
+
   ipcMain.handle('dependencies:check', async () => {
     return services!.agent.checkDependencies()
   })
