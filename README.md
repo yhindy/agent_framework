@@ -20,14 +20,16 @@ cd agent_framework
 
 ---
 
-## Quick Start (Installing into a Project)
+## Quick Start (Using with a Project)
+
+Once you've run `./setup.sh` and `./run.sh`, you can:
 
 ```bash
-# 1. Install the framework into your project (CLI)
+# Install the framework into a project
 ./install.sh /path/to/your/project
 
 # OR use the GUI App (recommended)
-./minions/bin/dashboard.sh
+./run.sh
 # Then select any project folder, and it will offer to install the framework.
 ```
 
@@ -95,16 +97,15 @@ Edit `minions/bin/config.sh` to customize:
 | Cursor IDE | Open worktree folder, start background minion |
 | Cursor CLI | `cursor --folder ../yourproject-agent-1` |
 | Claude Code | `claude "Read mission and implement"` |
-| Aider | `aider` |
 | Any AI tool | Just point it at the worktree |
 
-## GUI Orchestrator (Optional)
+## GUI Orchestrator
 
 A desktop app for managing minions with a visual interface:
 
 ```bash
 # Launch from the framework root
-./minions/bin/dashboard.sh
+./run.sh
 ```
 
 Features:
