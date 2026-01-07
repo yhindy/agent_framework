@@ -158,12 +158,18 @@ export class ClaudeSessionInfoService {
       let lastModel = ''
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
       let lastTimestamp = ''
+      let lastEntry: SessionJSONLEntry | null = null
 
       for (const line of lines) {
         if (!line.trim()) continue
 
         try {
           const entry = JSON.parse(line) as SessionJSONLEntry
+
+          // Track last meaningful entry for state detection (skip queue-operation, etc.)
+          if (entry.type === 'assistant' || entry.type === 'user') {
+            lastEntry = entry
+          }
 
           // Extract timestamp
           if (entry.timestamp) {
@@ -199,42 +205,32 @@ export class ClaudeSessionInfoService {
               tokenUsage.cacheReadTokens += msg.usage.cache_read_input_tokens || 0
               tokenUsage.cacheCreationTokens += msg.usage.cache_creation_input_tokens || 0
             }
-
-            // Determine state from assistant message
-            if (msg.content && Array.isArray(msg.content)) {
-              const hasToolUse = msg.content.some(c => c.type === 'tool_use')
-              if (hasToolUse) {
-                // Assistant is using tools - will be followed by tool results
-                state = 'working'
-              } else if (msg.stop_reason) {
-                // Assistant finished with a stop reason - waiting for input
-                state = 'waiting'
-              }
-            }
-          }
-
-          // User messages indicate Claude should be working (processing the message)
-          if (entry.type === 'user') {
-            // Check if this is a tool result
-            const msg = entry.message
-            if (msg && msg.content && Array.isArray(msg.content)) {
-              const isToolResult = msg.content.some(c => c.type === 'tool_result')
-              if (isToolResult) {
-                // Tool result - Claude is processing
-                state = 'working'
-              } else {
-                // Regular user message - Claude should be working on response
-                state = 'working'
-              }
-            } else if (msg && typeof msg.content === 'string') {
-              // Simple text message - Claude should be working
-              state = 'working'
-            }
           }
 
         } catch (parseError) {
           // Skip malformed lines
           continue
+        }
+      }
+
+      // Determine state from the LAST entry only (not all entries)
+      if (lastEntry) {
+        if (lastEntry.type === 'assistant' && lastEntry.message) {
+          const msg = lastEntry.message
+
+          // If assistant finished with end_turn, it's waiting for user input
+          if (msg.stop_reason === 'end_turn') {
+            state = 'waiting'
+          } else if (msg.content && Array.isArray(msg.content)) {
+            // If assistant has tool_use, it's working (waiting for tool results)
+            const hasToolUse = msg.content.some(c => c.type === 'tool_use')
+            if (hasToolUse) {
+              state = 'working'
+            }
+          }
+        } else if (lastEntry.type === 'user') {
+          // If last entry is user message, Claude is working on processing it
+          state = 'working'
         }
       }
 
@@ -244,6 +240,14 @@ export class ClaudeSessionInfoService {
       const inputCost = (tokenUsage.inputTokens / 1000) * 0.003
       const outputCost = (tokenUsage.outputTokens / 1000) * 0.015
       totalCostUsd = inputCost + outputCost
+
+      // Debug state detection
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ClaudeSessionInfoService] Parsed session state:', state, {
+          lastLine: lines[lines.length - 1]?.substring(0, 100),
+          linesCount: lines.length
+        })
+      }
 
       return {
         sessionId,
