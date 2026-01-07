@@ -5,6 +5,7 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import './AgentView.css'
@@ -80,6 +81,12 @@ function AgentView({ activeProjects }: AgentViewProps) {
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
+
+  // Auto-poll PR status if this agent has an open PR
+  usePRPolling({
+    assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
+    enabled: assignment?.status === 'pr_open' || false
+  })
 
   const teardownMessages = [
     'Returning minion to the break room...',
@@ -396,6 +403,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
       <div className="agent-header">
         <div className="agent-title">
           <h2>{agentId}</h2>
+          {assignment?.prStatus && (
+            <span className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}>
+              PR: {assignment.prStatus}
+            </span>
+          )}
         </div>
 
         <div className="agent-controls">
@@ -472,6 +484,29 @@ function AgentView({ activeProjects }: AgentViewProps) {
             >
               Open PR
             </button>
+          )}
+
+          {assignment && !assignment.isBaseBranchAgent && assignment.status === 'pr_open' && assignment.prUrl && (
+            <>
+              <button
+                onClick={() => window.open(assignment.prUrl, '_blank')}
+                className="primary"
+              >
+                Open PR
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await window.electronAPI.checkPullRequestStatus(assignment.id)
+                  } catch (err: any) {
+                    alert(`Failed to check PR: ${err.message}`)
+                  }
+                }}
+                className="secondary"
+              >
+                Refresh Status
+              </button>
+            </>
           )}
 
           {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (

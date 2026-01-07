@@ -13,6 +13,11 @@ const ChildStatusCard: React.FC<ChildStatusCardProps> = ({ child, onClick }) => 
       <div className="child-card-header">
         <span className="child-icon">🍌</span>
         <span className="child-id">{child.agentId}</span>
+        {child.prStatus && (
+          <span className={`pr-badge pr-${child.prStatus.toLowerCase()}`}>
+            {child.prStatus === 'OPEN' ? '🔄' : child.prStatus === 'MERGED' ? '✅' : '❌'}
+          </span>
+        )}
         <span className={`status-dot ${child.status}`}></span>
       </div>
       <div className="child-card-body">

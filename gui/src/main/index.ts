@@ -7,6 +7,7 @@ import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+import { PRPollingService } from './services/PRPollingService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -18,6 +19,7 @@ let services: {
   terminal: TerminalService
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
+  prPolling: PRPollingService
 } | null = null
 
 function createWindow(): void {
@@ -77,7 +79,8 @@ function initializeServices(): void {
     agent: agentService,
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
-    testEnv: new TestEnvService(mainWindow)
+    testEnv: new TestEnvService(mainWindow),
+    prPolling: new PRPollingService(mainWindow, agentService)
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -180,6 +183,15 @@ function setupIPC(): void {
     const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
     return services!.agent.findProjectForAssignment(activeProjectPaths, assignmentId)
   }
+
+  // Set the findProjectPath callback for PR polling
+  services.prPolling.setFindProjectPath(async (assignmentId: string) => {
+    try {
+      return await findProjectForAssignment(assignmentId)
+    } catch {
+      return null
+    }
+  })
 
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
@@ -526,8 +538,24 @@ function setupIPC(): void {
     console.log('[PR] PR status:', result.status)
 
     mainWindow?.webContents.send('assignments:updated')
-    
+
     return result
+  })
+
+  // PR Polling handlers
+  ipcMain.handle('prPolling:start', async (_event, assignmentId: string, subscriberId: string) => {
+    if (!services?.prPolling) return
+    await services.prPolling.startPolling(assignmentId, subscriberId)
+  })
+
+  ipcMain.handle('prPolling:stop', async (_event, assignmentId: string, subscriberId: string) => {
+    if (!services?.prPolling) return
+    await services.prPolling.stopPolling(assignmentId, subscriberId)
+  })
+
+  ipcMain.handle('prPolling:stopAll', async (_event, subscriberId: string) => {
+    if (!services?.prPolling) return
+    await services.prPolling.stopAllPolling(subscriberId)
   })
 
   ipcMain.handle('dependencies:check', async () => {

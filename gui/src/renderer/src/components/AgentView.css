@@ -470,3 +470,32 @@
   white-space: nowrap;
   line-height: 1;
 }
+
+/* PR Status Badge */
+.pr-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  margin-left: 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pr-status-open {
+  background: rgba(197, 134, 192, 0.2);
+  color: #c586c0;
+  border: 1px solid #c586c0;
+}
+
+.pr-status-merged {
+  background: rgba(78, 201, 176, 0.2);
+  color: #4ec9b0;
+  border: 1px solid #4ec9b0;
+}
+
+.pr-status-closed {
+  background: rgba(133, 133, 133, 0.2);
+  color: #858585;
+  border: 1px solid #858585;
+}
