@@ -45,15 +45,29 @@ Make Claude session information available in the GUI with live updates showing s
 
 ## Future Milestones
 
-### 📋 Milestone 3: Robust Session Resume
+### ✅ Milestone 3: Robust Session Resume
 **Goal:** Resume Claude sessions between app refreshes using JSONL state
 
-**Tasks:**
-- [ ] Detect partial sessions (waiting for user input) on app startup
-- [ ] Auto-resume with `claude --resume <session-id>`
-- [ ] Restore IdleDetector state from `.agent-info`
-- [ ] Handle session not found errors gracefully
-- [ ] Test resume across multiple refreshes
+**Completed:**
+- ✅ **JSONL-based session detection** on app startup
+  - Replaced `claudeSessionActive` flag with `ClaudeSessionInfoService.getSessionState()`
+  - Checks actual JSONL files to verify session exists
+- ✅ **Auto-resume with `claude --resume <session-id>`** (already existed, now smarter)
+  - Only resumes if `sessionState !== 'unknown'` (file exists)
+  - Logs which sessions are resumed and which are skipped
+- ✅ **Restore waiting notifications from JSONL state**
+  - Shows "Claude is waiting for input" if `sessionState === 'waiting'`
+  - No longer relies on pattern-based `isWaitingForInput`
+- ✅ **Graceful error handling**
+  - Skips resume if session file not found
+  - Logs reason for skip
+
+**Current Status:** ✅ WORKING - Sessions resume on app restart based on JSONL
+
+**Benefits:**
+- Survives app crashes (JSONL files persist, flags don't)
+- More accurate than pattern matching
+- Works even if `claudeSessionActive` flag is stale
 
 ---
 
