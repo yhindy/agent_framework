@@ -365,3 +365,294 @@ describe('Sidebar waiting indicator suppression', () => {
   })
 })
 
+describe('Sidebar branch name display', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('displays branch name for regular agents with standard format', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/add-dark-mode'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    // Should display only the descriptive part as the agent identifier
+    expect(screen.getByText('add-dark-mode')).toBeInTheDocument()
+
+    // Should NOT display the agent ID when branch is available
+    expect(screen.queryByText('agent-1')).not.toBeInTheDocument()
+
+    // Should NOT display the full branch path
+    expect(screen.queryByText('feature/test-project/add-dark-mode')).not.toBeInTheDocument()
+  })
+
+  it('displays full branch name when format does not match expected pattern', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'main'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    // Should display the full branch name as fallback
+    expect(screen.getByText('main')).toBeInTheDocument()
+  })
+
+  it('displays agent ID as fallback when branch field is missing', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+        // No branch field
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    // When no branch is available, agent ID should be displayed
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    const agentItem = screen.getByText('agent-1').closest('.agent-item')!
+    // Should have agent-id class, not agent-branch
+    expect(agentItem.querySelector('.agent-id')).toBeInTheDocument()
+    expect(agentItem.querySelector('.agent-branch')).not.toBeInTheDocument()
+  })
+
+  it('does not display branch for base branch agents', async () => {
+    const mockAgents = [
+      {
+        id: 'base-1',
+        agentId: 'base-1',
+        assignmentId: 'project-base-123',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isBaseBranchAgent: true,
+        branch: 'main'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/\(Base\)/)).toBeInTheDocument()
+    })
+
+    // Should not display branch name even though branch field exists
+    expect(screen.queryByText('main')).not.toBeInTheDocument()
+
+    const agentItem = screen.getByText(/\(Base\)/).closest('.agent-item')!
+    expect(agentItem.querySelector('.agent-branch')).not.toBeInTheDocument()
+  })
+
+  it('handles nested branch names correctly', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/ui/button-improvements'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    // Should display the nested path after project ID
+    expect(screen.getByText('ui/button-improvements')).toBeInTheDocument()
+  })
+
+  it('shows full branch path in title attribute on hover', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/add-dark-mode'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    const branchElement = screen.getByText('add-dark-mode')
+    expect(branchElement).toHaveAttribute('title', 'feature/test-project/add-dark-mode')
+  })
+
+  it('displays branch for super minions', async () => {
+    const mockAgents = [
+      {
+        id: 'super-1',
+        agentId: 'super-1',
+        isSuperMinion: true,
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/super-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('super-1')).toBeInTheDocument()
+    })
+
+    // Super minions should show branch name
+    expect(screen.getByText('super-task')).toBeInTheDocument()
+  })
+
+  it('truncates very long branch names with ellipsis', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/this-is-a-very-long-branch-name-that-should-be-truncated-with-ellipsis'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    const branchElement = container.querySelector('.agent-branch')!
+    expect(branchElement).toBeInTheDocument()
+
+    // Check that text-overflow: ellipsis style is applied
+    const styles = window.getComputedStyle(branchElement)
+    expect(styles.textOverflow).toBe('ellipsis')
+    expect(styles.overflow).toBe('hidden')
+    expect(styles.whiteSpace).toBe('nowrap')
+  })
+})
+
