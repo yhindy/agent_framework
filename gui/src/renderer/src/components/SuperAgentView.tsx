@@ -351,8 +351,8 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           <button className="danger compact-button" onClick={handleStop}>
             Stop
           </button>
-          <button className="danger compact-button" onClick={() => setShowTeardownConfirm(true)}>
-            Cleanup
+          <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
+            🗑️
           </button>
         </div>
       </div>

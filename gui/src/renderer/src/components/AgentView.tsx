@@ -482,7 +482,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
           {assignment && !assignment.isBaseBranchAgent && (
             <div className="cleanup-dropdown">
-              <button className="cleanup-button compact-button">Cleanup ▾</button>
+              <button className="cleanup-button compact-button icon-only">🗑️</button>
               <div className="cleanup-menu">
                 <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
                 <button onClick={() => handleCleanupClick('teardown')} className="danger-text">

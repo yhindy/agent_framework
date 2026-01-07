@@ -104,6 +104,11 @@
   cursor: not-allowed;
 }
 
+.agent-actions .compact-button.icon-only {
+  padding: 6px 10px;
+  min-width: 36px;
+}
+
 .copy-flash {
   animation: copy-flash-keyframe 0.3s ease-out;
 }
@@ -121,68 +126,17 @@
   }
 }
 
-/* Custom Tooltip for overflow text */
-[data-tooltip] {
-  position: relative;
-}
-
-[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  z-index: 1000;
-  border: 1px solid #3e3e42;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  word-break: break-word;
-  white-space: normal;
-  animation: tooltip-fade 0.2s ease-out;
-}
-
-[data-tooltip]:hover::before {
-  content: '';
-  position: absolute;
-  bottom: calc(100% - 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  border: 4px solid transparent;
-  border-top-color: #1e1e1e;
-  z-index: 1000;
-  pointer-events: none;
-  animation: tooltip-fade 0.2s ease-out;
-}
-
-@keyframes tooltip-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 /* Info Badge Styles */
 .info-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 4px 8px;
   background: #2d2d2d;
   border: 1px solid #3e3e42;
   border-radius: 4px;
-  font-size: 12px;
-  margin-left: 12px;
+  font-size: 11px;
+  margin-left: 8px;
   vertical-align: middle;
 }
 
@@ -193,7 +147,7 @@
 
 .info-badge-value {
   color: #d4d4d4;
-  max-width: 250px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -222,13 +176,13 @@
 .status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 4px 8px;
   background: #2d2d2d;
   border: 1px solid #3e3e42;
   border-radius: 4px;
-  font-size: 12px;
-  margin-left: 12px;
+  font-size: 11px;
+  margin-left: 8px;
   color: #d4d4d4;
 }
 
@@ -344,11 +298,7 @@
   background: #4e4e52;
 }
 
-/* Adjust icon-button styling for cleanup button */
-.cleanup-button.icon-button {
-  padding: 6px 10px;
-  font-size: 14px;
-}
+/* Cleanup button is now a compact button with icon-only class */
 
 .cleanup-menu {
   display: none;
