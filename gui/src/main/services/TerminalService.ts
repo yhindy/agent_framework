@@ -6,6 +6,7 @@ import { execSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
+import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import {
   IdleDetector,
   CLAUDE_WORKING_PATTERNS,
@@ -44,6 +45,7 @@ export class TerminalService {
   private plainTerminals: Map<string, PlainTerminalSession>
   private mainWindow: BrowserWindow
   private agentService?: AgentService
+  private claudeSessionInfoService?: ClaudeSessionInfoService
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
@@ -60,6 +62,10 @@ export class TerminalService {
 
   setAgentService(agentService: AgentService): void {
     this.agentService = agentService
+  }
+
+  setClaudeSessionInfoService(claudeSessionInfoService: ClaudeSessionInfoService): void {
+    this.claudeSessionInfoService = claudeSessionInfoService
   }
 
   private generateSessionId(agentId: string, worktreePath: string): string {
@@ -144,8 +150,18 @@ export class TerminalService {
     const agentInfo = await this.readAgentInfo(worktreePath)
 
     let isResume = false
-    if (agentInfo?.claudeSessionActive && agentInfo?.claudeSessionId && tool === 'claude') {
-      isResume = true
+    if (agentInfo?.claudeSessionId && tool === 'claude') {
+      // Check if session actually exists in JSONL (more reliable than flag)
+      const sessionState = this.claudeSessionInfoService?.getSessionState(
+        agentInfo.claudeSessionId,
+        worktreePath
+      )
+      if (sessionState && sessionState !== 'unknown') {
+        isResume = true
+        console.log(`[TerminalService] Resuming session ${agentInfo.claudeSessionId} (state: ${sessionState})`)
+      } else {
+        console.log(`[TerminalService] Session ${agentInfo.claudeSessionId} not found in JSONL, creating new`)
+      }
     }
 
     // Determine command based on tool

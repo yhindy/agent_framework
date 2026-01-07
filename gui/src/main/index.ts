@@ -72,9 +72,11 @@ function initializeServices(): void {
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
   const terminalService = new TerminalService(mainWindow)
+  const claudeSessionInfoService = new ClaudeSessionInfoService()
 
-  // Set AgentService reference in TerminalService for persistence
+  // Set service references in TerminalService
   terminalService.setAgentService(agentService)
+  terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
 
   services = {
     project: projectService,
@@ -83,7 +85,7 @@ function initializeServices(): void {
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
     prPolling: new PRPollingService(mainWindow, agentService),
-    claudeSessionInfo: new ClaudeSessionInfoService()
+    claudeSessionInfo: claudeSessionInfoService
   }
 
   // Migrate existing assignments from config.json to .agent-info files
