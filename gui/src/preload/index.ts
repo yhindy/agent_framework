@@ -111,6 +111,14 @@ const api = {
     return () => ipcRenderer.removeListener('agent:resumedWork', subscription)
   },
 
+  // Claude Session Info APIs
+  getClaudeSessionInfo: (agentId: string) => ipcRenderer.invoke('claude:getSessionInfo', agentId),
+  onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => {
+    const subscription = (_event: any, agentId: string, info: any) => callback(agentId, info)
+    ipcRenderer.on('claude:sessionInfoUpdated', subscription)
+    return () => ipcRenderer.removeListener('claude:sessionInfoUpdated', subscription)
+  },
+
   // Test Environment APIs
   getTestEnvConfig: (agentId?: string) => ipcRenderer.invoke('testEnv:getConfig', agentId),
   getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => 

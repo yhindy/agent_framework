@@ -8,6 +8,7 @@ import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
 import { PRPollingService } from './services/PRPollingService'
+import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -20,6 +21,7 @@ let services: {
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
   prPolling: PRPollingService
+  claudeSessionInfo: ClaudeSessionInfoService
 } | null = null
 
 function createWindow(): void {
@@ -80,7 +82,8 @@ function initializeServices(): void {
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
-    prPolling: new PRPollingService(mainWindow, agentService)
+    prPolling: new PRPollingService(mainWindow, agentService),
+    claudeSessionInfo: new ClaudeSessionInfoService()
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -716,6 +719,24 @@ function setupIPC(): void {
 
   ipcMain.on('testEnv:resize', (_event, agentId: string, commandId: string, cols: number, rows: number) => {
     services!.testEnv.resize(agentId, commandId, cols, rows)
+  })
+
+  // Claude Session Info APIs
+  ipcMain.handle('claude:getSessionInfo', async (_event, agentId: string) => {
+    // Find the agent to get its worktree path and session ID
+    const activeProjects = services!.project.getActiveProjects()
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      const agent = agents.find(a => a.id === agentId)
+      if (agent && agent.claudeSessionId) {
+        const info = services!.claudeSessionInfo.parseSessionInfo(
+          agent.claudeSessionId,
+          agent.worktreePath
+        )
+        return info
+      }
+    }
+    return null
   })
 }
 
