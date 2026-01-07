@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
+import { usePRPolling } from '../hooks/usePRPolling'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -96,6 +97,13 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
 
     return () => unsubscribe()
   }, [activeProjects])
+
+  // Auto-poll PR status for all pr_open assignments
+  const prOpenAssignments = assignments.filter(a => a.status === 'pr_open')
+  usePRPolling({
+    assignmentIds: prOpenAssignments.map(a => a.id),
+    enabled: prOpenAssignments.length > 0
+  })
 
   // Close dropdown when clicking outside
   useEffect(() => {

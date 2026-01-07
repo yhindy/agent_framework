@@ -75,7 +75,12 @@ const api = {
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
   createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),
   checkPullRequestStatus: (assignmentId: string) => ipcRenderer.invoke('assignments:checkPR', assignmentId),
-  
+
+  // PR Polling APIs
+  startPRPolling: (assignmentId: string, subscriberId: string) => ipcRenderer.invoke('prPolling:start', assignmentId, subscriberId),
+  stopPRPolling: (assignmentId: string, subscriberId: string) => ipcRenderer.invoke('prPolling:stop', assignmentId, subscriberId),
+  stopAllPRPolling: (subscriberId: string) => ipcRenderer.invoke('prPolling:stopAll', subscriberId),
+
   // Dependency check
   checkDependencies: () => ipcRenderer.invoke('dependencies:check'),
 

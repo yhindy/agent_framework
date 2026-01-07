@@ -1025,12 +1025,20 @@ export class AgentService {
     }
   }
 
-  async checkPullRequestStatus(projectPath: string, assignmentId: string): Promise<{ status: string; mergedAt?: string }> {
+  async checkPullRequestStatus(
+    projectPath: string,
+    assignmentId: string,
+    options?: { silent?: boolean }
+  ): Promise<{ status: string; mergedAt?: string; error?: string }> {
     const { assignments } = await this.getAssignments(projectPath)
     const assignment = assignments.find(a => a.id === assignmentId)
 
     if (!assignment || !assignment.prUrl) {
-      throw new Error('Assignment or PR URL not found')
+      const error = 'Assignment or PR URL not found'
+      if (!options?.silent) {
+        console.error('[AgentService]', error)
+      }
+      return { status: 'ERROR', error }
     }
 
     // Calculate worktree path
@@ -1048,7 +1056,11 @@ export class AgentService {
       // Extract PR number from URL
       const prNumberMatch = assignment.prUrl.match(/\/pull\/(\d+)/)
       if (!prNumberMatch) {
-        throw new Error('Could not extract PR number from URL')
+        const error = 'Could not extract PR number from URL'
+        if (!options?.silent) {
+          console.error('[AgentService]', error)
+        }
+        return { status: 'ERROR', error }
       }
       const prNumber = prNumberMatch[1]
 
@@ -1078,8 +1090,10 @@ export class AgentService {
         mergedAt: prData.mergedAt
       }
     } catch (error: any) {
-      console.error('[AgentService] Failed to check PR status:', error)
-      throw new Error(`Failed to check PR status: ${error.message}`)
+      if (!options?.silent) {
+        console.error('[AgentService] Failed to check PR status:', error)
+      }
+      return { status: 'ERROR', error: error.message }
     }
   }
 
