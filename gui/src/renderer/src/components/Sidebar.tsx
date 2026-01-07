@@ -272,7 +272,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
             {agent.isBaseBranchAgent && <span className="agent-icon">🏠</span>}
             {!agent.isSuperMinion && !agent.isBaseBranchAgent && <span className="agent-icon"></span>}
             <div className="agent-id">{agent.isBaseBranchAgent ? `${agent.assignmentId?.split('-').pop()} (Base)` : agent.id}</div>
-            {isWaiting && (
+            {isWaiting && !isActive && (
               <div className="attention-badge" title="Waiting for input">!</div>
             )}
             {showSpinner && (

@@ -231,3 +231,137 @@ describe('Sidebar plain terminal waiting', () => {
   })
 })
 
+describe('Sidebar waiting indicator suppression', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  const mockAgents = [
+    {
+      id: 'agent-1',
+      agentId: 'agent-1',
+      terminalPid: 123,
+      hasUnread: false,
+      lastActivity: new Date().toISOString()
+    },
+    {
+      id: 'agent-2',
+      agentId: 'agent-2',
+      terminalPid: 456,
+      hasUnread: false,
+      lastActivity: new Date().toISOString()
+    }
+  ]
+
+  let agentWaitingCallback: ((agentId: string, promptText: string) => void) | null = null
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    vi.mocked(window.electronAPI.onAgentWaitingForInput).mockImplementation((callback) => {
+      agentWaitingCallback = callback
+      return vi.fn()
+    })
+  })
+
+  it('shows indicator for waiting agent when viewing different agent', async () => {
+    // Start at a different agent route
+    render(
+      <MemoryRouter initialEntries={['/workspace/agent/agent-2']}>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    // Trigger agent-1 waiting
+    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+
+    // Should show badge for agent-1 (we're viewing agent-2)
+    await waitFor(() => {
+      const agent1Item = screen.getByText('agent-1').closest('.agent-item')!
+      expect(agent1Item.querySelector('.attention-badge')).toBeInTheDocument()
+    })
+  })
+
+  it('hides indicator for waiting agent when viewing that agent', async () => {
+    // Start at agent-1 route (the one that will be waiting)
+    render(
+      <MemoryRouter initialEntries={['/workspace/agent/agent-1']}>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+    })
+
+    // Trigger agent-1 waiting
+    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+
+    // Should NOT show badge for agent-1 (we're viewing it)
+    await waitFor(() => {
+      const agent1Item = screen.getByText('agent-1').closest('.agent-item')!
+      // The item should have the 'active' class but no attention-badge
+      expect(agent1Item).toHaveClass('active')
+      expect(agent1Item.querySelector('.attention-badge')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows badge for non-viewed waiting agent and hides for viewed one simultaneously', async () => {
+    // This test verifies that when both agents are waiting,
+    // only the non-active one shows the badge
+
+    // Start viewing agent-2
+    render(
+      <MemoryRouter initialEntries={['/workspace/agent/agent-2']}>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('agent-1')).toBeInTheDocument()
+      expect(screen.getByText('agent-2')).toBeInTheDocument()
+    })
+
+    // Trigger both agents waiting
+    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+    agentWaitingCallback?.('agent-2', 'Claude is waiting')
+
+    // Badge should show for agent-1 (not viewing it)
+    // Badge should NOT show for agent-2 (viewing it)
+    await waitFor(() => {
+      const agent1Item = screen.getByText('agent-1').closest('.agent-item')!
+      const agent2Item = screen.getByText('agent-2').closest('.agent-item')!
+
+      // agent-1 is NOT active but is waiting - should show badge
+      expect(agent1Item).not.toHaveClass('active')
+      expect(agent1Item).toHaveClass('waiting')
+      expect(agent1Item.querySelector('.attention-badge')).toBeInTheDocument()
+
+      // agent-2 IS active and waiting - should NOT show badge
+      expect(agent2Item).toHaveClass('active')
+      expect(agent2Item).toHaveClass('waiting')
+      expect(agent2Item.querySelector('.attention-badge')).not.toBeInTheDocument()
+    })
+  })
+})
+
