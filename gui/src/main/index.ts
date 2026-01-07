@@ -118,49 +118,53 @@ function initializeServices(): void {
         })
         .catch(err => console.error(`Failed to ensure base agent for ${project.path}:`, err))
 
-      // NEW: Auto-resume existing Claude sessions on app startup
+      // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
       services.agent.listAgents(project.path)
         .then(agents => {
           for (const agent of agents) {
-            // Only auto-resume Claude sessions marked as active
-            if (agent.claudeSessionActive && agent.tool === 'claude') {
-              // Stagger resumes to avoid overwhelming
-              const delay = 500 + Math.random() * 2000
+            // Check for Claude sessions with session IDs (use JSONL to verify they exist)
+            if (agent.claudeSessionId && agent.tool === 'claude') {
+              // Check actual session state from JSONL
+              const sessionState = services!.claudeSessionInfo.getSessionState(
+                agent.claudeSessionId,
+                agent.worktreePath
+              )
 
-              setTimeout(async () => {
-                try {
-                  await services!.terminal.startAgent(
-                    project.path,
-                    agent.id,
-                    agent.tool || 'claude',
-                    agent.mode || 'dev',
-                    agent.prompt,
-                    agent.model,
-                    false
-                  )
+              // Only resume if session exists (not 'unknown')
+              if (sessionState !== 'unknown') {
+                console.log(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
 
-                  mainWindow?.webContents.send('agents:updated')
+                // Stagger resumes to avoid overwhelming
+                const delay = 500 + Math.random() * 2000
 
-                  // Restore waiting notification if was waiting
-                  if (agent.isWaitingForInput) {
-                    mainWindow?.webContents.send('agent:waitingForInput',
-                      agent.id,
-                      'Claude is waiting for input'
-                    )
-                  }
-                } catch (error) {
-                  console.error(`Failed to resume agent ${agent.id}:`, error)
-
-                  // Mark session inactive on resume failure
+                setTimeout(async () => {
                   try {
-                    await services!.agent.updateAgentInfo(agent.worktreePath, {
-                      claudeSessionActive: false
-                    })
-                  } catch (err) {
-                    console.error('Failed to mark session inactive:', err)
+                    await services!.terminal.startAgent(
+                      project.path,
+                      agent.id,
+                      agent.tool || 'claude',
+                      agent.mode || 'dev',
+                      agent.prompt,
+                      agent.model,
+                      false
+                    )
+
+                    mainWindow?.webContents.send('agents:updated')
+
+                    // Restore waiting notification based on JSONL state
+                    if (sessionState === 'waiting') {
+                      mainWindow?.webContents.send('agent:waitingForInput',
+                        agent.id,
+                        'Claude is waiting for input'
+                      )
+                    }
+                  } catch (error) {
+                    console.error(`Failed to resume agent ${agent.id}:`, error)
                   }
-                }
-              }, delay)
+                }, delay)
+              } else {
+                console.log(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
+              }
             }
           }
         })
