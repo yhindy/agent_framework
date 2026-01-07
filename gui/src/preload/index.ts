@@ -80,6 +80,7 @@ const api = {
   startPRPolling: (assignmentId: string, subscriberId: string) => ipcRenderer.invoke('prPolling:start', assignmentId, subscriberId),
   stopPRPolling: (assignmentId: string, subscriberId: string) => ipcRenderer.invoke('prPolling:stop', assignmentId, subscriberId),
   stopAllPRPolling: (subscriberId: string) => ipcRenderer.invoke('prPolling:stopAll', subscriberId),
+  refreshPRNow: (assignmentId: string) => ipcRenderer.invoke('prPolling:refreshNow', assignmentId),
 
   // Dependency check
   checkDependencies: () => ipcRenderer.invoke('dependencies:check'),

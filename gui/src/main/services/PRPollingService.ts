@@ -8,12 +8,25 @@ interface PollingJob {
   lastCheckTime: number
   errorCount: number
   isPolling: boolean
+  prCreatedAt: number | null
+  isManualRefresh: boolean
+}
+
+interface CachedPRStatus {
+  status: string
+  timestamp: number
+  mergedAt?: string
 }
 
 /**
  * PRPollingService manages automatic polling of PR status across the application.
  * It deduplicates requests so that multiple components watching the same PR
  * result in only a single GitHub API call every 30 seconds.
+ *
+ * Uses intelligent polling intervals based on PR age:
+ * - New PRs (< 5 min): 30 seconds
+ * - Recent PRs (5-60 min): 90 seconds
+ * - Stale PRs (> 60 min): 5 minutes
  */
 export class PRPollingService {
   private mainWindow: BrowserWindow
@@ -26,9 +39,13 @@ export class PRPollingService {
   // Track active subscriptions: assignmentId -> Set<subscriberId>
   private subscriptions: Map<string, Set<string>> = new Map()
 
+  // Cache for PR status: assignmentId -> CachedPRStatus
+  private prStatusCache: Map<string, CachedPRStatus> = new Map()
+
   // Rate limiting state
   private rateLimitedUntil: number = 0
-  private rateLimitBackoffMs: number = 5 * 60 * 1000 // 5 minutes
+  private rateLimitBackoffMs: number = 10 * 60 * 1000 // 10 minutes
+  private cacheTtlMs: number = 5 * 60 * 1000 // 5 minutes cache TTL
 
   constructor(mainWindow: BrowserWindow, agentService: AgentService) {
     this.mainWindow = mainWindow
@@ -66,17 +83,18 @@ export class PRPollingService {
       intervalId: null,
       lastCheckTime: 0,
       errorCount: 0,
-      isPolling: false
+      isPolling: false,
+      prCreatedAt: null,
+      isManualRefresh: false
     }
 
     this.pollingJobs.set(assignmentId, job)
 
-    // Start polling immediately, then every 30 seconds
+    // Start polling immediately
     await this.executePollingCheck(job)
 
-    job.intervalId = setInterval(async () => {
-      await this.executePollingCheck(job)
-    }, 30000) // 30 seconds
+    // Schedule next poll with dynamic interval
+    this.scheduleNextPoll(job)
   }
 
   /**
@@ -116,11 +134,98 @@ export class PRPollingService {
   }
 
   /**
+   * Manually refresh PR status immediately
+   */
+  async refreshPRNow(assignmentId: string): Promise<void> {
+    const job = this.pollingJobs.get(assignmentId)
+    if (!job) return
+
+    // Mark as manual refresh to bypass backoff
+    job.isManualRefresh = true
+    job.errorCount = 0 // Reset error count on manual refresh
+
+    // Clear cache to force fresh API call
+    this.prStatusCache.delete(assignmentId)
+
+    // Execute check immediately
+    await this.executePollingCheck(job)
+
+    // Reschedule polling
+    this.scheduleNextPoll(job)
+  }
+
+  /**
+   * Calculate polling interval based on PR age (in milliseconds)
+   * - New PRs (< 5 min): 30 seconds
+   * - Recent PRs (5-60 min): 90 seconds
+   * - Stale PRs (> 60 min): 5 minutes
+   */
+  private calculatePollingInterval(prCreatedAt: number | null): number {
+    if (!prCreatedAt) {
+      return 60 * 1000 // Default to 60 seconds if no creation time
+    }
+
+    const ageMinutes = (Date.now() - prCreatedAt) / 60000
+
+    if (ageMinutes < 5) {
+      return 30 * 1000 // 30 seconds for new PRs
+    } else if (ageMinutes < 60) {
+      return 90 * 1000 // 90 seconds for recent PRs
+    } else {
+      return 5 * 60 * 1000 // 5 minutes for stale PRs
+    }
+  }
+
+  /**
+   * Calculate backoff delay based on error count (exponential backoff)
+   */
+  private calculateBackoffMs(errorCount: number): number {
+    if (errorCount === 1) {
+      return 30 * 1000 // 30 seconds on first error
+    } else if (errorCount === 2) {
+      return 2 * 60 * 1000 // 2 minutes on second error
+    } else {
+      return 10 * 60 * 1000 // 10 minutes on third+ errors
+    }
+  }
+
+  /**
+   * Schedule the next poll with dynamic interval
+   */
+  private scheduleNextPoll(job: PollingJob): void {
+    if (job.intervalId) {
+      clearInterval(job.intervalId)
+    }
+
+    const interval = this.calculatePollingInterval(job.prCreatedAt)
+    job.intervalId = setInterval(async () => {
+      await this.executePollingCheck(job)
+    }, interval)
+  }
+
+  /**
+   * Check if there's a fresh cached PR status
+   */
+  private getCachedPRStatus(assignmentId: string): CachedPRStatus | null {
+    const cached = this.prStatusCache.get(assignmentId)
+    if (!cached) return null
+
+    // Return cache if still fresh
+    if (Date.now() - cached.timestamp < this.cacheTtlMs) {
+      return cached
+    }
+
+    // Cache is stale, remove it
+    this.prStatusCache.delete(assignmentId)
+    return null
+  }
+
+  /**
    * Execute a single PR status check
    */
   private async executePollingCheck(job: PollingJob): Promise<void> {
-    // Check if rate limited
-    if (this.isRateLimited()) {
+    // Check if rate limited (unless this is a manual refresh)
+    if (!job.isManualRefresh && this.isRateLimited()) {
       return
     }
 
@@ -132,9 +237,20 @@ export class PRPollingService {
     job.isPolling = true
 
     try {
-      // We need to find the project path for this assignment
-      // This is a bit tricky since we only have the assignmentId
-      // We'll need to get it from the active projects
+      // Check cache first (unless manual refresh)
+      if (!job.isManualRefresh) {
+        const cached = this.getCachedPRStatus(job.assignmentId)
+        if (cached) {
+          // Use cached value
+          job.lastCheckTime = Date.now()
+          if (cached.status === 'MERGED' || cached.status === 'CLOSED') {
+            this.stopPollingJob(job.assignmentId)
+          }
+          return
+        }
+      }
+
+      // Find project path
       const projectPath = await this.findProjectPathForAssignment(job.assignmentId)
       if (!projectPath) {
         // Assignment no longer exists, stop polling
@@ -157,6 +273,18 @@ export class PRPollingService {
         job.errorCount = 0
         job.lastCheckTime = Date.now()
 
+        // Store creation time on first successful check
+        if (!job.prCreatedAt && result.createdAt) {
+          job.prCreatedAt = new Date(result.createdAt).getTime()
+        }
+
+        // Cache the result
+        this.prStatusCache.set(job.assignmentId, {
+          status: result.status,
+          timestamp: Date.now(),
+          mergedAt: result.mergedAt
+        })
+
         // Emit update event to refresh UI
         this.mainWindow.webContents.send('assignments:updated')
 
@@ -169,24 +297,30 @@ export class PRPollingService {
       this.handlePollingError(job, error.message)
     } finally {
       job.isPolling = false
+      job.isManualRefresh = false
     }
   }
 
   /**
-   * Handle polling errors with retry logic
+   * Handle polling errors with exponential backoff retry logic
    */
   private handlePollingError(job: PollingJob, errorMessage: string): void {
     job.errorCount++
 
     // Check for rate limiting
     if (errorMessage.includes('rate limit') || errorMessage.includes('403') || errorMessage.includes('429')) {
-      console.warn('[PRPolling] Rate limited, backing off for 5 minutes')
+      console.warn(`[PRPolling] Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
       this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs
+      return
     }
 
-    // Stop after 3 consecutive errors
-    if (job.errorCount >= 3) {
-      console.warn(`[PRPolling] Stopping polling for ${job.assignmentId} after 3 errors`)
+    // Use exponential backoff for other errors
+    if (job.errorCount < 3) {
+      const backoffMs = this.calculateBackoffMs(job.errorCount)
+      console.warn(`[PRPolling] Error #${job.errorCount} for ${job.assignmentId}, backing off for ${backoffMs / 1000}s`)
+    } else {
+      // Stop after 3 consecutive errors (this prevents infinite retries)
+      console.warn(`[PRPolling] Stopping polling for ${job.assignmentId} after 3 consecutive errors`)
       this.stopPollingJob(job.assignmentId)
     }
   }
@@ -234,5 +368,6 @@ export class PRPollingService {
     }
     this.pollingJobs.clear()
     this.subscriptions.clear()
+    this.prStatusCache.clear()
   }
 }

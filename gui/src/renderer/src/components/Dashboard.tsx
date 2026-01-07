@@ -287,10 +287,18 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const handleCheckPRStatus = async (assignment: Assignment) => {
     try {
       setCheckingPRFor(prev => new Set(prev).add(assignment.id))
-      
-      console.log('[Dashboard] Checking PR status for:', assignment.id)
+
+      console.log('[Dashboard] Manually refreshing PR status for:', assignment.id)
+
+      // Trigger manual refresh (bypasses rate limiting and cache)
+      await window.electronAPI.refreshPRNow(assignment.id)
+
+      // Give a moment for the refresh to complete and update to propagate
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Now check the updated status
       const result = await window.electronAPI.checkPullRequestStatus(assignment.id)
-      
+
       if (result.status === 'MERGED') {
         alert(`PR has been merged! 🎉\n\nYou can now archive this assignment.`)
       } else if (result.status === 'CLOSED') {
@@ -514,10 +522,11 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                             handleCheckPRStatus(assignment)
                           }}
                           disabled={checkingPRFor.has(assignment.id)}
+                          title="Manually refresh PR status (auto-polling runs in background)"
                         >
                           {checkingPRFor.has(assignment.id)
-                            ? 'Checking...'
-                            : 'Check PR Status'}
+                            ? 'Refreshing...'
+                            : '↻ Refresh PR'}
                         </button>
                       </div>
                     )}
