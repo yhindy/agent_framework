@@ -74,7 +74,11 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   })
 
   const loadAgent = async () => {
-    if (!agentId) return
+    if (!agentId) {
+      // No agent ID - set default tab
+      setActiveTab('orchestration')
+      return
+    }
     try {
       setError(null)
       const details = await window.electronAPI.getSuperAgentDetails(agentId)
@@ -101,13 +105,33 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     } catch (err: any) {
       console.error('Failed to load super agent details:', err)
       setError(err.message || 'Failed to load super agent')
+      // Fallback to default tab on error
+      setActiveTab('orchestration')
     }
   }
 
   useEffect(() => {
-    loadAgent()
-    loadTestEnvConfig()
-    loadTestEnvStatus()
+    if (!agentId) {
+      // Ensure default tab is set even if no agentId
+      setActiveTab('orchestration')
+      return
+    }
+
+    // Load test env config FIRST, then agent data to prevent race condition
+    // where activeTab is validated against empty testEnvCommands
+    const initializeSuperAgentView = async () => {
+      try {
+        await loadTestEnvConfig()
+        await loadAgent()
+        loadTestEnvStatus()
+      } catch (err) {
+        console.error('Failed to initialize super agent view:', err)
+        // Ensure we have a default tab on error
+        setActiveTab('orchestration')
+      }
+    }
+
+    initializeSuperAgentView()
 
     // Listen for updates
     const unsubscribeList = window.electronAPI.onAgentListUpdate(() => {
@@ -149,10 +173,10 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     saveUIStateDebounced(agentId, uiState)
   }, [activeTab, plainTerminals, terminalCounter, agentId, saveUIStateDebounced])
 
-  // Cleanup debounced save on unmount
+  // Flush debounced save on unmount to ensure state is persisted
   useEffect(() => {
     return () => {
-      saveUIStateDebounced.cancel()
+      saveUIStateDebounced.flush()
     }
   }, [saveUIStateDebounced])
 

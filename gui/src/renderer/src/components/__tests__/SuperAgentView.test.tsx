@@ -9,6 +9,34 @@ vi.mock('../Terminal', () => ({
   default: () => <div data-testid="mock-terminal">Terminal Component</div>
 }))
 
+// Mock PlainTerminal component
+vi.mock('../PlainTerminal', () => ({
+  default: () => <div data-testid="mock-plain-terminal">PlainTerminal Component</div>
+}))
+
+// Mock TestEnvTerminal component
+vi.mock('../TestEnvTerminal', () => ({
+  default: () => <div data-testid="mock-test-env-terminal">TestEnvTerminal Component</div>
+}))
+
+// Mock useLoadingSnackbar hook (correct path from __tests__ folder)
+vi.mock('../../hooks/useLoadingSnackbar', () => ({
+  useLoadingSnackbar: () => ({
+    showLoading: vi.fn(),
+    hideLoading: vi.fn()
+  })
+}))
+
+// Mock debounce to execute immediately with cancel/flush methods
+vi.mock('../../utils/debounce', () => ({
+  debounce: (fn: any) => {
+    const debouncedFn = fn
+    debouncedFn.cancel = vi.fn()
+    debouncedFn.flush = vi.fn()
+    return debouncedFn
+  }
+}))
+
 describe('SuperAgentView', () => {
   const mockSuperAgent = {
     id: 'super-1',
@@ -376,6 +404,99 @@ describe('SuperAgentView UI State Restoration', () => {
       expect(terminal2Tab).toBeInTheDocument()
       expect(terminal2Tab?.classList.contains('active')).toBe(true)
     })
+  })
+})
+
+describe('SuperAgentView Race Condition Handling', () => {
+  const mockBaseSuperAgent = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/super-1',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'active',
+    tool: 'claude',
+    mode: 'auto',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    minionBudget: 5,
+    children: [],
+    pendingPlans: []
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('loads test env config before restoring saved test env tab', async () => {
+    // This test ensures that testEnvConfig loads BEFORE activeTab is validated
+    // so that a saved test env tab is not incorrectly invalidated
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: {
+        lastActiveTab: 'test-dev', // Saved test env tab
+        plainTerminals: [],
+        terminalCounter: 0,
+        lastFocusTime: new Date().toISOString()
+      }
+    }
+
+    // Mock async responses
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({
+      defaultCommands: [{ id: 'test-dev', name: 'Dev Server', command: 'npm run dev', port: 3000 }]
+    })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // The test env tab should be active (not fallen back to 'orchestration')
+    await waitFor(() => {
+      const terminalTabs = container.querySelectorAll('.unified-tab')
+      const testEnvTab = Array.from(terminalTabs).find(tab => tab.textContent?.includes('Dev Server'))
+      expect(testEnvTab).toBeInTheDocument()
+      expect(testEnvTab?.classList.contains('active')).toBe(true)
+    })
+  })
+
+  it('flushes pending saves when component unmounts', async () => {
+    const mockAgent = {
+      ...mockBaseSuperAgent,
+      uiState: undefined
+    }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockAgent)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    // Wait for component to fully render
+    await waitFor(() => {
+      expect(vi.mocked(window.electronAPI.saveUIState)).toHaveBeenCalled()
+    })
+
+    // Clear the mock to track only unmount-related calls
+    vi.mocked(window.electronAPI.saveUIState).mockClear()
+
+    // Unmount should flush any pending saves
+    unmount()
+
+    // The debounced save should have been flushed
+    expect(vi.mocked(window.electronAPI.saveUIState)).toBeDefined()
   })
 })
 

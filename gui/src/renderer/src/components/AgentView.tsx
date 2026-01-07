@@ -96,11 +96,27 @@ function AgentView({ activeProjects }: AgentViewProps) {
   ]
 
   useEffect(() => {
-    if (!agentId) return
+    if (!agentId) {
+      // Ensure default tab is set even if no agentId
+      setActiveTab('agent')
+      return
+    }
 
-    loadAgentData()
-    loadTestEnvConfig()
-    loadTestEnvStatus()
+    // Load test env config FIRST, then agent data to prevent race condition
+    // where activeTab is validated against empty testEnvCommands
+    const initializeAgentView = async () => {
+      try {
+        await loadTestEnvConfig()
+        await loadAgentData()
+        loadTestEnvStatus()
+      } catch (err) {
+        console.error('Failed to initialize agent view:', err)
+        // Ensure we have a default tab on error
+        setActiveTab('agent')
+      }
+    }
+
+    initializeAgentView()
 
     // Listen for agent updates
     const unsubscribeUpdate = window.electronAPI.onAgentListUpdate(() => {
@@ -142,10 +158,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
     saveUIStateDebounced(agentId, uiState)
   }, [activeTab, plainTerminals, terminalCounter, agentId, saveUIStateDebounced])
 
-  // Cleanup debounced save on unmount
+  // Flush debounced save on unmount to ensure state is persisted
   useEffect(() => {
     return () => {
-      saveUIStateDebounced.cancel()
+      saveUIStateDebounced.flush()
     }
   }, [saveUIStateDebounced])
 
@@ -166,48 +182,58 @@ function AgentView({ activeProjects }: AgentViewProps) {
   }, [activeTab, plainTerminals, testEnvCommands])
 
   const loadAgentData = async () => {
-    if (!agentId) return
-
-    // Load agent session - search across all active projects
-    let agentData: AgentSession | null = null
-    let assignmentData: Assignment | null = null
-
-    for (const project of activeProjects) {
-      try {
-        const agents = await window.electronAPI.listAgentsForProject(project.path)
-        const found = agents.find((a: AgentSession) => a.id === agentId)
-        if (found) {
-          agentData = found
-          
-          // Also load assignment from this project
-          const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
-          assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId) || null
-          break
-        }
-      } catch (err) {
-        console.error(`Failed to search project ${project.path}:`, err)
-      }
+    if (!agentId) {
+      // No agent ID - set default tab
+      setActiveTab('agent')
+      return
     }
 
-    setAgent(agentData)
-    setAssignment(assignmentData)
+    try {
+      // Load agent session - search across all active projects
+      let agentData: AgentSession | null = null
+      let assignmentData: Assignment | null = null
 
-    // Restore UI state if available
-    if (agentData?.uiState) {
-      const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = agentData.uiState
+      for (const project of activeProjects) {
+        try {
+          const agents = await window.electronAPI.listAgentsForProject(project.path)
+          const found = agents.find((a: AgentSession) => a.id === agentId)
+          if (found) {
+            agentData = found
 
-      // Validate terminal counter against saved terminals
-      const maxTerminalNum = Math.max(
-        ...savedTerminals.map(id => parseInt(id.split('-')[1]) || 0),
-        0
-      )
-      const restoredCounter = Math.max(savedCounter, maxTerminalNum)
+            // Also load assignment from this project
+            const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
+            assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId) || null
+            break
+          }
+        } catch (err) {
+          console.error(`Failed to search project ${project.path}:`, err)
+        }
+      }
 
-      setPlainTerminals(savedTerminals)
-      setTerminalCounter(restoredCounter)
-      setActiveTab(lastActiveTab)
-    } else {
-      // No saved state - set default tab
+      setAgent(agentData)
+      setAssignment(assignmentData)
+
+      // Restore UI state if available
+      if (agentData?.uiState) {
+        const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = agentData.uiState
+
+        // Validate terminal counter against saved terminals
+        const maxTerminalNum = Math.max(
+          ...savedTerminals.map(id => parseInt(id.split('-')[1]) || 0),
+          0
+        )
+        const restoredCounter = Math.max(savedCounter, maxTerminalNum)
+
+        setPlainTerminals(savedTerminals)
+        setTerminalCounter(restoredCounter)
+        setActiveTab(lastActiveTab)
+      } else {
+        // No saved state - set default tab
+        setActiveTab('agent')
+      }
+    } catch (err) {
+      console.error('Error loading agent data:', err)
+      // Fallback to default tab on error
       setActiveTab('agent')
     }
   }
