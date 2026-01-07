@@ -7,6 +7,7 @@ import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -19,6 +20,7 @@ let services: {
   terminal: TerminalService
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
+  notification: NotificationService
   prPolling: PRPollingService
 } | null = null
 
@@ -46,7 +48,17 @@ function createWindow(): void {
     services.terminal.setWindow(mainWindow)
     services.testEnv.setWindow(mainWindow)
     services.fileWatcher.setWindow(mainWindow)
+    services.notification.setWindow(mainWindow)
   }
+
+  // Track window focus for notifications
+  mainWindow.on('focus', () => {
+    services?.notification.setWindowFocus(true)
+  })
+
+  mainWindow.on('blur', () => {
+    services?.notification.setWindowFocus(false)
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -67,9 +79,18 @@ function createWindow(): void {
 function initializeServices(): void {
   if (!mainWindow) return
 
+  // Set app name for notifications (helps with macOS permissions)
+  app.setName('Agent Orchestrator')
+
+  // On macOS, ensure app appears in dock (required for notifications in dev mode)
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.show()
+  }
+
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
-  const terminalService = new TerminalService(mainWindow)
+  const notificationService = new NotificationService(mainWindow)
+  const terminalService = new TerminalService(mainWindow, notificationService)
 
   // Set AgentService reference in TerminalService for persistence
   terminalService.setAgentService(agentService)
@@ -80,6 +101,7 @@ function initializeServices(): void {
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
+    notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService)
   }
 

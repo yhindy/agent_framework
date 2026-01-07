@@ -6,6 +6,7 @@ import { execSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
+import { NotificationService } from './NotificationService'
 import {
   IdleDetector,
   CLAUDE_WORKING_PATTERNS,
@@ -44,14 +45,16 @@ export class TerminalService {
   private plainTerminals: Map<string, PlainTerminalSession>
   private mainWindow: BrowserWindow
   private agentService?: AgentService
+  private notificationService?: NotificationService
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
 
-  constructor(mainWindow: BrowserWindow) {
+  constructor(mainWindow: BrowserWindow, notificationService?: NotificationService) {
     this.terminals = new Map()
     this.plainTerminals = new Map()
     this.mainWindow = mainWindow
+    this.notificationService = notificationService
   }
 
   setWindow(mainWindow: BrowserWindow): void {
@@ -215,6 +218,12 @@ export class TerminalService {
         {
           onWaitingForInput: (context: string) => {
             this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+            // Send desktop notification
+            this.notificationService?.notify({
+              title: 'Input Required',
+              body: `Agent ${agentId} is waiting for your input`,
+              agentId
+            })
             // Persist waiting state
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,

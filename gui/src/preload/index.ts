@@ -145,7 +145,7 @@ const api = {
   },
   
   onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => {
-    const subscription = (_event: any, agentId: string, commandId: string, exitCode: number) => 
+    const subscription = (_event: any, agentId: string, commandId: string, exitCode: number) =>
       callback(agentId, commandId, exitCode)
     ipcRenderer.on('testEnv:exited', subscription)
     return () => ipcRenderer.removeListener('testEnv:exited', subscription)
