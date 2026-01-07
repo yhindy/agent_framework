@@ -22,22 +22,24 @@ Make Claude session information available in the GUI with live updates showing s
 
 ---
 
-## In-Progress Milestones
-
-### 🔄 Milestone 2: Live Updates + State Detection
+### ✅ Milestone 2: Live Updates + State Detection
 **Goal:** Detect model changes mid-session and update state in real-time
 
-**Tasks:**
-- [ ] Add polling to SessionInfoPanel (fetch every 2-3 seconds when agent is running)
-- [ ] Detect model changes and highlight them in UI
-- [ ] Implement file watcher for session JSONL (using ClaudeSessionInfoService.watchSession)
-- [ ] Update state badge when Claude transitions between working ↔ waiting
-- [ ] Add optional notifications when model changes or state changes
+**Completed:**
+- ✅ 2-second polling interval added to SessionInfoPanel
+- ✅ Model change history tracked with timestamps
+- ✅ **Fixed state detection:** Now uses LAST entry only (not all entries)
+  - `stop_reason: "end_turn"` → waiting for user input
+  - `tool_use` with `stop_reason: null` → working (awaiting tool results)
+  - user message → working (Claude is processing)
+- ✅ Token usage and cost estimates update in real-time
+- ✅ Efficient diff-based state updates (no unnecessary re-renders)
 
-**Acceptance Criteria:**
-- If user changes model mid-session with `claude --model`, UI updates within 2-3 seconds
-- State badge updates when Claude is thinking vs waiting for input
-- No excessive polling/file watcher overhead
+**Current Status:** ✅ WORKING - State transitions correctly, model changes tracked
+
+**Known Limitations:**
+- Model changes via `/model` command update on next "keep going" (not immediately)
+- File watcher not yet implemented (polling works well enough for now)
 
 ---
 
