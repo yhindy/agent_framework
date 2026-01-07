@@ -6,7 +6,7 @@ A lightweight framework for running multiple AI coding minions in parallel on an
 
 ```bash
 # 1. Clone the repo
-git clone <repo-url>
+git clone https://github.com/yhindy/agent_framework
 cd agent_framework
 
 # 2. Run setup (installs dependencies)
