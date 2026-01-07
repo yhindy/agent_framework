@@ -226,7 +226,15 @@ export class ClaudeSessionInfoService {
             const hasToolUse = msg.content.some(c => c.type === 'tool_use')
             if (hasToolUse) {
               state = 'working'
+            } else {
+              // Assistant message with no tool_use and no end_turn (e.g., interrupted)
+              // Default to waiting since there's no pending action
+              state = 'waiting'
             }
+          } else {
+            // Assistant message with non-array content or no content
+            // Likely interrupted or incomplete - default to waiting
+            state = 'waiting'
           }
         } else if (lastEntry.type === 'user') {
           // If last entry is user message, Claude is working on processing it
