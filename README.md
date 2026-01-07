@@ -2,7 +2,25 @@
 
 A lightweight framework for running multiple AI coding minions in parallel on any codebase.
 
-## Quick Start
+## First-Time Setup
+
+```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd agent_framework
+
+# 2. Run setup (installs dependencies)
+./setup.sh
+
+# 3. Start the GUI
+./run.sh
+```
+
+**Next:** See [USAGE.md](./USAGE.md) for how to use the framework.
+
+---
+
+## Quick Start (Installing into a Project)
 
 ```bash
 # 1. Install the framework into your project (CLI)
