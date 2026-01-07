@@ -395,11 +395,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
           {assignment && (
             <>
-              <div className="info-badge feature-badge">
+              <div className="info-badge feature-badge" title={`${assignment.feature} (click to copy)`}>
                 <span className="info-badge-label">Feature:</span>
                 <span
                   className="info-badge-value copyable"
-                  data-tooltip={assignment.feature}
                   onClick={(e) => handleCopyToClipboard(assignment.feature, e as any)}
                   role="button"
                   tabIndex={0}
@@ -408,10 +407,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 </span>
               </div>
 
-              <div className="info-badge branch-badge">
+              <div className="info-badge branch-badge" title={`${assignment.branch} (click to copy)`}>
                 <span
                   className="info-badge-value copyable"
-                  data-tooltip={assignment.branch}
                   onClick={(e) => handleCopyToClipboard(assignment.branch, e as any)}
                   role="button"
                   tabIndex={0}
@@ -420,11 +418,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 </span>
               </div>
 
-              <div className="status-badge">
+              <div className="status-badge" title={`${assignment.status} (click to copy)`}>
                 <span className={`status-dot ${getStatusClass(assignment.status)}`} />
                 <span
                   className="copyable"
-                  data-tooltip={assignment.status}
                   onClick={(e) => handleCopyToClipboard(assignment.status, e as any)}
                   role="button"
                   tabIndex={0}
@@ -438,12 +435,12 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
         <div className="agent-actions">
           {assignment?.tool !== 'cursor' && isRunning && (
-            <button onClick={handleStopAgent} className="danger icon-button" title="Stop Agent">
-              ⏹️
+            <button onClick={handleStopAgent} className="danger compact-button">
+              Stop
             </button>
           )}
-          <button onClick={handleOpenCursor} className="icon-button" title="Open in Cursor">
-            📝
+          <button onClick={handleOpenCursor} className="compact-button">
+            Cursor
           </button>
 
           {assignment?.prStatus && assignment.prUrl && (
@@ -476,17 +473,16 @@ function AgentView({ activeProjects }: AgentViewProps) {
           {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
             <button
               onClick={handleCreatePRClick}
-              className="success icon-button"
+              className="success compact-button"
               disabled={isCreatingPR}
-              title={isCreatingPR ? 'Creating PR...' : 'Make PR'}
             >
-              {isCreatingPR ? '⏳' : '➕'}
+              {isCreatingPR ? 'Creating...' : 'Make PR'}
             </button>
           )}
 
           {assignment && !assignment.isBaseBranchAgent && (
             <div className="cleanup-dropdown">
-              <button className="cleanup-button icon-button" title="Cleanup Options">🗑️</button>
+              <button className="cleanup-button compact-button">Cleanup ▾</button>
               <div className="cleanup-menu">
                 <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
                 <button onClick={() => handleCleanupClick('teardown')} className="danger-text">

@@ -53,56 +53,53 @@
   flex-shrink: 0;
 }
 
-.agent-actions .icon-button {
-  padding: 6px 10px;
+.agent-actions .compact-button {
+  padding: 6px 12px;
   background: #3e3e42;
   color: #cccccc;
   border: none;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  height: 36px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.agent-actions .icon-button:hover {
+.agent-actions .compact-button:hover {
   background: #4e4e52;
-  transform: scale(1.05);
+  transform: translateY(-1px);
 }
 
-.agent-actions .icon-button:active {
-  transform: scale(0.95);
+.agent-actions .compact-button:active {
+  transform: translateY(0);
 }
 
-.agent-actions .icon-button.primary {
+.agent-actions .compact-button.primary {
   background: #0e639c;
 }
 
-.agent-actions .icon-button.primary:hover {
+.agent-actions .compact-button.primary:hover {
   background: #1177bb;
 }
 
-.agent-actions .icon-button.danger {
+.agent-actions .compact-button.danger {
   background: #c72e1d;
 }
 
-.agent-actions .icon-button.danger:hover {
+.agent-actions .compact-button.danger:hover {
   background: #e03e2d;
 }
 
-.agent-actions .icon-button.success {
+.agent-actions .compact-button.success {
   background: #0dbc79;
 }
 
-.agent-actions .icon-button.success:hover {
+.agent-actions .compact-button.success:hover {
   background: #23d18b;
 }
 
-.agent-actions .icon-button:disabled {
+.agent-actions .compact-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

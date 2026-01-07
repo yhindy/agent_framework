@@ -328,11 +328,10 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
             </h2>
           </div>
 
-          <div className="info-badge mission-badge">
+          <div className="info-badge mission-badge" title={`${agent.feature} (click to copy)`}>
             <span className="info-badge-label">Mission:</span>
             <span
               className="info-badge-value copyable"
-              data-tooltip={agent.feature}
               onClick={(e) => handleCopyToClipboard(agent.feature, e as any)}
               role="button"
               tabIndex={0}
@@ -343,17 +342,17 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         </div>
 
         <div className="agent-actions">
-          <button onClick={handleCreatePRClick} className="success icon-button" disabled={isCreatingPR} title={isCreatingPR ? 'Creating PR...' : 'Make PR'}>
-            {isCreatingPR ? '⏳' : '➕'}
+          <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
+            {isCreatingPR ? 'Creating...' : 'Make PR'}
           </button>
-          <button onClick={handleOpenCursor} className="icon-button" title="Open in Cursor">
-            📝
+          <button onClick={handleOpenCursor} className="compact-button">
+            Cursor
           </button>
-          <button className="danger icon-button" onClick={handleStop} title="Stop Agent">
-            ⏹️
+          <button className="danger compact-button" onClick={handleStop}>
+            Stop
           </button>
-          <button className="danger icon-button" onClick={() => setShowTeardownConfirm(true)} title="Cleanup">
-            🗑️
+          <button className="danger compact-button" onClick={() => setShowTeardownConfirm(true)}>
+            Cleanup
           </button>
         </div>
       </div>
