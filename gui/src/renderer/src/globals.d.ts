@@ -49,6 +49,12 @@ declare global {
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
       createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
       checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>
+
+      // PR Polling APIs
+      startPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>
+      stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>
+      stopAllPRPolling: (subscriberId: string) => Promise<void>
+
       checkDependencies: () => Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }>
 
       // Test Environment APIs
