@@ -263,6 +263,12 @@ export class TerminalService {
             // Transitioned to waiting - emit notification
             console.log(`[TerminalService] ${agentId} now waiting for input - sending IPC event`)
             this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+            // Send desktop notification
+            this.notificationService?.notify({
+              title: 'Input Required',
+              body: `Agent ${agentId} is waiting for your input`,
+              agentId
+            })
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,
               claudeLastSeen: new Date().toISOString()
