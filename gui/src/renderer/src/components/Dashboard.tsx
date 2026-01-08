@@ -78,7 +78,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     shortName: '',
     prompt: '',
     tool: 'claude',
-    model: 'haiku',
+    model: 'opusplan',
     mode: 'planning',
     status: 'pending',
     yolo: true,
@@ -226,7 +226,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         shortName: '',
         prompt: '',
         tool: 'claude',
-        model: 'opus',
+        model: 'opusplan',
         mode: 'planning',
         status: 'pending',
         yolo: false,
@@ -681,6 +681,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                       <option value="haiku">Haiku</option>
                       <option value="sonnet">Sonnet</option>
                       <option value="opus">Opus</option>
+                      <option value="opusplan">Opus Plan</option>
                     </select>
                   </div>
                 )}
@@ -719,7 +720,11 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                     <label>Mode</label>
                     <select
                       value={formData.mode}
-                      onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'planning' | 'dev' })}
+                      onChange={(e) => {
+                        const newMode = e.target.value as 'planning' | 'dev'
+                        const newModel = newMode === 'dev' ? 'haiku' : 'opusplan'
+                        setFormData({ ...formData, mode: newMode, model: newModel })
+                      }}
                     >
                       <option value="planning">Planning</option>
                       <option value="dev">Dev</option>
