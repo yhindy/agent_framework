@@ -89,3 +89,81 @@ The system will spawn Child Minions for approved plans. You can monitor their st
 1.  If a child fails or you identify missing tasks, you can propose **new** plans by updating `.pending-plans.json` with **only the new plans** and signaling `===SIGNAL:PLANS_READY===` again.
 2.  Once all children are finished and you have verified the work, you can mark the Super Mission as complete.
 
+## 🛠️ Using the Task Tool
+
+You can use Claude Code's built-in **Task tool** to spawn subagents for quick, targeted work that doesn't require full child minions. This is ideal for:
+
+- **Exploration**: Quick codebase reconnaissance before planning
+- **Implementation**: TDD-style feature development
+- **Review**: Code review after implementations complete
+
+### Available Subagent Types
+
+| Type | Purpose |
+|------|---------|
+| `Explore` | Lightweight codebase exploration |
+| `general-purpose` | Full-featured implementation agent |
+| `Plan` | Architecture and planning |
+| `Bash` | Shell command execution |
+
+### Spawning an Implementer (TDD Approach)
+
+When spawning implementers, guide them to use Test-Driven Development:
+
+```
+Task(subagent_type="general-purpose", description="Implement user auth", prompt="""
+You are an Implementer. Follow TDD:
+1. Write failing tests first that define expected behavior
+2. Implement minimal code to make tests pass
+3. Refactor while keeping tests green
+
+Scope: Implement user authentication with JWT tokens
+Files: src/auth/
+Tests: src/auth/__tests__/
+""")
+```
+
+### Parallel Execution
+
+For independent tasks, spawn multiple agents in a single message:
+
+```
+// Good - parallel execution
+Task(subagent_type="general-purpose", description="Implement login", prompt="...")
+Task(subagent_type="general-purpose", description="Implement logout", prompt="...")
+
+// These run concurrently since they're independent
+```
+
+### Sequential Workflow
+
+For dependent tasks, wait for results before spawning the next:
+
+1. **Explore** first to understand codebase
+2. **Implement** based on exploration findings
+3. **Review** after implementation completes
+
+### Human Escalation
+
+When blocked or facing critical decisions, use **AskUserQuestion** to escalate to the human. The question appears in the terminal and the human can respond there directly.
+
+```
+AskUserQuestion(questions=[{
+  "question": "Which authentication provider should we use?",
+  "header": "Auth choice",
+  "options": [
+    {"label": "OAuth 2.0", "description": "Industry standard, supports SSO"},
+    {"label": "JWT only", "description": "Simpler, self-contained tokens"}
+  ]
+}])
+```
+
+### Task Tool vs Child Minions
+
+| Use Task Tool when... | Use Child Minions when... |
+|----------------------|---------------------------|
+| Quick exploration | Full feature implementation |
+| Single-file changes | Multi-file coordinated work |
+| Code review | Long-running development |
+| Immediate results needed | Parallel independent features |
+
