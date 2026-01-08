@@ -31,7 +31,8 @@ interface TerminalSession {
   prompt?: string             // Store for restart
   model?: string              // Store for restart
   yolo?: boolean              // Store for restart
-  idleDetector?: IdleDetector // Shared idle detection module
+  idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
+  statePollingInterval?: NodeJS.Timeout // JSONL-based state polling for Claude
 }
 
 interface PlainTerminalSession {
@@ -236,46 +237,74 @@ export class TerminalService {
       env: spawnEnv
     })
 
-    // Create IdleDetector for Claude terminals
+    // State detection: JSONL for Claude, IdleDetector for other tools
     let idleDetector: IdleDetector | undefined
-    if (tool === 'claude') {
+    let statePollingInterval: NodeJS.Timeout | undefined
+
+    if (tool === 'claude' && this.claudeSessionInfoService) {
+      // JSONL-based state detection for Claude (more reliable than pattern matching)
+      let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
+
+      // Poll JSONL state every 5 seconds for notification triggers (cached to avoid file I/O)
+      statePollingInterval = setInterval(() => {
+        if (!sessionId) return
+
+        const currentState = this.claudeSessionInfoService!.getSessionState(sessionId, worktreePath)
+
+        // Detect state transitions
+        if (currentState !== lastKnownState) {
+          if (currentState === 'waiting' && lastKnownState !== 'waiting') {
+            // Transitioned to waiting - emit notification
+            console.log(`[TerminalService] ${agentId} now waiting for input`)
+            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+            this.updateAgentInfo(worktreePath, {
+              isWaitingForInput: true,
+              claudeLastSeen: new Date().toISOString()
+            }).catch(err => console.error('Failed to update agent info:', err))
+          } else if (currentState === 'working' && lastKnownState === 'waiting') {
+            // Transitioned to working - clear notification
+            console.log(`[TerminalService] ${agentId} resumed work`)
+            this.mainWindow.webContents.send('agent:resumedWork', agentId)
+            this.updateAgentInfo(worktreePath, {
+              isWaitingForInput: false,
+              claudeLastSeen: new Date().toISOString()
+            }).catch(err => console.error('Failed to update agent info:', err))
+          }
+
+          lastKnownState = currentState
+        }
+      }, 5000) // 5 second interval - cached lookups make this efficient
+
+      // Initialize state if resuming
+      if (isResume) {
+        lastKnownState = this.claudeSessionInfoService.getSessionState(sessionId, worktreePath)
+      }
+    } else {
+      // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
       idleDetector = new IdleDetector(
         {
-          workingPatterns: CLAUDE_WORKING_PATTERNS,
-          idleIndicators: CLAUDE_IDLE_INDICATORS,
+          workingPatterns: tool === 'cursor-cli' ? CLAUDE_WORKING_PATTERNS : [],
+          idleIndicators: tool === 'cursor-cli' ? CLAUDE_IDLE_INDICATORS : [],
           idleThreshold: 2000,
           inputGracePeriod: 1000,
           requireStartSignal: true,
           startPattern: CLAUDE_START_PATTERN
         },
         {
-          onWaitingForInput: (context: string) => {
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
-            // Persist waiting state
+          onWaitingForInput: (_context: string) => {
+            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Waiting for input')
             this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: true,
-              lastOutputSnapshot: context,
-              claudeLastSeen: new Date().toISOString()
-            })
+              isWaitingForInput: true
+            }).catch(err => console.error('Failed to update agent info:', err))
           },
           onResumedWork: () => {
             this.mainWindow.webContents.send('agent:resumedWork', agentId)
-            // Persist resumed state
             this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: false,
-              claudeLastSeen: new Date().toISOString()
-            })
+              isWaitingForInput: false
+            }).catch(err => console.error('Failed to update agent info:', err))
           }
         }
       )
-
-      // Restore state if resuming
-      if (isResume) {
-        idleDetector.setHasStarted(true)
-      }
-      if (agentInfo?.isWaitingForInput) {
-        idleDetector.setIsWaiting(true)
-      }
     }
 
     // Store terminal session
@@ -289,7 +318,8 @@ export class TerminalService {
       prompt,
       model,
       yolo,
-      idleDetector
+      idleDetector,
+      statePollingInterval
     }
 
     // Mark if we're attempting to resume (for error detection)
@@ -322,8 +352,13 @@ export class TerminalService {
 
     // Handle exit
     terminal.onExit(() => {
-      // Clean up idle detector
+      // Clean up idle detector (legacy, for non-Claude tools)
       session.idleDetector?.dispose()
+
+      // Clean up JSONL state polling (Claude sessions)
+      if (session.statePollingInterval) {
+        clearInterval(session.statePollingInterval)
+      }
 
       // Mark session as inactive on exit
       if (tool === 'claude' && worktreePath) {
@@ -461,7 +496,14 @@ export class TerminalService {
   stopAgent(agentId: string): void {
     const session = this.terminals.get(agentId)
     if (session) {
+      // Clean up idle detector (legacy, for non-Claude tools)
       session.idleDetector?.dispose()
+
+      // Clean up JSONL state polling (Claude sessions)
+      if (session.statePollingInterval) {
+        clearInterval(session.statePollingInterval)
+      }
+
       session.pty.kill()
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')

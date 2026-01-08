@@ -80,12 +80,12 @@ describe('TerminalService Input Detection', () => {
     expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
   })
 
-  it('emits waitingForInput event after timer expires (uses IdleDetector)', async () => {
-    await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
+  it('emits waitingForInput event after timer expires (uses IdleDetector for cursor-cli)', async () => {
+    await terminalService.startAgent('path', 'agent-1', 'cursor-cli', 'dev')
 
-    // Simulate Claude UI start and non-working output
+    // Simulate Cursor agent start and non-working output
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-    dataHandler('Claude Code 0.0.1\n') // Header to set claudeStarted = true
+    dataHandler('Claude Code 0.0.1\n') // Header to set started = true
     dataHandler('Some output without working indicators\n')
 
     // Advance time past the idle threshold (2000ms)
@@ -95,14 +95,14 @@ describe('TerminalService Input Detection', () => {
     expect(mockWebContents.send).toHaveBeenCalledWith(
       'agent:waitingForInput',
       'agent-1',
-      'Claude is waiting for input'
+      'Waiting for input'
     )
   })
 
-  it('does NOT emit waitingForInput when working patterns are detected', async () => {
-    await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
+  it('does NOT emit waitingForInput when working patterns are detected (cursor-cli)', async () => {
+    await terminalService.startAgent('path', 'agent-1', 'cursor-cli', 'dev')
 
-    // Simulate Claude UI start with working indicators
+    // Simulate Cursor agent start with working indicators
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
     dataHandler('Claude Code started...\n')
     dataHandler('Thinking…') // Working pattern - should prevent waiting
@@ -118,12 +118,12 @@ describe('TerminalService Input Detection', () => {
     )
   })
 
-  it('cancels idle timer if working output arrives', async () => {
-    await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
+  it('cancels idle timer if working output arrives (cursor-cli)', async () => {
+    await terminalService.startAgent('path', 'agent-1', 'cursor-cli', 'dev')
 
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
 
-    // Start Claude and some output
+    // Start agent and some output
     dataHandler('Claude Code\n')
     dataHandler('Some output...\n')
 
@@ -144,8 +144,8 @@ describe('TerminalService Input Detection', () => {
     )
   })
 
-  it('respects grace period after user input', async () => {
-    await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
+  it('respects grace period after user input (cursor-cli)', async () => {
+    await terminalService.startAgent('path', 'agent-1', 'cursor-cli', 'dev')
 
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
 

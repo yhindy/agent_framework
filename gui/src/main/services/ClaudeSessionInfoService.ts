@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, watch, FSWatcher } from 'fs'
+import { readFileSync, existsSync, watch, FSWatcher, statSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
@@ -134,13 +134,23 @@ export class ClaudeSessionInfoService {
 
   /**
    * Parse a session JSONL file and extract session info.
-   * Uses tail-based reading for efficiency on large files.
+   * Uses smart caching to avoid re-parsing unchanged files.
    */
   parseSessionInfo(sessionId: string, worktreePath: string): ClaudeSessionInfo | null {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
     if (!sessionFile) return null
 
     try {
+      // Check cache first - avoid re-parsing if file hasn't changed
+      const stat = statSync(sessionFile)
+      const mtime = stat.mtimeMs
+
+      const cached = this.cache.get(sessionId)
+      if (cached && cached.mtime === mtime) {
+        // File hasn't changed, return cached info
+        return cached.info
+      }
+
       // Read the whole file for now - can optimize to tail later if needed
       const content = readFileSync(sessionFile, 'utf-8')
       const lines = content.trim().split('\n')
@@ -257,7 +267,7 @@ export class ClaudeSessionInfoService {
         })
       }
 
-      return {
+      const info: ClaudeSessionInfo = {
         sessionId,
         actualModel,
         claudeCodeVersion,
@@ -267,6 +277,11 @@ export class ClaudeSessionInfoService {
         modelHistory,
         state
       }
+
+      // Cache the result for future calls
+      this.cache.set(sessionId, { info, mtime })
+
+      return info
     } catch (error) {
       console.error(`Failed to parse session file ${sessionFile}:`, error)
       return null
@@ -274,7 +289,7 @@ export class ClaudeSessionInfoService {
   }
 
   /**
-   * Get session state from the JSONL file.
+   * Get session state from the JSONL file with smart caching.
    * This is a lighter-weight operation that only reads the last few entries.
    */
   getSessionState(sessionId: string, worktreePath: string): 'working' | 'waiting' | 'unknown' {
@@ -282,11 +297,22 @@ export class ClaudeSessionInfoService {
     if (!sessionFile) return 'unknown'
 
     try {
+      // Check cache first - avoid reading file if it hasn't changed
+      const stat = statSync(sessionFile)
+      const mtime = stat.mtimeMs
+
+      const cached = this.cache.get(sessionId)
+      if (cached && cached.mtime === mtime) {
+        // File hasn't changed, return cached state
+        return cached.info.state
+      }
+
       // Read last ~10KB which should contain recent entries
       const tail = this.readFileTail(sessionFile, 10000)
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
+      let state: 'working' | 'waiting' | 'unknown' = 'unknown'
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
           const entry = JSON.parse(lines[i]) as SessionJSONLEntry
@@ -296,15 +322,18 @@ export class ClaudeSessionInfoService {
             if (msg.content && Array.isArray(msg.content)) {
               const hasToolUse = msg.content.some(c => c.type === 'tool_use')
               if (hasToolUse) {
-                return 'working'
+                state = 'working'
+                break
               } else if (msg.stop_reason) {
-                return 'waiting'
+                state = 'waiting'
+                break
               }
             }
           }
 
           if (entry.type === 'user') {
-            return 'working'
+            state = 'working'
+            break
           }
 
         } catch {
@@ -312,7 +341,13 @@ export class ClaudeSessionInfoService {
         }
       }
 
-      return 'unknown'
+      // Update cache with just the state (lightweight)
+      if (cached) {
+        cached.info.state = state
+        cached.mtime = mtime
+      }
+
+      return state
     } catch {
       return 'unknown'
     }
