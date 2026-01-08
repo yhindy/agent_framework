@@ -95,12 +95,12 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     })
 
     // Poll for changes (catches model changes, state updates, token usage)
-    // Use 5 second interval with smart caching for efficiency
+    // Use 2 second interval - mtime caching makes this efficient
     const pollInterval = setInterval(() => {
       if (isRunning) {
         loadSessionInfo()
       }
-    }, 5000)
+    }, 2000)
 
     return () => {
       unsubscribe()

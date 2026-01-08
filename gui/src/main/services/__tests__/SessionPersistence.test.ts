@@ -277,8 +277,8 @@ describe('Session Persistence', () => {
       // Change JSONL state to waiting (simulating Claude finishing a task)
       vi.mocked(claudeSessionInfoService.getSessionState).mockReturnValue('waiting')
 
-      // Advance timer to trigger JSONL polling (5 second interval)
-      vi.advanceTimersByTime(5100)
+      // Advance timer to trigger JSONL polling (2 second interval)
+      vi.advanceTimersByTime(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),
@@ -295,8 +295,8 @@ describe('Session Persistence', () => {
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
-      // Advance timer to establish initial waiting state (5 second interval)
-      vi.advanceTimersByTime(5100)
+      // Advance timer to establish initial waiting state (2 second interval)
+      vi.advanceTimersByTime(2100)
 
       // Clear mock to see new calls
       vi.mocked(agentService.updateAgentInfo).mockClear()
@@ -304,8 +304,8 @@ describe('Session Persistence', () => {
       // Change JSONL state to working (simulating user input and Claude processing)
       vi.mocked(claudeSessionInfoService.getSessionState).mockReturnValue('working')
 
-      // Advance timer to trigger JSONL polling (5 second interval)
-      vi.advanceTimersByTime(5100)
+      // Advance timer to trigger JSONL polling (2 second interval)
+      vi.advanceTimersByTime(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),

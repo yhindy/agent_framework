@@ -245,7 +245,8 @@ export class TerminalService {
       // JSONL-based state detection for Claude (more reliable than pattern matching)
       let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
 
-      // Poll JSONL state every 5 seconds for notification triggers (cached to avoid file I/O)
+      // Poll JSONL state every 2 seconds for notification triggers
+      // Smart caching (mtime check) makes frequent polling efficient - cache hits are ~0.1ms
       statePollingInterval = setInterval(() => {
         if (!sessionId) return
 
@@ -273,7 +274,7 @@ export class TerminalService {
 
           lastKnownState = currentState
         }
-      }, 5000) // 5 second interval - cached lookups make this efficient
+      }, 2000) // 2 second interval - mtime caching makes this efficient
 
       // Initialize state if resuming
       if (isResume) {
