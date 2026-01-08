@@ -20,6 +20,7 @@ interface AgentSession {
   isSuperMinion?: boolean
   parentAgentId?: string
   isBaseBranchAgent?: boolean
+  branch?: string
 
   // Session persistence fields
   claudeSessionId?: string
@@ -94,7 +95,8 @@ export class AgentService {
                 isWaitingForInput: baseAgentInfo.isWaitingForInput,
                 prompt: baseAgentInfo.prompt,
                 model: baseAgentInfo.model,
-                uiState: baseAgentInfo.uiState
+                uiState: baseAgentInfo.uiState,
+                branch: baseAgentInfo.branch
               }
               this.sessions.set(baseAgentInfo.agentId, session)
             } else {
@@ -110,6 +112,7 @@ export class AgentService {
               session.prompt = baseAgentInfo.prompt
               session.model = baseAgentInfo.model
               session.uiState = baseAgentInfo.uiState
+              session.branch = baseAgentInfo.branch
             }
             agents.push(session)
           }
@@ -149,7 +152,8 @@ export class AgentService {
               isWaitingForInput: agentInfo.isWaitingForInput,
               prompt: agentInfo.prompt,
               model: agentInfo.model,
-              uiState: agentInfo.uiState
+              uiState: agentInfo.uiState,
+              branch: agentInfo.branch
             }
             this.sessions.set(agentInfo.agentId, session)
           } else {
@@ -167,6 +171,7 @@ export class AgentService {
             session.prompt = agentInfo.prompt
             session.model = agentInfo.model
             session.uiState = agentInfo.uiState
+            session.branch = agentInfo.branch
           }
 
           agents.push(session)
@@ -1062,7 +1067,7 @@ export class AgentService {
     projectPath: string,
     assignmentId: string,
     options?: { silent?: boolean }
-  ): Promise<{ status: string; mergedAt?: string; error?: string }> {
+  ): Promise<{ status: string; mergedAt?: string; createdAt?: string; error?: string }> {
     const { assignments } = await this.getAssignments(projectPath)
     const assignment = assignments.find(a => a.id === assignmentId)
 
@@ -1100,7 +1105,7 @@ export class AgentService {
       // Check PR status using gh CLI
       const { stdout } = await execFileAsync(
         'gh',
-        ['pr', 'view', prNumber, '--json', 'state,mergedAt'],
+        ['pr', 'view', prNumber, '--json', 'state,mergedAt,createdAt'],
         { cwd: projectPath }
       )
 
@@ -1120,7 +1125,8 @@ export class AgentService {
 
       return {
         status,
-        mergedAt: prData.mergedAt
+        mergedAt: prData.mergedAt,
+        createdAt: prData.createdAt
       }
     } catch (error: any) {
       if (!options?.silent) {

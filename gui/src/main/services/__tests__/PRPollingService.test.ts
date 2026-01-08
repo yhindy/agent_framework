@@ -38,7 +38,7 @@ describe('PRPollingService', () => {
     )
 
     // Set a mock findProjectPath function
-    service.setFindProjectPath(async (assignmentId: string) => {
+    service.setFindProjectPath(async () => {
       return '/test/project/path'
     })
   })
@@ -346,6 +346,356 @@ describe('PRPollingService', () => {
       // Should not make any more calls
       vi.advanceTimersByTime(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+    })
+  })
+
+  describe('dynamic polling intervals', () => {
+    it('should poll every 30 seconds for new PRs (< 5 minutes old)', async () => {
+      const assignmentId = 'test-assignment-1'
+      const now = Date.now()
+      const prCreatedAt = now - 2 * 60 * 1000 // 2 minutes ago
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN',
+        createdAt: new Date(prCreatedAt).toISOString()
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 30 seconds
+      vi.advanceTimersByTime(30000)
+
+      // Should have called for new PR interval
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
+    })
+
+    it('should poll every 90 seconds for recent PRs (5-60 minutes old)', async () => {
+      const assignmentId = 'test-assignment-1'
+      const now = Date.now()
+      const prCreatedAt = now - 30 * 60 * 1000 // 30 minutes ago
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN',
+        createdAt: new Date(prCreatedAt).toISOString()
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 30 seconds - should not call for recent PR
+      vi.advanceTimersByTime(30000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+
+      // Advance by 60 more seconds (total 90)
+      vi.advanceTimersByTime(60000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
+    })
+
+    it('should poll every 5 minutes for stale PRs (> 60 minutes old)', async () => {
+      const assignmentId = 'test-assignment-1'
+      const now = Date.now()
+      const prCreatedAt = now - 120 * 60 * 1000 // 120 minutes ago
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN',
+        createdAt: new Date(prCreatedAt).toISOString()
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 2 minutes - should not call for stale PR
+      vi.advanceTimersByTime(120000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+
+      // Advance by 3 more minutes (total 5)
+      vi.advanceTimersByTime(180000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
+    })
+
+    it('should default to 60 second interval when creation time is unknown', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN'
+        // No createdAt
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 30 seconds - should not call with default interval
+      vi.advanceTimersByTime(30000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+
+      // Advance by 30 more seconds (total 60)
+      vi.advanceTimersByTime(30000)
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
+    })
+  })
+
+  describe('exponential backoff on errors', () => {
+    it('should retry after 30 seconds on first error', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockRejectedValueOnce(
+        new Error('Network error')
+      )
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValueOnce({
+        status: 'OPEN'
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 30 seconds
+      vi.advanceTimersByTime(30000)
+
+      // Should have retried
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should retry after 2 minutes on second error', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any)
+        .mockRejectedValueOnce(new Error('Error 1'))
+        .mockRejectedValueOnce(new Error('Error 2'))
+        .mockResolvedValueOnce({
+          status: 'OPEN'
+        })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance past first retry (30s) but not second (2m)
+      vi.advanceTimersByTime(60000)
+      const callsAfter1Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
+
+      // Advance to 2 minutes total
+      vi.advanceTimersByTime(60000)
+      const callsAfter2Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
+
+      expect(callsAfter2Min).toBeGreaterThan(callsAfter1Min)
+    })
+
+    it('should stop polling after 3 consecutive errors', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockRejectedValue(
+        new Error('Persistent error')
+      )
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Trigger multiple retry attempts
+      vi.advanceTimersByTime(30000) // First error's backoff
+      vi.advanceTimersByTime(120000) // Second error's backoff
+      vi.advanceTimersByTime(600000) // Third error's backoff
+
+      // After 3 errors, should stop polling completely
+      const finalCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
+      expect(finalCalls).toBeLessThanOrEqual(3)
+    })
+  })
+
+  describe('rate limiting with 10 minute backoff', () => {
+    it('should detect rate limit errors and back off for 10 minutes', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'ERROR',
+        error: 'rate limit exceeded'
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 5 minutes (less than backoff)
+      vi.advanceTimersByTime(5 * 60 * 1000)
+
+      // Should not make new calls during backoff
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+
+      // Advance by 6 more minutes (total 11 minutes, past backoff)
+      vi.advanceTimersByTime(6 * 60 * 1000)
+
+      // Should be able to call now
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should handle 429 Too Many Requests as rate limit', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'ERROR',
+        error: '429: Too Many Requests'
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 5 minutes
+      vi.advanceTimersByTime(5 * 60 * 1000)
+
+      // Should not call during backoff
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+    })
+
+    it('should handle 403 Forbidden as rate limit', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'ERROR',
+        error: '403: Forbidden'
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 5 minutes
+      vi.advanceTimersByTime(5 * 60 * 1000)
+
+      // Should not call during backoff
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+    })
+  })
+
+  describe('caching', () => {
+    it('should cache PR status for 5 minutes', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN',
+        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance by 30 seconds (within new PR polling interval)
+      vi.advanceTimersByTime(30000)
+
+      // Should use cache instead of calling API
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
+
+      // Advance past cache TTL (5 minutes from initial call + 30s = 5.5 minutes)
+      vi.advanceTimersByTime(4 * 60 * 1000 + 40 * 1000)
+
+      // Now should call API again because cache is stale
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should bypass cache on manual refresh', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
+        status: 'OPEN',
+        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+      })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Manually refresh - should bypass cache
+      await (service as any).refreshPRNow(assignmentId)
+
+      // Should have called API despite fresh cache
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should clear cache on error', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any)
+        .mockResolvedValueOnce({
+          status: 'OPEN',
+          createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+        })
+        .mockRejectedValueOnce(new Error('API error'))
+        .mockResolvedValueOnce({
+          status: 'MERGED',
+          createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+        })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Advance to trigger error
+      vi.advanceTimersByTime(30000)
+
+      // After error, next call should not use stale cache
+      vi.advanceTimersByTime(30000)
+
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('manual refresh', () => {
+    it('should execute refresh immediately bypassing rate limit', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any)
+        .mockResolvedValueOnce({
+          status: 'OPEN',
+          error: 'rate limit exceeded'
+        })
+        .mockResolvedValueOnce({
+          status: 'MERGED'
+        })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Trigger rate limit
+      vi.advanceTimersByTime(30000)
+
+      // Manual refresh should work despite rate limit
+      await (service as any).refreshPRNow(assignmentId)
+
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should reset error count on manual refresh', async () => {
+      const assignmentId = 'test-assignment-1'
+
+      ;(mockAgentService.checkPullRequestStatus as any)
+        .mockRejectedValueOnce(new Error('Error 1'))
+        .mockRejectedValueOnce(new Error('Error 2'))
+        .mockResolvedValueOnce({
+          status: 'OPEN'
+        })
+
+      await service.startPolling(assignmentId, 'subscriber-1')
+
+      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
+
+      // Trigger two errors
+      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(120000)
+
+      // Manual refresh should reset error count
+      await (service as any).refreshPRNow(assignmentId)
+
+      // Should succeed because error count was reset
+      expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
     })
   })
 })

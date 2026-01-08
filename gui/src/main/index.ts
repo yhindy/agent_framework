@@ -7,6 +7,7 @@ import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 
@@ -20,6 +21,7 @@ let services: {
   terminal: TerminalService
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
+  notification: NotificationService
   prPolling: PRPollingService
   claudeSessionInfo: ClaudeSessionInfoService
 } | null = null
@@ -48,7 +50,17 @@ function createWindow(): void {
     services.terminal.setWindow(mainWindow)
     services.testEnv.setWindow(mainWindow)
     services.fileWatcher.setWindow(mainWindow)
+    services.notification.setWindow(mainWindow)
   }
+
+  // Track window focus for notifications
+  mainWindow.on('focus', () => {
+    services?.notification.setWindowFocus(true)
+  })
+
+  mainWindow.on('blur', () => {
+    services?.notification.setWindowFocus(false)
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -69,10 +81,19 @@ function createWindow(): void {
 function initializeServices(): void {
   if (!mainWindow) return
 
+  // Set app name for notifications (helps with macOS permissions)
+  app.setName('Agent Orchestrator')
+
+  // On macOS, ensure app appears in dock (required for notifications in dev mode)
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.show()
+  }
+
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
-  const terminalService = new TerminalService(mainWindow)
+  const notificationService = new NotificationService(mainWindow)
   const claudeSessionInfoService = new ClaudeSessionInfoService()
+  const terminalService = new TerminalService(mainWindow, notificationService)
 
   // Set service references in TerminalService
   terminalService.setAgentService(agentService)
@@ -84,6 +105,7 @@ function initializeServices(): void {
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
+    notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService),
     claudeSessionInfo: claudeSessionInfoService
   }
@@ -565,6 +587,11 @@ function setupIPC(): void {
   ipcMain.handle('prPolling:stopAll', async (_event, subscriberId: string) => {
     if (!services?.prPolling) return
     await services.prPolling.stopAllPolling(subscriberId)
+  })
+
+  ipcMain.handle('prPolling:refreshNow', async (_event, assignmentId: string) => {
+    if (!services?.prPolling) return
+    await services.prPolling.refreshPRNow(assignmentId)
   })
 
   ipcMain.handle('dependencies:check', async () => {
