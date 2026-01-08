@@ -271,6 +271,7 @@
 }
 
 .children-section-wrapper h3,
+.tasks-section-wrapper h3,
 .plans-section-wrapper h3 {
   font-size: 15px;
   font-weight: 600;
@@ -279,6 +280,10 @@
   border-bottom: 2px solid #4ec9b0;
   padding-bottom: 8px;
   letter-spacing: 0.5px;
+}
+
+.tasks-section-wrapper h3 {
+  border-bottom-color: #569cd6;
 }
 
 .children-section-wrapper {

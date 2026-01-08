@@ -4,6 +4,7 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ChildStatusCard from './ChildStatusCard'
+import TaskStatusCard from './TaskStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
 import { usePRCreation } from '../hooks/usePRCreation'
@@ -480,9 +481,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         {agent.mode !== 'planning' && (
           <div className={`collapsible-section ${isGridCollapsed ? 'collapsed' : ''}`}>
             <div className="section-header" onClick={() => setIsGridCollapsed(!isGridCollapsed)}>
-              <h3>{isGridCollapsed ? '▶' : '▼'} Children & Plans</h3>
+              <h3>{isGridCollapsed ? '▶' : '▼'} Children, Tasks & Plans</h3>
               <span className="section-hint">
-                {isGridCollapsed ? 'Click to expand' : `${agent.children.length} active, ${agent.pendingPlans.filter(p => p.status === 'pending').length} pending`}
+                {isGridCollapsed ? 'Click to expand' : `${agent.children.length} children, ${agent.taskInvocations?.length || 0} tasks, ${agent.pendingPlans.filter(p => p.status === 'pending').length} pending`}
               </span>
             </div>
             {!isGridCollapsed && (
@@ -502,6 +503,22 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
                     </div>
                   </div>
                 </div>
+
+                {agent.taskInvocations && agent.taskInvocations.length > 0 && (
+                  <div className="tasks-section-wrapper">
+                    <h3>Task Subagents ({agent.taskInvocations.length})</h3>
+                    <div className="tasks-section">
+                      <div className="task-cards">
+                        {agent.taskInvocations.map(task => (
+                          <TaskStatusCard
+                            key={task.toolUseId}
+                            task={task}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="plans-section-wrapper">
                   <h3>Proposed Plans ({agent.pendingPlans.filter(p => p.status === 'pending').length})</h3>

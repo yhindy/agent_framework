@@ -66,11 +66,15 @@ export interface ChildPlan {
   childAgentId?: string
 }
 
+// Re-export TaskInvocation for use in renderer
+export { TaskInvocation } from '../ClaudeSessionInfoService'
+
 export interface SuperAgentInfo extends AgentInfo {
   isSuperMinion: true
   minionBudget: number
   children: AgentInfo[]
   pendingPlans: ChildPlan[]
+  taskInvocations: import('../ClaudeSessionInfoService').TaskInvocation[]
 }
 
 export function isSuperMinion(agent: AgentInfo): agent is SuperAgentInfo {

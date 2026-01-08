@@ -99,6 +99,9 @@ function initializeServices(): void {
   terminalService.setAgentService(agentService)
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
 
+  // Set service references in AgentService
+  agentService.setClaudeSessionInfoService(claudeSessionInfoService)
+
   services = {
     project: projectService,
     agent: agentService,
