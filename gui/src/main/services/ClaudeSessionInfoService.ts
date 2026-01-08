@@ -22,6 +22,21 @@ export interface ModelHistoryEntry {
   timestamp: string
 }
 
+/**
+ * Represents a Task tool invocation by Claude (subagent spawning).
+ * Parsed from JSONL to track running and completed subagent tasks.
+ */
+export interface TaskInvocation {
+  toolUseId: string
+  description: string
+  subagentType: string
+  prompt: string
+  status: 'running' | 'completed' | 'failed'
+  startedAt: string
+  completedAt?: string
+  resultSummary?: string
+}
+
 export interface ClaudeSessionInfo {
   sessionId: string
   actualModel: string           // Full model name like "claude-haiku-4-5-20251001"
@@ -32,6 +47,7 @@ export interface ClaudeSessionInfo {
   lastUpdated: string
   modelHistory: ModelHistoryEntry[]
   state: 'working' | 'waiting' | 'unknown'
+  taskInvocations: TaskInvocation[]  // Task tool subagent invocations
 }
 
 interface SessionJSONLEntry {
@@ -170,6 +186,9 @@ export class ClaudeSessionInfoService {
       let lastTimestamp = ''
       let lastEntry: SessionJSONLEntry | null = null
 
+      // Track Task tool invocations
+      const taskInvocationsMap = new Map<string, TaskInvocation>()
+
       for (const line of lines) {
         if (!line.trim()) continue
 
@@ -214,6 +233,45 @@ export class ClaudeSessionInfoService {
               tokenUsage.outputTokens += msg.usage.output_tokens || 0
               tokenUsage.cacheReadTokens += msg.usage.cache_read_input_tokens || 0
               tokenUsage.cacheCreationTokens += msg.usage.cache_creation_input_tokens || 0
+            }
+
+            // Track Task tool invocations
+            if (Array.isArray(msg.content)) {
+              for (const block of msg.content) {
+                if (block.type === 'tool_use' && block.name === 'Task') {
+                  const input = block.input || {}
+                  taskInvocationsMap.set(block.id, {
+                    toolUseId: block.id,
+                    description: input.description || '',
+                    subagentType: input.subagent_type || 'general-purpose',
+                    prompt: input.prompt || '',
+                    status: 'running',
+                    startedAt: entry.timestamp || new Date().toISOString()
+                  })
+                }
+              }
+            }
+          }
+
+          // Process user messages for tool_result (Task completion)
+          if (entry.type === 'user' && entry.message) {
+            const content = entry.message.content
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === 'tool_result' && block.tool_use_id) {
+                  const task = taskInvocationsMap.get(block.tool_use_id)
+                  if (task) {
+                    // Check if it's an error result
+                    const isError = block.is_error === true
+                    task.status = isError ? 'failed' : 'completed'
+                    task.completedAt = entry.timestamp || new Date().toISOString()
+                    // Extract result summary (first 500 chars)
+                    if (typeof block.content === 'string') {
+                      task.resultSummary = block.content.slice(0, 500)
+                    }
+                  }
+                }
+              }
             }
           }
 
@@ -273,7 +331,8 @@ export class ClaudeSessionInfoService {
         tokenUsage,
         lastUpdated: lastTimestamp || new Date().toISOString(),
         modelHistory,
-        state
+        state,
+        taskInvocations: Array.from(taskInvocationsMap.values())
       }
 
       // Cache the result for future calls
