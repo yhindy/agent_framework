@@ -28,6 +28,7 @@ interface AgentSession {
   isWaitingForInput?: boolean
   prompt?: string
   model?: string
+  yolo?: boolean
 
   // UI state persistence
   uiState?: UIState
@@ -65,6 +66,56 @@ export class AgentService {
     }
   }
 
+  /**
+   * Create a new AgentSession from AgentInfo
+   */
+  private createSessionFromInfo(agentInfo: AgentInfo, worktreePath: string, isBase: boolean): AgentSession {
+    return {
+      id: agentInfo.agentId,
+      assignmentId: agentInfo.id,
+      worktreePath,
+      terminalPid: null,
+      hasUnread: agentInfo.hasUnread || false,
+      lastActivity: agentInfo.lastActivity,
+      mode: agentInfo.mode,
+      tool: agentInfo.tool,
+      isSuperMinion: (agentInfo as any).isSuperMinion || false,
+      parentAgentId: agentInfo.parentAgentId,
+      isBaseBranchAgent: isBase,
+      claudeSessionId: agentInfo.claudeSessionId,
+      claudeSessionActive: agentInfo.claudeSessionActive,
+      isWaitingForInput: agentInfo.isWaitingForInput,
+      prompt: agentInfo.prompt,
+      model: agentInfo.model,
+      uiState: agentInfo.uiState,
+      branch: agentInfo.branch,
+      yolo: agentInfo.yolo
+    }
+  }
+
+  /**
+   * Update an existing AgentSession with data from AgentInfo
+   */
+  private updateSessionFromInfo(session: AgentSession, agentInfo: AgentInfo): void {
+    Object.assign(session, {
+      assignmentId: agentInfo.id,
+      mode: agentInfo.mode,
+      tool: agentInfo.tool,
+      hasUnread: agentInfo.hasUnread || session.hasUnread,
+      lastActivity: agentInfo.lastActivity,
+      isSuperMinion: (agentInfo as any).isSuperMinion,
+      parentAgentId: agentInfo.parentAgentId,
+      claudeSessionId: agentInfo.claudeSessionId,
+      claudeSessionActive: agentInfo.claudeSessionActive,
+      isWaitingForInput: agentInfo.isWaitingForInput,
+      prompt: agentInfo.prompt,
+      model: agentInfo.model,
+      uiState: agentInfo.uiState,
+      branch: agentInfo.branch,
+      yolo: agentInfo.yolo
+    })
+  }
+
   async listAgents(projectPath: string): Promise<AgentSession[]> {
     const agents: AgentSession[] = []
 
@@ -78,41 +129,11 @@ export class AgentService {
           if (baseAgentInfo.isBaseBranchAgent) {
             let session = this.sessions.get(baseAgentInfo.agentId)
             if (!session) {
-              session = {
-                id: baseAgentInfo.agentId,
-                assignmentId: baseAgentInfo.id,
-                worktreePath: projectPath,
-                terminalPid: null,
-                hasUnread: baseAgentInfo.hasUnread || false,
-                lastActivity: baseAgentInfo.lastActivity,
-                mode: baseAgentInfo.mode,
-                tool: baseAgentInfo.tool,
-                isSuperMinion: false,
-                parentAgentId: baseAgentInfo.parentAgentId,
-                isBaseBranchAgent: true,
-                claudeSessionId: baseAgentInfo.claudeSessionId,
-                claudeSessionActive: baseAgentInfo.claudeSessionActive,
-                isWaitingForInput: baseAgentInfo.isWaitingForInput,
-                prompt: baseAgentInfo.prompt,
-                model: baseAgentInfo.model,
-                uiState: baseAgentInfo.uiState,
-                branch: baseAgentInfo.branch
-              }
+              session = this.createSessionFromInfo(baseAgentInfo, projectPath, true)
               this.sessions.set(baseAgentInfo.agentId, session)
             } else {
-              session.assignmentId = baseAgentInfo.id
-              session.mode = baseAgentInfo.mode
-              session.tool = baseAgentInfo.tool
-              session.hasUnread = baseAgentInfo.hasUnread || session.hasUnread
-              session.lastActivity = baseAgentInfo.lastActivity
+              this.updateSessionFromInfo(session, baseAgentInfo)
               session.isBaseBranchAgent = true
-              session.claudeSessionId = baseAgentInfo.claudeSessionId
-              session.claudeSessionActive = baseAgentInfo.claudeSessionActive
-              session.isWaitingForInput = baseAgentInfo.isWaitingForInput
-              session.prompt = baseAgentInfo.prompt
-              session.model = baseAgentInfo.model
-              session.uiState = baseAgentInfo.uiState
-              session.branch = baseAgentInfo.branch
             }
             agents.push(session)
           }
@@ -136,42 +157,10 @@ export class AgentService {
           // Get or create session
           let session = this.sessions.get(agentInfo.agentId)
           if (!session) {
-            session = {
-              id: agentInfo.agentId,
-              assignmentId: agentInfo.id,
-              worktreePath: worktree.path,
-              terminalPid: null,
-              hasUnread: agentInfo.hasUnread || false,
-              lastActivity: agentInfo.lastActivity,
-              mode: agentInfo.mode,
-              tool: agentInfo.tool,
-              isSuperMinion: (agentInfo as any).isSuperMinion,
-              parentAgentId: agentInfo.parentAgentId,
-              claudeSessionId: agentInfo.claudeSessionId,
-              claudeSessionActive: agentInfo.claudeSessionActive,
-              isWaitingForInput: agentInfo.isWaitingForInput,
-              prompt: agentInfo.prompt,
-              model: agentInfo.model,
-              uiState: agentInfo.uiState,
-              branch: agentInfo.branch
-            }
+            session = this.createSessionFromInfo(agentInfo, worktree.path, false)
             this.sessions.set(agentInfo.agentId, session)
           } else {
-            // Update session with latest data from .agent-info
-            session.assignmentId = agentInfo.id
-            session.mode = agentInfo.mode
-            session.tool = agentInfo.tool
-            session.hasUnread = agentInfo.hasUnread || session.hasUnread
-            session.lastActivity = agentInfo.lastActivity
-            session.isSuperMinion = (agentInfo as any).isSuperMinion
-            session.parentAgentId = agentInfo.parentAgentId
-            session.claudeSessionId = agentInfo.claudeSessionId
-            session.claudeSessionActive = agentInfo.claudeSessionActive
-            session.isWaitingForInput = agentInfo.isWaitingForInput
-            session.prompt = agentInfo.prompt
-            session.model = agentInfo.model
-            session.uiState = agentInfo.uiState
-            session.branch = agentInfo.branch
+            this.updateSessionFromInfo(session, agentInfo)
           }
 
           agents.push(session)

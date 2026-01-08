@@ -125,8 +125,12 @@ export class TerminalService {
     model?: string,
     yolo?: boolean
   ): Promise<void> {
-    // Stop existing terminal if any
-    this.stopAgent(agentId)
+    // Stop existing terminal if any (clean up orphaned sessions)
+    const existingSession = this.terminals.get(agentId)
+    if (existingSession) {
+      console.log(`[TerminalService] Cleaning up existing terminal for ${agentId} before starting`)
+      this.stopAgent(agentId)
+    }
 
     // Determine worktree path
     let worktreePath: string
@@ -383,7 +387,10 @@ export class TerminalService {
     })
 
     // Handle exit
-    terminal.onExit(() => {
+    terminal.onExit((data) => {
+      const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
+      console.log(`[TerminalService] Terminal exited for ${agentId} - ${exitInfo}`)
+
       // Clean up idle detector (legacy, for non-Claude tools)
       session.idleDetector?.dispose()
 
