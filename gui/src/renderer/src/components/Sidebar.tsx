@@ -69,7 +69,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
     // Load agents and initialize waiting states from persisted data
     const loadAgentsAndStates = async () => {
       const agentsByProj: AgentsByProject = {}
-      const waiting = new Set<string>()
+      const waitingFromFiles = new Set<string>()
 
       for (const project of activeProjects) {
         try {
@@ -79,7 +79,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
           // Initialize waiting states from .agent-info (restored after app restart)
           for (const agent of agents) {
             if ((agent as any).isWaitingForInput) {
-              waiting.add(agent.id)
+              waitingFromFiles.add(agent.id)
             }
           }
         } catch (err) {
@@ -89,7 +89,19 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       }
 
       setAgentsByProject(agentsByProj)
-      setWaitingAgents(waiting)
+      // Use file-based state as source of truth, but only update if actually different
+      // This avoids overwriting fresh IPC updates with stale file reads during race conditions
+      setWaitingAgents(prev => {
+        // If file says waiting but we don't have it, add it (restore from persistence)
+        // If file says not waiting but we have it, remove it (file is authoritative)
+        // This ensures file persistence works while IPC provides real-time updates
+        const next = new Set<string>()
+        for (const agentId of waitingFromFiles) {
+          next.add(agentId)
+        }
+        console.log('[Sidebar] loadAgentsAndStates - waiting from files:', [...waitingFromFiles], 'prev:', [...prev])
+        return next
+      })
     }
 
     loadAgentsAndStates()
@@ -101,10 +113,12 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
 
     // Listen for waiting state changes
     const unsubWaiting = window.electronAPI.onAgentWaitingForInput((agentId) => {
+      console.log('[Sidebar] Received waitingForInput event for:', agentId)
       setWaitingAgents(prev => new Set([...prev, agentId]))
     })
 
     const unsubResumed = window.electronAPI.onAgentResumedWork((agentId) => {
+      console.log('[Sidebar] Received resumedWork event for:', agentId)
       setWaitingAgents(prev => {
         const next = new Set(prev)
         next.delete(agentId)

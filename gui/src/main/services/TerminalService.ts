@@ -247,6 +247,7 @@ export class TerminalService {
 
       // Poll JSONL state every 2 seconds for notification triggers
       // Smart caching (mtime check) makes frequent polling efficient - cache hits are ~0.1ms
+      console.log(`[TerminalService] Starting JSONL state polling for ${agentId} (session: ${sessionId})`)
       statePollingInterval = setInterval(() => {
         if (!sessionId) return
 
@@ -254,21 +255,28 @@ export class TerminalService {
 
         // Detect state transitions
         if (currentState !== lastKnownState) {
+          console.log(`[TerminalService] State transition for ${agentId}: ${lastKnownState} -> ${currentState} (session: ${sessionId})`)
           if (currentState === 'waiting' && lastKnownState !== 'waiting') {
             // Transitioned to waiting - emit notification
-            console.log(`[TerminalService] ${agentId} now waiting for input`)
+            console.log(`[TerminalService] ${agentId} now waiting for input - sending IPC event`)
             this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,
               claudeLastSeen: new Date().toISOString()
+            }).then(() => {
+              // Also emit agents:updated to ensure sidebar reloads from files
+              this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
           } else if (currentState === 'working' && lastKnownState === 'waiting') {
             // Transitioned to working - clear notification
-            console.log(`[TerminalService] ${agentId} resumed work`)
+            console.log(`[TerminalService] ${agentId} resumed work - sending IPC event`)
             this.mainWindow.webContents.send('agent:resumedWork', agentId)
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,
               claudeLastSeen: new Date().toISOString()
+            }).then(() => {
+              // Also emit agents:updated to ensure sidebar reloads from files
+              this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
           }
 
@@ -276,9 +284,17 @@ export class TerminalService {
         }
       }, 2000) // 2 second interval - mtime caching makes this efficient
 
-      // Initialize state if resuming
+      // Initialize state if resuming - and emit current state to ensure sidebar is in sync
       if (isResume) {
-        lastKnownState = this.claudeSessionInfoService.getSessionState(sessionId, worktreePath)
+        const initialState = this.claudeSessionInfoService.getSessionState(sessionId, worktreePath)
+        lastKnownState = initialState
+        console.log(`[TerminalService] Resume: initial JSONL state for ${agentId} is '${initialState}'`)
+
+        // Emit initial state event so sidebar is immediately in sync
+        if (initialState === 'waiting') {
+          console.log(`[TerminalService] Resume: emitting initial waitingForInput for ${agentId}`)
+          this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+        }
       }
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)

@@ -321,19 +321,25 @@ export class ClaudeSessionInfoService {
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
-      // Key insight: If last entry is assistant with tool_use and no tool_result after,
-      // Claude is waiting for user approval (not working)
+      // Key insight: Only look at 'user' and 'assistant' entries - skip 'summary', 'file-history-snapshot', etc.
+      // If last conversation entry is assistant (finished responding), Claude is waiting
+      // If last conversation entry is user (sent message/tool_result), Claude is working
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
-      let lastEntryType: string | null = null
+      let lastConversationEntryType: string | null = null
       let lastEntryHasToolUse = false
 
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
           const entry = JSON.parse(lines[i]) as SessionJSONLEntry
 
-          // Track what the very last entry is
-          if (lastEntryType === null) {
-            lastEntryType = entry.type
+          // Skip non-conversation entries (summary, file-history-snapshot, etc.)
+          if (entry.type !== 'user' && entry.type !== 'assistant') {
+            continue
+          }
+
+          // Track what the last CONVERSATION entry is (first one we find going backwards)
+          if (lastConversationEntryType === null) {
+            lastConversationEntryType = entry.type
             if (entry.type === 'assistant' && entry.message?.content) {
               lastEntryHasToolUse = Array.isArray(entry.message.content) &&
                 entry.message.content.some(c => c.type === 'tool_use')
@@ -351,8 +357,8 @@ export class ClaudeSessionInfoService {
 
             // Claude used a tool and it completed - check if there's a tool_result after
             if (msg.stop_reason === 'tool_use') {
-              // If this is the last entry, Claude is waiting for tool approval
-              if (lastEntryType === 'assistant' && lastEntryHasToolUse) {
+              // If this is the last conversation entry, Claude is waiting for tool approval
+              if (lastConversationEntryType === 'assistant') {
                 state = 'waiting'
               } else {
                 state = 'working'
@@ -366,18 +372,27 @@ export class ClaudeSessionInfoService {
               const hasText = msg.content.some(c => c.type === 'text')
 
               if (hasToolUse) {
-                // Has tool_use - if this is the last entry, Claude is waiting for approval
-                if (lastEntryType === 'assistant') {
+                // Has tool_use - if this is the last conversation entry, Claude is waiting for approval
+                if (lastConversationEntryType === 'assistant') {
                   state = 'waiting'
                 } else {
                   state = 'working'
                 }
                 break
               } else if (hasText) {
-                // Has text but no stop_reason - likely streaming or interrupted
-                // Continue looking for a message with stop_reason
-                continue
+                // Has text but no stop_reason - assistant finished responding, waiting for user
+                // This handles the case where stop_reason is missing or null
+                if (lastConversationEntryType === 'assistant') {
+                  state = 'waiting'
+                }
+                break
               }
+            } else {
+              // Assistant entry with no content array - likely finished, waiting for user
+              if (lastConversationEntryType === 'assistant') {
+                state = 'waiting'
+              }
+              break
             }
           }
 
@@ -391,6 +406,9 @@ export class ClaudeSessionInfoService {
           continue
         }
       }
+
+      // Log state determination for debugging
+      console.log(`[ClaudeSessionInfoService] getSessionState: ${sessionId.slice(0, 8)}... -> ${state} (lastConvEntry: ${lastConversationEntryType}, hasToolUse: ${lastEntryHasToolUse})`)
 
       // Update cache with just the state (lightweight)
       if (cached) {
