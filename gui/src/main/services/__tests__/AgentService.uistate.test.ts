@@ -1,8 +1,9 @@
 import { AgentService } from '../AgentService'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
+import { vi } from 'vitest'
 
 describe('AgentService - UI State Persistence', () => {
   let agentService: AgentService
@@ -210,6 +211,170 @@ describe('AgentService - UI State Persistence', () => {
         savedInfo.uiState.lastActiveTab === 'terminal-2'
       ).toBe(true)
     })
+
+    it('should handle missing .agent-info file gracefully during saveUIState', async () => {
+      const uiState = {
+        lastActiveTab: 'terminal-1',
+        plainTerminals: ['terminal-1'],
+        terminalCounter: 1,
+        lastFocusTime: new Date().toISOString()
+      }
+
+      const agentInfoPath = join(testWorktreePath, '.agent-info')
+
+      // Simulate race condition: delete file between test setup and saveUIState
+      // First, warm the cache by calling listAgents
+      await agentService.listAgents(testProjectPath)
+
+      // Now delete the file to simulate it being deleted during teardown
+      unlinkSync(agentInfoPath)
+
+      // Manually add agent back to the list that saveUIState will see
+      // This simulates the race where listAgents finds the agent but file is gone
+      const mockAgent = {
+        id: agentId,
+        assignmentId: `${agentId}-1`,
+        worktreePath: testWorktreePath,
+        terminalPid: null,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        mode: 'dev' as const,
+        tool: 'claude' as const
+      }
+
+      // Spy on listAgents to return our mock agent (simulating stale cache)
+      const listAgentsSpy = vi.spyOn(agentService, 'listAgents')
+      listAgentsSpy.mockResolvedValueOnce([mockAgent])
+
+      // Should NOT throw - should handle gracefully
+      await expect(
+        agentService.saveUIState(testProjectPath, agentId, uiState)
+      ).resolves.toBeUndefined()
+
+      listAgentsSpy.mockRestore()
+
+      // Recreate file for cleanup
+      const agentInfo = {
+        id: `${agentId}-1`,
+        agentId: agentId,
+        branch: `feature/${agentId}/test`,
+        project: 'test-project',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+      writeFileSync(agentInfoPath, JSON.stringify(agentInfo, null, 2))
+    })
+
+    it('should update in-memory session even when .agent-info file is missing', async () => {
+      const uiState = {
+        lastActiveTab: 'terminal-2',
+        plainTerminals: ['terminal-1', 'terminal-2'],
+        terminalCounter: 2,
+        lastFocusTime: new Date().toISOString()
+      }
+
+      const agentInfoPath = join(testWorktreePath, '.agent-info')
+      await agentService.listAgents(testProjectPath)
+      unlinkSync(agentInfoPath)
+
+      const mockAgent = {
+        id: agentId,
+        assignmentId: `${agentId}-1`,
+        worktreePath: testWorktreePath,
+        terminalPid: null,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        mode: 'dev' as const,
+        tool: 'claude' as const
+      }
+
+      const listAgentsSpy = vi.spyOn(agentService, 'listAgents')
+      listAgentsSpy.mockResolvedValueOnce([mockAgent])
+
+      await agentService.saveUIState(testProjectPath, agentId, uiState)
+
+      // Check in-memory session was updated
+      const session = agentService['sessions'].get(agentId)
+      expect(session).toBeDefined()
+      expect(session?.uiState).toEqual(uiState)
+
+      listAgentsSpy.mockRestore()
+
+      // Recreate file
+      const agentInfo = {
+        id: `${agentId}-1`,
+        agentId: agentId,
+        branch: `feature/${agentId}/test`,
+        project: 'test-project',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+      writeFileSync(agentInfoPath, JSON.stringify(agentInfo, null, 2))
+    })
+
+    it('should log warning when agent file is missing during saveUIState', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const uiState = {
+        lastActiveTab: 'agent',
+        plainTerminals: [],
+        terminalCounter: 0,
+        lastFocusTime: new Date().toISOString()
+      }
+
+      const agentInfoPath = join(testWorktreePath, '.agent-info')
+      await agentService.listAgents(testProjectPath)
+      unlinkSync(agentInfoPath)
+
+      const mockAgent = {
+        id: agentId,
+        assignmentId: `${agentId}-1`,
+        worktreePath: testWorktreePath,
+        terminalPid: null,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        mode: 'dev' as const,
+        tool: 'claude' as const
+      }
+
+      const listAgentsSpy = vi.spyOn(agentService, 'listAgents')
+      listAgentsSpy.mockResolvedValueOnce([mockAgent])
+
+      await agentService.saveUIState(testProjectPath, agentId, uiState)
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Agent')
+      )
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('.agent-info file missing')
+      )
+
+      consoleWarnSpy.mockRestore()
+      listAgentsSpy.mockRestore()
+
+      // Recreate file
+      const agentInfo = {
+        id: `${agentId}-1`,
+        agentId: agentId,
+        branch: `feature/${agentId}/test`,
+        project: 'test-project',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+      writeFileSync(agentInfoPath, JSON.stringify(agentInfo, null, 2))
+    })
   })
 
   describe('listAgents - UI state restoration', () => {
@@ -254,6 +419,16 @@ describe('AgentService - UI State Persistence', () => {
       expect(agent).toBeDefined()
       // Should preserve whatever was in the file (type: string in this case)
       expect(agent!.uiState).toBe('invalid-not-an-object')
+    })
+  })
+
+  describe('updateAgentInfo', () => {
+    it('should include worktreePath in error when agent info not found', () => {
+      const fakePath = '/fake/path/to/worktree'
+
+      expect(() => {
+        agentService.updateAgentInfo(fakePath, { status: 'active' })
+      }).toThrow(`Agent info not found at worktree path: ${fakePath}`)
     })
   })
 })
