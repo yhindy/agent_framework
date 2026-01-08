@@ -17,6 +17,7 @@ export interface AgentInfo {
   tool: string
   model?: string
   mode: 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
+  yolo?: boolean              // Dangerously skip permissions flag
   prUrl?: string
   prStatus?: string
   prompt?: string
@@ -33,6 +34,22 @@ export interface AgentInfo {
   claudeLastSeen?: string        // Last time we saw output from Claude
   isWaitingForInput?: boolean    // Persisted waiting state for notification restoration
   lastOutputSnapshot?: string    // Last ~500 chars of output for resume detection
+
+  // Live session info from Claude's JSONL (updated in real-time)
+  actualModel?: string           // Full model name like "claude-haiku-4-5-20251001"
+  totalCostUsd?: number          // Running cost for this session
+  tokenUsage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+  }
+  claudeCodeVersion?: string     // Version of Claude Code being used
+  claudeState?: 'working' | 'waiting' | 'unknown'  // Current state from JSONL
+  modelHistory?: Array<{         // Track model changes during session
+    model: string
+    timestamp: string
+  }>
 
   // UI state persistence for terminal/tab restoration
   uiState?: UIState

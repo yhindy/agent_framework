@@ -4,6 +4,7 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import ConfirmModal from './ConfirmModal'
+import SessionInfoPanel from './SessionInfoPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
@@ -493,6 +494,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
           )}
         </div>
       </div>
+
+      {/* Session Info Panel - shows live Claude session data */}
+      {assignment?.tool === 'claude' && (
+        <SessionInfoPanel agentId={agentId || ''} isRunning={isRunning} />
+      )}
 
       <div className="agent-content">
         <div className="unified-tabs">

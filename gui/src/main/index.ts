@@ -9,6 +9,7 @@ import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
 import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
+import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -22,6 +23,7 @@ let services: {
   testEnv: TestEnvService
   notification: NotificationService
   prPolling: PRPollingService
+  claudeSessionInfo: ClaudeSessionInfoService
 } | null = null
 
 function createWindow(): void {
@@ -90,10 +92,12 @@ function initializeServices(): void {
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
   const notificationService = new NotificationService(mainWindow)
+  const claudeSessionInfoService = new ClaudeSessionInfoService()
   const terminalService = new TerminalService(mainWindow, notificationService)
 
-  // Set AgentService reference in TerminalService for persistence
+  // Set service references in TerminalService
   terminalService.setAgentService(agentService)
+  terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
 
   services = {
     project: projectService,
@@ -102,7 +106,8 @@ function initializeServices(): void {
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
     notification: notificationService,
-    prPolling: new PRPollingService(mainWindow, agentService)
+    prPolling: new PRPollingService(mainWindow, agentService),
+    claudeSessionInfo: claudeSessionInfoService
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -137,49 +142,53 @@ function initializeServices(): void {
         })
         .catch(err => console.error(`Failed to ensure base agent for ${project.path}:`, err))
 
-      // NEW: Auto-resume existing Claude sessions on app startup
+      // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
       services.agent.listAgents(project.path)
         .then(agents => {
           for (const agent of agents) {
-            // Only auto-resume Claude sessions marked as active
-            if (agent.claudeSessionActive && agent.tool === 'claude') {
-              // Stagger resumes to avoid overwhelming
-              const delay = 500 + Math.random() * 2000
+            // Check for Claude sessions with session IDs (use JSONL to verify they exist)
+            if (agent.claudeSessionId && agent.tool === 'claude') {
+              // Check actual session state from JSONL
+              const sessionState = services!.claudeSessionInfo.getSessionState(
+                agent.claudeSessionId,
+                agent.worktreePath
+              )
 
-              setTimeout(async () => {
-                try {
-                  await services!.terminal.startAgent(
-                    project.path,
-                    agent.id,
-                    agent.tool || 'claude',
-                    agent.mode || 'dev',
-                    agent.prompt,
-                    agent.model,
-                    false
-                  )
+              // Only resume if session exists (not 'unknown')
+              if (sessionState !== 'unknown') {
+                console.log(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
 
-                  mainWindow?.webContents.send('agents:updated')
+                // Stagger resumes to avoid overwhelming
+                const delay = 500 + Math.random() * 2000
 
-                  // Restore waiting notification if was waiting
-                  if (agent.isWaitingForInput) {
-                    mainWindow?.webContents.send('agent:waitingForInput',
-                      agent.id,
-                      'Claude is waiting for input'
-                    )
-                  }
-                } catch (error) {
-                  console.error(`Failed to resume agent ${agent.id}:`, error)
-
-                  // Mark session inactive on resume failure
+                setTimeout(async () => {
                   try {
-                    await services!.agent.updateAgentInfo(agent.worktreePath, {
-                      claudeSessionActive: false
-                    })
-                  } catch (err) {
-                    console.error('Failed to mark session inactive:', err)
+                    await services!.terminal.startAgent(
+                      project.path,
+                      agent.id,
+                      agent.tool || 'claude',
+                      agent.mode || 'dev',
+                      agent.prompt,
+                      agent.model,
+                      agent.yolo || false  // Restore yolo flag for dangerously-skip-permissions
+                    )
+
+                    mainWindow?.webContents.send('agents:updated')
+
+                    // Restore waiting notification based on JSONL state
+                    if (sessionState === 'waiting') {
+                      mainWindow?.webContents.send('agent:waitingForInput',
+                        agent.id,
+                        'Claude is waiting for input'
+                      )
+                    }
+                  } catch (error) {
+                    console.error(`Failed to resume agent ${agent.id}:`, error)
                   }
-                }
-              }, delay)
+                }, delay)
+              } else {
+                console.log(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
+              }
             }
           }
         })
@@ -743,6 +752,24 @@ function setupIPC(): void {
 
   ipcMain.on('testEnv:resize', (_event, agentId: string, commandId: string, cols: number, rows: number) => {
     services!.testEnv.resize(agentId, commandId, cols, rows)
+  })
+
+  // Claude Session Info APIs
+  ipcMain.handle('claude:getSessionInfo', async (_event, agentId: string) => {
+    // Find the agent to get its worktree path and session ID
+    const activeProjects = services!.project.getActiveProjects()
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      const agent = agents.find(a => a.id === agentId)
+      if (agent && agent.claudeSessionId) {
+        const info = services!.claudeSessionInfo.parseSessionInfo(
+          agent.claudeSessionId,
+          agent.worktreePath
+        )
+        return info
+      }
+    }
+    return null
   })
 }
 

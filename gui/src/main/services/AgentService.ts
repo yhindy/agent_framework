@@ -90,6 +90,12 @@ export class AgentService {
                 isSuperMinion: false,
                 parentAgentId: baseAgentInfo.parentAgentId,
                 isBaseBranchAgent: true,
+                claudeSessionId: baseAgentInfo.claudeSessionId,
+                claudeSessionActive: baseAgentInfo.claudeSessionActive,
+                isWaitingForInput: baseAgentInfo.isWaitingForInput,
+                prompt: baseAgentInfo.prompt,
+                model: baseAgentInfo.model,
+                uiState: baseAgentInfo.uiState,
                 branch: baseAgentInfo.branch
               }
               this.sessions.set(baseAgentInfo.agentId, session)
@@ -100,6 +106,12 @@ export class AgentService {
               session.hasUnread = baseAgentInfo.hasUnread || session.hasUnread
               session.lastActivity = baseAgentInfo.lastActivity
               session.isBaseBranchAgent = true
+              session.claudeSessionId = baseAgentInfo.claudeSessionId
+              session.claudeSessionActive = baseAgentInfo.claudeSessionActive
+              session.isWaitingForInput = baseAgentInfo.isWaitingForInput
+              session.prompt = baseAgentInfo.prompt
+              session.model = baseAgentInfo.model
+              session.uiState = baseAgentInfo.uiState
               session.branch = baseAgentInfo.branch
             }
             agents.push(session)
@@ -219,6 +231,21 @@ export class AgentService {
 
   // New helper functions for JSON .agent-info format
   readAgentInfo(worktreePath: string): AgentInfo | null {
+    // Check for base agent info first (.minions-base-info in project root)
+    const baseInfoPath = join(worktreePath, '.minions-base-info')
+    if (existsSync(baseInfoPath)) {
+      try {
+        const content = readFileSync(baseInfoPath, 'utf-8')
+        const info = JSON.parse(content) as AgentInfo
+        if (info.isBaseBranchAgent) {
+          return info
+        }
+      } catch {
+        // Fall through to check .agent-info
+      }
+    }
+
+    // Check for regular agent info (.agent-info in worktree)
     const agentInfoPath = join(worktreePath, '.agent-info')
     if (!existsSync(agentInfoPath)) {
       return null
@@ -255,8 +282,14 @@ export class AgentService {
   }
 
   writeAgentInfo(worktreePath: string, info: AgentInfo): void {
-    const agentInfoPath = join(worktreePath, '.agent-info')
-    writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+    // Base agents use .minions-base-info, regular agents use .agent-info
+    if (info.isBaseBranchAgent) {
+      const baseInfoPath = join(worktreePath, '.minions-base-info')
+      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+    } else {
+      const agentInfoPath = join(worktreePath, '.agent-info')
+      writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+    }
   }
 
   updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): void {
