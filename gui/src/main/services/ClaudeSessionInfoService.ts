@@ -109,13 +109,17 @@ export class ClaudeSessionInfoService {
    */
   findSessionFile(sessionId: string, worktreePath: string): string | null {
     const projectPath = this.getClaudeProjectPath(worktreePath)
-    if (!projectPath) return null
+    if (!projectPath) {
+      console.warn(`[ClaudeSessionInfoService] Could not find Claude project directory for worktree: ${worktreePath}`)
+      return null
+    }
 
     const sessionFile = join(projectPath, `${sessionId}.jsonl`)
     if (existsSync(sessionFile)) {
       return sessionFile
     }
 
+    console.warn(`[ClaudeSessionInfoService] Session file not found: ${sessionFile}`)
     return null
   }
 
@@ -224,10 +228,15 @@ export class ClaudeSessionInfoService {
       }
 
       // Determine state from the LAST entry only
-      // waiting = assistant finished with text (no tool_use, no thinking)
-      // working = everything else
+      // Simple 3-state logic:
+      // - waiting: assistant finished with text-only content
+      // - working: user sent input OR assistant using tools/thinking
+      // - unknown: any other case (safe default)
       if (lastEntry) {
-        if (lastEntry.type === 'assistant' && lastEntry.message) {
+        if (lastEntry.type === 'user') {
+          // User sent message/tool_result = Claude is processing
+          state = 'working'
+        } else if (lastEntry.type === 'assistant' && lastEntry.message) {
           const content = lastEntry.message.content
           if (Array.isArray(content)) {
             const hasToolUse = content.some(c => c.type === 'tool_use')
@@ -237,16 +246,17 @@ export class ClaudeSessionInfoService {
             // Only waiting if Claude sent text without tool_use or thinking
             if (hasText && !hasToolUse && !hasThinking) {
               state = 'waiting'
-            } else {
+            } else if (hasToolUse || hasThinking) {
+              // Claude is working (using tools or thinking)
               state = 'working'
+            } else {
+              // Empty content or unexpected content types = unknown
+              state = 'unknown'
             }
           } else {
-            // No content array = working (still processing)
-            state = 'working'
+            // No content array = unknown (unexpected format)
+            state = 'unknown'
           }
-        } else if (lastEntry.type === 'user') {
-          // User sent message/tool_result = Claude is processing
-          state = 'working'
         }
       }
 
@@ -310,8 +320,10 @@ export class ClaudeSessionInfoService {
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
-      // waiting = assistant finished with text (no tool_use, no thinking)
-      // working = everything else
+      // Simple 3-state logic (same as parseSessionInfo):
+      // - waiting: assistant finished with text-only content
+      // - working: user sent input OR assistant using tools/thinking
+      // - unknown: any other case (safe default)
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
 
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -321,6 +333,12 @@ export class ClaudeSessionInfoService {
           // Skip non-conversation entries (summary, file-history-snapshot, etc.)
           if (entry.type !== 'user' && entry.type !== 'assistant') {
             continue
+          }
+
+          if (entry.type === 'user') {
+            // User sent message/tool_result = Claude is processing
+            state = 'working'
+            break
           }
 
           if (entry.type === 'assistant' && entry.message) {
@@ -333,18 +351,17 @@ export class ClaudeSessionInfoService {
               // Only waiting if Claude sent text without tool_use or thinking
               if (hasText && !hasToolUse && !hasThinking) {
                 state = 'waiting'
-              } else {
+              } else if (hasToolUse || hasThinking) {
+                // Claude is working (using tools or thinking)
                 state = 'working'
+              } else {
+                // Empty content or unexpected content types = unknown
+                state = 'unknown'
               }
             } else {
-              state = 'working'
+              // No content array = unknown (unexpected format)
+              state = 'unknown'
             }
-            break
-          }
-
-          if (entry.type === 'user') {
-            // User sent message/tool_result = Claude is processing
-            state = 'working'
             break
           }
 
