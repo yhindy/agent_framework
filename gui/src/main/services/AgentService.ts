@@ -295,7 +295,7 @@ export class AgentService {
   updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): void {
     const current = this.readAgentInfo(worktreePath)
     if (!current) {
-      throw new Error('Agent info not found')
+      throw new Error(`Agent info not found at worktree path: ${worktreePath}`)
     }
 
     const updated = { ...current, ...updates, lastActivity: new Date().toISOString() }
@@ -782,6 +782,23 @@ export class AgentService {
 
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`)
+    }
+
+    // Verify the agent info file exists before attempting update
+    const agentInfoPath = join(agent.worktreePath, '.agent-info')
+    const baseInfoPath = join(agent.worktreePath, '.minions-base-info')
+
+    if (!existsSync(agentInfoPath) && !existsSync(baseInfoPath)) {
+      console.warn(
+        `Agent ${agentId} found in worktree list but .agent-info file missing at ${agent.worktreePath}. ` +
+        'Skipping UI state save - agent may have been deleted.'
+      )
+      // Gracefully skip the file update, but still update in-memory session
+      const session = this.sessions.get(agentId)
+      if (session) {
+        session.uiState = uiState
+      }
+      return
     }
 
     // Update the .agent-info file with UI state
