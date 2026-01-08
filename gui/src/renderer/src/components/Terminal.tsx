@@ -10,11 +10,38 @@ interface TerminalProps {
   onMount?: () => void
 }
 
+// Configuration constants for terminal output limits
+const TERMINAL_SCROLLBACK_LINES = 10000 // xterm.js scrollback buffer limit
+const MAX_OUTPUT_CHUNKS = 10000 // Maximum number of chunks to keep in cache
+const CONSOLIDATION_THRESHOLD = 1000 // Consolidate when cache exceeds this many chunks
+const REPLAY_BATCH_SIZE = 100 // Number of chunks to batch together during replay
+
 // Cache terminal OUTPUT (not XTerm instances - they can't be re-attached to DOM)
 const outputCache = new Map<string, string[]>()
 
 // Track the currently active terminal for live output
 let activeTerminal: { agentId: string; terminal: XTerm } | null = null
+
+// Helper function to consolidate many small chunks into fewer large ones
+function consolidateCache(agentId: string) {
+  const cache = outputCache.get(agentId)
+  if (!cache || cache.length < CONSOLIDATION_THRESHOLD) return
+
+  // Combine all chunks into a single chunk to reduce array operations
+  const consolidated = cache.join('')
+  cache.length = 0
+  cache.push(consolidated)
+}
+
+// Helper function to trim cache when it exceeds limits
+function trimCache(agentId: string) {
+  const cache = outputCache.get(agentId)
+  if (!cache || cache.length <= MAX_OUTPUT_CHUNKS) return
+
+  // Remove oldest chunks, keeping only the most recent MAX_OUTPUT_CHUNKS
+  const excessChunks = cache.length - MAX_OUTPUT_CHUNKS
+  cache.splice(0, excessChunks)
+}
 
 // Global listener - set up once, captures ALL output for ALL agents
 let globalListenerInitialized = false
@@ -28,7 +55,16 @@ function initGlobalOutputListener() {
       outputCache.set(id, [])
     }
     outputCache.get(id)!.push(data)
-    
+
+    // Trim cache if it exceeds limits
+    trimCache(id)
+
+    // Periodically consolidate chunks to prevent array fragmentation
+    const cache = outputCache.get(id)!
+    if (cache.length >= CONSOLIDATION_THRESHOLD) {
+      consolidateCache(id)
+    }
+
     // If this agent's terminal is currently active, write to it immediately
     if (activeTerminal && activeTerminal.agentId === id) {
       activeTerminal.terminal.write(data)
@@ -52,6 +88,7 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
       cursorInactiveStyle: 'outline', // Show outline cursor when unfocused so it's always visible
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      scrollback: TERMINAL_SCROLLBACK_LINES, // Limit scrollback buffer to prevent memory issues
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
@@ -104,10 +141,11 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
         outputCache.set(agentId, [])
       }
 
-      // Replay cached output to restore terminal history
+      // Replay cached output to restore terminal history (batched for performance)
       const cachedOutput = outputCache.get(agentId)!
-      for (const chunk of cachedOutput) {
-        terminal.write(chunk)
+      for (let i = 0; i < cachedOutput.length; i += REPLAY_BATCH_SIZE) {
+        const batch = cachedOutput.slice(i, i + REPLAY_BATCH_SIZE).join('')
+        terminal.write(batch)
       }
 
       // Scroll to bottom after replaying cached content
