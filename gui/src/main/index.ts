@@ -530,7 +530,8 @@ function setupIPC(): void {
             assignment.tool,
             'planning',
             assignment.prompt,
-            assignment.model
+            assignment.model,
+            assignment.yolo || false
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {

@@ -193,7 +193,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
           tool: formData.tool,
           model: formData.model,
           prompt: formData.prompt,
-          status: 'in_progress'
+          status: 'in_progress',
+          yolo: formData.yolo
         })
       } else {
         result = await window.electronAPI.createAssignmentForProject(projectPath, {

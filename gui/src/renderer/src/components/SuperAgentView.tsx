@@ -7,6 +7,7 @@ import ChildStatusCard from './ChildStatusCard'
 import TaskStatusCard from './TaskStatusCard'
 import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
+import SessionInfoPanel from './SessionInfoPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
@@ -358,6 +359,11 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           </button>
         </div>
       </div>
+
+      {/* Session Info Panel - shows live Claude session data */}
+      {agent.tool === 'claude' && (
+        <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
+      )}
 
       <div className="super-content">
         <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' || isGridCollapsed ? 'full-screen' : ''}`}>
