@@ -223,7 +223,9 @@ export class ClaudeSessionInfoService {
         }
       }
 
-      // Determine state from the LAST entry only (not all entries)
+      // Determine state from the LAST entry only
+      // Key insight: If last entry is assistant with tool_use and no tool_result after,
+      // Claude is waiting for user approval (not working)
       if (lastEntry) {
         if (lastEntry.type === 'assistant' && lastEntry.message) {
           const msg = lastEntry.message
@@ -232,15 +234,17 @@ export class ClaudeSessionInfoService {
           if (msg.stop_reason === 'stop_sequence') {
             state = 'waiting'
           }
-          // Claude used a tool - working (waiting for tool result or still processing)
+          // Claude used a tool - if last entry is assistant, waiting for approval
           else if (msg.stop_reason === 'tool_use') {
-            state = 'working'
+            // Last entry is assistant with tool_use = waiting for approval
+            state = 'waiting'
           }
           // No stop_reason - check content to infer state
           else if (msg.content && Array.isArray(msg.content)) {
             const hasToolUse = msg.content.some(c => c.type === 'tool_use')
             if (hasToolUse) {
-              state = 'working'
+              // Last entry is assistant with tool_use = waiting for approval
+              state = 'waiting'
             } else {
               // Has text but no stop_reason - likely streaming or interrupted
               // Default to waiting since there's no pending action
@@ -252,7 +256,7 @@ export class ClaudeSessionInfoService {
             state = 'waiting'
           }
         } else if (lastEntry.type === 'user') {
-          // If last entry is user message, Claude is working on processing it
+          // If last entry is user message/tool_result, Claude is working on processing it
           state = 'working'
         }
       }
@@ -317,10 +321,24 @@ export class ClaudeSessionInfoService {
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
+      // Key insight: If last entry is assistant with tool_use and no tool_result after,
+      // Claude is waiting for user approval (not working)
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
+      let lastEntryType: string | null = null
+      let lastEntryHasToolUse = false
+
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
           const entry = JSON.parse(lines[i]) as SessionJSONLEntry
+
+          // Track what the very last entry is
+          if (lastEntryType === null) {
+            lastEntryType = entry.type
+            if (entry.type === 'assistant' && entry.message?.content) {
+              lastEntryHasToolUse = Array.isArray(entry.message.content) &&
+                entry.message.content.some(c => c.type === 'tool_use')
+            }
+          }
 
           if (entry.type === 'assistant' && entry.message) {
             const msg = entry.message
@@ -331,9 +349,14 @@ export class ClaudeSessionInfoService {
               break
             }
 
-            // Claude used a tool - working (waiting for tool result or still processing)
+            // Claude used a tool and it completed - check if there's a tool_result after
             if (msg.stop_reason === 'tool_use') {
-              state = 'working'
+              // If this is the last entry, Claude is waiting for tool approval
+              if (lastEntryType === 'assistant' && lastEntryHasToolUse) {
+                state = 'waiting'
+              } else {
+                state = 'working'
+              }
               break
             }
 
@@ -343,8 +366,12 @@ export class ClaudeSessionInfoService {
               const hasText = msg.content.some(c => c.type === 'text')
 
               if (hasToolUse) {
-                // Has tool_use but no stop_reason - likely streaming, treat as working
-                state = 'working'
+                // Has tool_use - if this is the last entry, Claude is waiting for approval
+                if (lastEntryType === 'assistant') {
+                  state = 'waiting'
+                } else {
+                  state = 'working'
+                }
                 break
               } else if (hasText) {
                 // Has text but no stop_reason - likely streaming or interrupted
@@ -355,7 +382,7 @@ export class ClaudeSessionInfoService {
           }
 
           if (entry.type === 'user') {
-            // Last entry is user message - Claude is processing it
+            // User sent a message/tool_result - Claude is processing it
             state = 'working'
             break
           }
