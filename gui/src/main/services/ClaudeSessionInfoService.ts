@@ -228,16 +228,21 @@ export class ClaudeSessionInfoService {
         if (lastEntry.type === 'assistant' && lastEntry.message) {
           const msg = lastEntry.message
 
-          // If assistant finished with end_turn, it's waiting for user input
-          if (msg.stop_reason === 'end_turn') {
+          // Claude finished responding with text - waiting for user input
+          if (msg.stop_reason === 'stop_sequence') {
             state = 'waiting'
-          } else if (msg.content && Array.isArray(msg.content)) {
-            // If assistant has tool_use, it's working (waiting for tool results)
+          }
+          // Claude used a tool - working (waiting for tool result or still processing)
+          else if (msg.stop_reason === 'tool_use') {
+            state = 'working'
+          }
+          // No stop_reason - check content to infer state
+          else if (msg.content && Array.isArray(msg.content)) {
             const hasToolUse = msg.content.some(c => c.type === 'tool_use')
             if (hasToolUse) {
               state = 'working'
             } else {
-              // Assistant message with no tool_use and no end_turn (e.g., interrupted)
+              // Has text but no stop_reason - likely streaming or interrupted
               // Default to waiting since there's no pending action
               state = 'waiting'
             }
@@ -319,19 +324,38 @@ export class ClaudeSessionInfoService {
 
           if (entry.type === 'assistant' && entry.message) {
             const msg = entry.message
+
+            // Claude finished responding with text - waiting for user input
+            if (msg.stop_reason === 'stop_sequence') {
+              state = 'waiting'
+              break
+            }
+
+            // Claude used a tool - working (waiting for tool result or still processing)
+            if (msg.stop_reason === 'tool_use') {
+              state = 'working'
+              break
+            }
+
+            // No stop_reason set - check content to infer state
             if (msg.content && Array.isArray(msg.content)) {
               const hasToolUse = msg.content.some(c => c.type === 'tool_use')
+              const hasText = msg.content.some(c => c.type === 'text')
+
               if (hasToolUse) {
+                // Has tool_use but no stop_reason - likely streaming, treat as working
                 state = 'working'
                 break
-              } else if (msg.stop_reason) {
-                state = 'waiting'
-                break
+              } else if (hasText) {
+                // Has text but no stop_reason - likely streaming or interrupted
+                // Continue looking for a message with stop_reason
+                continue
               }
             }
           }
 
           if (entry.type === 'user') {
+            // Last entry is user message - Claude is processing it
             state = 'working'
             break
           }
