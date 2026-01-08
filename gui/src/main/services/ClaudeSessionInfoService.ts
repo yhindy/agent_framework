@@ -224,39 +224,28 @@ export class ClaudeSessionInfoService {
       }
 
       // Determine state from the LAST entry only
-      // Key insight: If last entry is assistant with tool_use and no tool_result after,
-      // Claude is waiting for user approval (not working)
+      // waiting = assistant finished with text (no tool_use, no thinking)
+      // working = everything else
       if (lastEntry) {
         if (lastEntry.type === 'assistant' && lastEntry.message) {
-          const msg = lastEntry.message
+          const content = lastEntry.message.content
+          if (Array.isArray(content)) {
+            const hasToolUse = content.some(c => c.type === 'tool_use')
+            const hasThinking = content.some(c => c.type === 'thinking')
+            const hasText = content.some(c => c.type === 'text')
 
-          // Claude finished responding with text - waiting for user input
-          if (msg.stop_reason === 'stop_sequence') {
-            state = 'waiting'
-          }
-          // Claude used a tool - if last entry is assistant, waiting for approval
-          else if (msg.stop_reason === 'tool_use') {
-            // Last entry is assistant with tool_use = waiting for approval
-            state = 'waiting'
-          }
-          // No stop_reason - check content to infer state
-          else if (msg.content && Array.isArray(msg.content)) {
-            const hasToolUse = msg.content.some(c => c.type === 'tool_use')
-            if (hasToolUse) {
-              // Last entry is assistant with tool_use = waiting for approval
+            // Only waiting if Claude sent text without tool_use or thinking
+            if (hasText && !hasToolUse && !hasThinking) {
               state = 'waiting'
             } else {
-              // Has text but no stop_reason - likely streaming or interrupted
-              // Default to waiting since there's no pending action
-              state = 'waiting'
+              state = 'working'
             }
           } else {
-            // Assistant message with non-array content or no content
-            // Likely interrupted or incomplete - default to waiting
-            state = 'waiting'
+            // No content array = working (still processing)
+            state = 'working'
           }
         } else if (lastEntry.type === 'user') {
-          // If last entry is user message/tool_result, Claude is working on processing it
+          // User sent message/tool_result = Claude is processing
           state = 'working'
         }
       }
@@ -321,12 +310,9 @@ export class ClaudeSessionInfoService {
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
-      // Key insight: Only look at 'user' and 'assistant' entries - skip 'summary', 'file-history-snapshot', etc.
-      // If last conversation entry is assistant (finished responding), Claude is waiting
-      // If last conversation entry is user (sent message/tool_result), Claude is working
+      // waiting = assistant finished with text (no tool_use, no thinking)
+      // working = everything else
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
-      let lastConversationEntryType: string | null = null
-      let lastEntryHasToolUse = false
 
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
@@ -337,67 +323,27 @@ export class ClaudeSessionInfoService {
             continue
           }
 
-          // Track what the last CONVERSATION entry is (first one we find going backwards)
-          if (lastConversationEntryType === null) {
-            lastConversationEntryType = entry.type
-            if (entry.type === 'assistant' && entry.message?.content) {
-              lastEntryHasToolUse = Array.isArray(entry.message.content) &&
-                entry.message.content.some(c => c.type === 'tool_use')
-            }
-          }
-
           if (entry.type === 'assistant' && entry.message) {
-            const msg = entry.message
+            const content = entry.message.content
+            if (Array.isArray(content)) {
+              const hasToolUse = content.some(c => c.type === 'tool_use')
+              const hasThinking = content.some(c => c.type === 'thinking')
+              const hasText = content.some(c => c.type === 'text')
 
-            // Claude finished responding with text - waiting for user input
-            if (msg.stop_reason === 'stop_sequence') {
-              state = 'waiting'
-              break
-            }
-
-            // Claude used a tool and it completed - check if there's a tool_result after
-            if (msg.stop_reason === 'tool_use') {
-              // If this is the last conversation entry, Claude is waiting for tool approval
-              if (lastConversationEntryType === 'assistant') {
+              // Only waiting if Claude sent text without tool_use or thinking
+              if (hasText && !hasToolUse && !hasThinking) {
                 state = 'waiting'
               } else {
                 state = 'working'
               }
-              break
-            }
-
-            // No stop_reason set - check content to infer state
-            if (msg.content && Array.isArray(msg.content)) {
-              const hasToolUse = msg.content.some(c => c.type === 'tool_use')
-              const hasText = msg.content.some(c => c.type === 'text')
-
-              if (hasToolUse) {
-                // Has tool_use - if this is the last conversation entry, Claude is waiting for approval
-                if (lastConversationEntryType === 'assistant') {
-                  state = 'waiting'
-                } else {
-                  state = 'working'
-                }
-                break
-              } else if (hasText) {
-                // Has text but no stop_reason - assistant finished responding, waiting for user
-                // This handles the case where stop_reason is missing or null
-                if (lastConversationEntryType === 'assistant') {
-                  state = 'waiting'
-                }
-                break
-              }
             } else {
-              // Assistant entry with no content array - likely finished, waiting for user
-              if (lastConversationEntryType === 'assistant') {
-                state = 'waiting'
-              }
-              break
+              state = 'working'
             }
+            break
           }
 
           if (entry.type === 'user') {
-            // User sent a message/tool_result - Claude is processing it
+            // User sent message/tool_result = Claude is processing
             state = 'working'
             break
           }
@@ -408,7 +354,7 @@ export class ClaudeSessionInfoService {
       }
 
       // Log state determination for debugging
-      console.log(`[ClaudeSessionInfoService] getSessionState: ${sessionId.slice(0, 8)}... -> ${state} (lastConvEntry: ${lastConversationEntryType}, hasToolUse: ${lastEntryHasToolUse})`)
+      console.log(`[ClaudeSessionInfoService] getSessionState: ${sessionId.slice(0, 8)}... -> ${state}`)
 
       // Update cache with just the state (lightweight)
       if (cached) {
