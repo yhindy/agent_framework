@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import ProjectPicker from './ProjectPicker'
+import { extractBranchName } from '../utils/branchUtils'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -28,20 +29,6 @@ interface AgentSession {
 
 interface AgentsByProject {
   [projectPath: string]: AgentSession[]
-}
-
-// Extract descriptive part from format: feature/project-id/branch-name -> branch-name
-function extractBranchName(branch?: string): string | null {
-  if (!branch) return null
-
-  const parts = branch.split('/')
-  if (parts.length >= 3) {
-    // Return everything after feature/project-id/
-    return parts.slice(2).join('/') // Handles nested paths
-  }
-
-  // Fallback: return full branch if format doesn't match
-  return branch
 }
 
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: SidebarProps) {

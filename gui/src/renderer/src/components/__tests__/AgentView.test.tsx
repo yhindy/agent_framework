@@ -58,7 +58,7 @@ describe('AgentView Header Consolidation', () => {
   const mockAssignment = {
     id: 'assign-1',
     agentId: 'test-agent',
-    branch: 'feature/test-branch',
+    branch: 'feature/test-project/add-feature',
     feature: 'Test Feature Implementation',
     status: 'working',
     specFile: '/path/to/spec.md',
@@ -100,7 +100,7 @@ describe('AgentView Header Consolidation', () => {
     vi.clearAllMocks()
   })
 
-  it('renders consolidated header with agent ID and banana emoji', async () => {
+  it('renders consolidated header with shortened branch name and banana emoji', async () => {
     render(
       <BrowserRouter>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
@@ -108,11 +108,11 @@ describe('AgentView Header Consolidation', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/🍌 test-agent/)).toBeInTheDocument()
+      expect(screen.getByText(/🍌 add-feature/)).toBeInTheDocument()
     })
   })
 
-  it('renders feature, branch, and status badges when assignment exists', async () => {
+  it('renders feature, agent ID, and status badges when assignment exists', async () => {
     render(
       <BrowserRouter>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
@@ -122,7 +122,7 @@ describe('AgentView Header Consolidation', () => {
     await waitFor(() => {
       expect(screen.getByText('Feature:')).toBeInTheDocument()
       expect(screen.getByText('Test Feature Implementation')).toBeInTheDocument()
-      expect(screen.getByText('feature/test-branch')).toBeInTheDocument()
+      expect(screen.getByText('test-agent')).toBeInTheDocument()
       expect(screen.getByText('working')).toBeInTheDocument()
     })
   })
@@ -365,7 +365,7 @@ describe('AgentView Header Consolidation', () => {
     })
   })
 
-  it('renders branch badge with title attribute for truncation', async () => {
+  it('renders agent ID badge with title attribute for truncation', async () => {
     const { container } = render(
       <BrowserRouter>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
@@ -373,8 +373,8 @@ describe('AgentView Header Consolidation', () => {
     )
 
     await waitFor(() => {
-      const badgeValue = container.querySelector('.branch-badge .info-badge-value')
-      expect(badgeValue).toHaveAttribute('title', 'feature/test-branch')
+      const badge = container.querySelector('.agent-id-badge')
+      expect(badge).toHaveAttribute('title', 'test-agent (click to copy)')
     })
   })
 
@@ -392,7 +392,7 @@ describe('AgentView Header Consolidation', () => {
     await waitFor(() => {
       expect(screen.getByText(/🍌 test-agent/)).toBeInTheDocument()
       expect(container.querySelector('.feature-badge')).not.toBeInTheDocument()
-      expect(container.querySelector('.branch-badge')).not.toBeInTheDocument()
+      expect(container.querySelector('.agent-id-badge')).not.toBeInTheDocument()
       expect(container.querySelector('.status-badge')).not.toBeInTheDocument()
     })
   })

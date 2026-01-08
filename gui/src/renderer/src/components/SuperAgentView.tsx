@@ -10,6 +10,7 @@ import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
+import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
 import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
 
@@ -323,7 +324,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         <div className="agent-header-left">
           <div className="agent-title">
             <h2>
-              👑 {agent.agentId}
+              👑 {extractBranchName(agent.branch) || agent.agentId}
               <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span>
             </h2>
           </div>

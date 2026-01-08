@@ -9,6 +9,7 @@ import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
+import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -391,7 +392,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
       <div className="agent-header">
         <div className="agent-header-left">
           <div className="agent-title">
-            <h2>🍌 {agentId}</h2>
+            <h2>🍌 {extractBranchName(assignment?.branch) || agentId}</h2>
           </div>
 
           {assignment && (
@@ -408,14 +409,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 </span>
               </div>
 
-              <div className="info-badge branch-badge" title={`${assignment.branch} (click to copy)`}>
+              <div className="info-badge agent-id-badge" title={`${agentId} (click to copy)`}>
                 <span
                   className="info-badge-value copyable"
-                  onClick={(e) => handleCopyToClipboard(assignment.branch, e as any)}
+                  onClick={(e) => handleCopyToClipboard(agentId, e as any)}
                   role="button"
                   tabIndex={0}
                 >
-                  {assignment.branch}
+                  {agentId}
                 </span>
               </div>
 
