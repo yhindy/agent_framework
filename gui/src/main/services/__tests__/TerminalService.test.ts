@@ -198,7 +198,7 @@ describe('TerminalService Input Detection', () => {
     expect(mockWebContents.send).toHaveBeenCalledWith(
       'agent:waitingForInput',
       'agent-1',
-      'Claude is waiting for input'
+      'Waiting for input'
     )
 
     // Send input

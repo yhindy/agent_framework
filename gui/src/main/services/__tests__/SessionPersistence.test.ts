@@ -339,20 +339,32 @@ describe('Session Persistence', () => {
     })
 
     it('clears waiting state when user sends input', async () => {
+      // Setup: Mock getSessionState to simulate state transitions
+      let isWaiting = true
+      vi.mocked(claudeSessionInfoService.getSessionState).mockImplementation(() => {
+        return isWaiting ? 'waiting' : 'working'
+      })
+
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 
-      const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-
-      // Simulate waiting state
-      dataHandler('Claude Code 0.0.1\n')
-      dataHandler('Waiting...\n')
+      // Advance timer to detect waiting state
       vi.advanceTimersByTime(2100)
 
-      // Clear mock
+      // Verify waiting state was detected
+      expect(mockWebContents.send).toHaveBeenCalledWith(
+        'agent:waitingForInput',
+        'agent-1',
+        expect.anything()
+      )
+
+      // Clear mock to see new calls
       mockWebContents.send.mockClear()
 
-      // Send input
-      terminalService.sendInput('agent-1', 'y\n')
+      // Simulate user sending input - JSONL would update to show working state
+      isWaiting = false
+
+      // Advance timer to detect the state change
+      vi.advanceTimersByTime(2100)
 
       expect(mockWebContents.send).toHaveBeenCalledWith('agent:resumedWork', 'agent-1')
     })
@@ -366,6 +378,8 @@ describe('Session Persistence', () => {
       }
 
       vi.mocked(agentService.readAgentInfo).mockResolvedValue(agentInfo as any)
+      // Mock getSessionState to return 'waiting' so resume is attempted
+      vi.mocked(claudeSessionInfoService.getSessionState).mockReturnValue('waiting')
 
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev', 'test prompt')
 
@@ -395,6 +409,8 @@ describe('Session Persistence', () => {
       }
 
       vi.mocked(agentService.readAgentInfo).mockResolvedValue(agentInfo as any)
+      // Mock getSessionState to return 'waiting' so resume is attempted
+      vi.mocked(claudeSessionInfoService.getSessionState).mockReturnValue('waiting')
 
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 
@@ -413,6 +429,8 @@ describe('Session Persistence', () => {
       }
 
       vi.mocked(agentService.readAgentInfo).mockResolvedValue(agentInfo as any)
+      // Mock getSessionState to return 'waiting' so resume is attempted
+      vi.mocked(claudeSessionInfoService.getSessionState).mockReturnValue('waiting')
 
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 
@@ -456,29 +474,49 @@ describe('Session Persistence', () => {
     })
 
     it('maintains separate waiting states for multiple agents', async () => {
+      // Track which session IDs belong to which agents
+      const sessionToAgent = new Map<string, string>()
+
+      // Setup: Mock getSessionState to return different states based on worktreePath
+      vi.mocked(claudeSessionInfoService.getSessionState).mockImplementation((sessionId: string, worktreePath: string) => {
+        // Determine which agent based on projectPath (in worktreePath)
+        const isAgent1 = worktreePath.includes('worktree1')
+
+        // First call for each session returns unknown (initial state)
+        if (!sessionToAgent.has(sessionId)) {
+          sessionToAgent.set(sessionId, isAgent1 ? 'agent-1' : 'agent-2')
+          return 'unknown'
+        }
+        // After first call, agent-1 returns waiting, agent-2 returns working
+        return isAgent1 ? 'waiting' : 'working'
+      })
+
       // Start agent 1
       await terminalService.startAgent('/path/to/worktree1', 'agent-1', 'claude', 'dev')
-      let dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-      dataHandler('Claude Code 0.0.1\n')
-      dataHandler('Waiting...\n')
-      vi.advanceTimersByTime(2100)
+
+      // Advance timer to let agent-1's polling start and first call happen
+      vi.advanceTimersByTime(100)
 
       // Start agent 2
       mockPty.write.mockClear()
       mockPty.onData.mockClear()
       await terminalService.startAgent('/path/to/worktree2', 'agent-2', 'claude', 'dev')
-      dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
-      dataHandler('Claude Code 0.0.1\n')
-      dataHandler('Still working...\n')
 
-      // Agent 1 should be waiting
+      // Advance timers to trigger JSONL polling
+      // First poll at 2000ms returns 'unknown' (initial state)
+      vi.advanceTimersByTime(2100)
+
+      // Second poll at 4000ms returns the actual state - this triggers the transition
+      vi.advanceTimersByTime(2000)
+
+      // Agent 1 should be waiting (state transitioned from unknown to waiting)
       expect(mockWebContents.send).toHaveBeenCalledWith(
         'agent:waitingForInput',
         'agent-1',
         expect.anything()
       )
 
-      // Agent 2 should NOT be waiting
+      // Agent 2 should NOT be waiting (state is working, no transition to waiting)
       const waitingCalls = mockWebContents.send.mock.calls.filter(
         call => call[0] === 'agent:waitingForInput' && call[1] === 'agent-2'
       )

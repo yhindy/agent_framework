@@ -8,7 +8,8 @@ import { homedir } from 'os'
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   existsSync: vi.fn(),
-  watch: vi.fn()
+  watch: vi.fn(),
+  statSync: vi.fn(() => ({ mtimeMs: Date.now() }))
 }))
 
 // Get fixture paths
@@ -96,7 +97,7 @@ describe('ClaudeSessionInfoService', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
 {"type":"user","sessionId":"test-123","version":"2.0.76","message":{"role":"user","content":"Hello"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi!"}],"stop_reason":"end_turn","usage":{"input_tokens":100,"output_tokens":25}},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi!"}],"stop_reason":"stop_sequence","usage":{"input_tokens":100,"output_tokens":25}},"timestamp":"2026-01-07T10:00:05.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test-123', '/Users/test/project')
@@ -119,7 +120,7 @@ describe('ClaudeSessionInfoService', () => {
       vi.mocked(readFileSync).mockReturnValue(`
 {"type":"user","message":{"role":"user","content":"Hello"},"timestamp":"2026-01-07T10:00:00.000Z"}
 not valid json
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi!"}],"stop_reason":"end_turn","usage":{"input_tokens":50,"output_tokens":10}},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi!"}],"stop_reason":"stop_sequence","usage":{"input_tokens":50,"output_tokens":10}},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -138,7 +139,7 @@ not valid json
     it('extracts model from assistant messages', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Response"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Response"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -149,9 +150,9 @@ not valid json
     it('aggregates token usage across multiple turns', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"1"}],"stop_reason":"end_turn","usage":{"input_tokens":100,"output_tokens":10,"cache_read_input_tokens":50}},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"1"}],"stop_reason":"stop_sequence","usage":{"input_tokens":100,"output_tokens":10,"cache_read_input_tokens":50}},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"user","message":{"role":"user","content":"More"},"timestamp":"2026-01-07T10:00:01.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"2"}],"stop_reason":"end_turn","usage":{"input_tokens":150,"output_tokens":20,"cache_read_input_tokens":100}},"timestamp":"2026-01-07T10:00:02.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"2"}],"stop_reason":"stop_sequence","usage":{"input_tokens":150,"output_tokens":20,"cache_read_input_tokens":100}},"timestamp":"2026-01-07T10:00:02.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -163,32 +164,33 @@ not valid json
   })
 
   describe('State Detection', () => {
-    it('detects waiting state when assistant finished with stop_reason', () => {
+    it('detects waiting state when assistant finished with stop_sequence', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
 {"type":"user","message":{"role":"user","content":"Question?"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Answer."}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Answer."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
       expect(result!.state).toBe('waiting')
     })
 
-    it('detects working state when assistant has tool_use', () => {
+    it('detects waiting state when assistant has tool_use (waiting for approval)', () => {
+      // When last entry is assistant with tool_use, Claude is waiting for user approval
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
 {"type":"user","message":{"role":"user","content":"Read file"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
-      expect(result!.state).toBe('working')
+      expect(result!.state).toBe('waiting')
     })
 
     it('detects working state when last entry is user message', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Done"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Done"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"user","message":{"role":"user","content":"New question"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
@@ -199,12 +201,26 @@ not valid json
     it('detects working state when user sends tool_result', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"file contents"}]},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
       expect(result!.state).toBe('working')
+    })
+
+    it('skips non-conversation entries (summary, file-history-snapshot)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Question?"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Answer."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"summary","summary":"Test summary"}
+{"type":"file-history-snapshot","snapshot":{}}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      // Should still be waiting because last CONVERSATION entry is assistant
+      expect(result!.state).toBe('waiting')
     })
   })
 
@@ -212,7 +228,7 @@ not valid json
     it('returns waiting when last assistant has stop_reason', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Done"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Done"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
       `.trim())
 
       const state = service.getSessionState('test', '/Users/test/project')
@@ -222,7 +238,7 @@ not valid json
     it('returns working when last entry is user', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"content":[{"type":"text","text":"Done"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Done"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"user","message":{"content":"New question"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
@@ -236,15 +252,28 @@ not valid json
       const state = service.getSessionState('nonexistent', '/Users/test/project')
       expect(state).toBe('unknown')
     })
+
+    it('skips summary and file-history-snapshot entries', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"content":[{"type":"text","text":"Done"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"summary","summary":"Conversation summary"}
+{"type":"file-history-snapshot","snapshot":{}}
+      `.trim())
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be waiting because last CONVERSATION entry is assistant
+      expect(state).toBe('waiting')
+    })
   })
 
   describe('Model Change Detection', () => {
     it('detects model change and records history', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Hi"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"user","message":{"content":"/model opus"},"timestamp":"2026-01-07T10:01:00.000Z"}
-{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Switched"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:01:05.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Switched"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:01:05.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -257,9 +286,9 @@ not valid json
     it('tracks multiple model changes', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"1"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"2"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:01:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"3"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:02:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"1"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"2"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:01:00.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"3"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:02:00.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
