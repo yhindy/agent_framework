@@ -13,7 +13,7 @@ describe('SuperAgentView', () => {
   const mockSuperAgent = {
     id: 'super-1',
     agentId: 'super-1',
-    branch: 'feature/super-1',
+    branch: 'feature/test-project/master-coordination',
     project: 'test-project',
     feature: 'Master feature',
     status: 'active',
@@ -54,7 +54,7 @@ describe('SuperAgentView', () => {
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText('👑 super-1')).toBeInTheDocument()
+      expect(screen.getByText('👑 master-coordination')).toBeInTheDocument()
     })
 
     // Check if details are displayed
@@ -91,7 +91,7 @@ describe('SuperAgentView', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('👑 super-1')).toBeInTheDocument()
+      expect(screen.getByText('👑 master-coordination')).toBeInTheDocument()
       expect(screen.getByText('Budget: 1/5')).toBeInTheDocument()
       expect(screen.getByText('Mission:')).toBeInTheDocument()
       expect(screen.getByText('Master feature')).toBeInTheDocument()
