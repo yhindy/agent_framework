@@ -298,6 +298,40 @@ not valid json
     })
   })
 
+  describe('OpusPlan Model Support', () => {
+    it('extracts claude-opus-4-5-20251101 as actual model', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Planning..."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.actualModel).toBe('claude-opus-4-5-20251101')
+    })
+
+    it('tracks model change from Opus to Sonnet in OpusPlan', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Planning the implementation..."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"content":"Approved"},"timestamp":"2026-01-07T10:01:00.000Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4-5-20250929","content":[{"type":"text","text":"Implementing..."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:01:05.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.actualModel).toBe('claude-sonnet-4-5-20250929')
+      expect(result!.modelHistory).toHaveLength(1)
+      expect(result!.modelHistory[0].model).toBe('claude-sonnet-4-5-20250929')
+      expect(result!.modelHistory[0].timestamp).toBe('2026-01-07T10:01:05.000Z')
+    })
+
+    it('formats Opus 4.5 model name correctly', () => {
+      const formatted = ClaudeSessionInfoService.formatModelName('claude-opus-4-5-20251101')
+      expect(formatted).toBe('claude-opus-4-5')
+    })
+  })
+
   describe('Static formatting methods', () => {
     it('formatModelName removes date suffix', () => {
       expect(ClaudeSessionInfoService.formatModelName('claude-haiku-4-5-20251001')).toBe('claude-haiku-4-5')

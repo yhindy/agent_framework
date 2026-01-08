@@ -369,3 +369,111 @@ describe('PlainTerminal Detection', () => {
   })
 })
 
+describe('TerminalService Model Handling', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+
+  beforeEach(() => {
+    // Setup Mock Window & WebContents
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    // Setup Mock PTY
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('passes opusplan model to Claude CLI', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create a plan',
+      'opusplan'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--model')
+    expect(command).toContain('opusplan')
+  })
+
+  it('passes haiku model to Claude CLI', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create a plan',
+      'haiku'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--model')
+    expect(command).toContain('haiku')
+  })
+
+  it('passes sonnet model to Claude CLI', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create a plan',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--model')
+    expect(command).toContain('sonnet')
+  })
+
+  it('passes opus model to Claude CLI', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create a plan',
+      'opus'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--model')
+    expect(command).toContain('opus')
+  })
+
+  it('handles undefined model gracefully', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create a plan'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    // Should not contain --model flag if model is undefined
+    expect(command).not.toContain('--model')
+  })
+})
+
