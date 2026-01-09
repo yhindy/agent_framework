@@ -17,7 +17,8 @@ describe('Super Minion Types', () => {
       isSuperMinion: true,
       minionBudget: 5,
       children: [],
-      pendingPlans: []
+      pendingPlans: [],
+      taskInvocations: []
     }
 
     expect(isSuperMinion(superAgent)).toBe(true)

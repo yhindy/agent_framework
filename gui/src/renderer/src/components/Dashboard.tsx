@@ -120,6 +120,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
+    return undefined
   }, [showMissionDropdown])
 
   useEffect(() => {

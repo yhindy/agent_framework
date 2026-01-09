@@ -8,6 +8,7 @@
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
+    "types": ["vitest/globals"],
     "paths": {
       "@renderer/*": [
         "src/renderer/src/*"

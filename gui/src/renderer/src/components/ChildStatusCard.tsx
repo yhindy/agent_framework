@@ -1,6 +1,6 @@
 import React from 'react'
 import './ChildStatusCard.css'
-import { AgentInfo } from '../services/types/ProjectConfig'
+import { AgentInfo } from '../../../main/services/types/ProjectConfig'
 import { extractBranchName } from '../utils/branchUtils'
 
 interface ChildStatusCardProps {

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { ProjectService, ProjectState } from '../ProjectService'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { ProjectService } from '../ProjectService'
 import Store from 'electron-store'
 import * as fs from 'fs'
 
@@ -57,15 +57,15 @@ describe('ProjectService Multi-Repo', () => {
     expect(projectService.getCurrentProject()).toBeNull()
   })
 
-  it('addProject adds a project and sets it as current if first', () => {
+  it('addProject adds a project and sets it as current if first', async () => {
     const projectPath = '/path/to/project1'
-    
-    const project = projectService.addProject(projectPath)
-    
+
+    const project = await projectService.addProject(projectPath)
+
     expect(project.path).toBe(projectPath)
     expect(projectService.getActiveProjects()).toHaveLength(1)
     expect(projectService.getCurrentProject()?.path).toBe(projectPath)
-    
+
     // Should persist to store
     expect(mockStore.set).toHaveBeenCalledWith('activeProjects', expect.any(Array))
   })

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AgentService } from '../AgentService'
-import * as fs from 'fs'
-import * as path from 'path'
 
 // Mock fs
 vi.mock('fs', () => ({

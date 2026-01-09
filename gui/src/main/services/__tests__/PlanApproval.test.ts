@@ -3,7 +3,6 @@ import { AgentService } from '../AgentService'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { BrowserWindow } from 'electron'
 
 // Mock Electron
 vi.mock('electron', () => ({
@@ -13,19 +12,11 @@ vi.mock('electron', () => ({
 
 describe('AgentService Plan Approval', () => {
   let agentService: AgentService
-  let mockMainWindow: any
   let testProjectPath: string
   let testSuperWorktreePath: string
 
   beforeEach(() => {
-    // Setup Mock Window
-    mockMainWindow = {
-      webContents: {
-        send: vi.fn()
-      }
-    } as unknown as BrowserWindow
-
-    agentService = new AgentService(mockMainWindow)
+    agentService = new AgentService()
 
     // Create a test project directory
     testProjectPath = join(tmpdir(), `test-project-${Date.now()}`)

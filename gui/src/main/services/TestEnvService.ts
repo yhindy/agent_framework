@@ -76,7 +76,7 @@ export class TestEnvService {
    * Start a specific test environment command
    */
   async startCommand(
-    projectPath: string,
+    _projectPath: string,
     agentId: string,
     worktreePath: string,
     command: TestEnvCommand

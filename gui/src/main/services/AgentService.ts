@@ -327,7 +327,7 @@ export class AgentService {
   }
 
   getSuperMinionRulesPath(): string {
-    return join(this.getMinionsPath(), 'rules', 'super-minion-rules.md')
+    return 'minions/rules/super-minion-rules.md'
   }
 
   private getProjectConfigPath(projectPath: string): string {
