@@ -81,6 +81,12 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     try {
       setError(null)
       const details = await window.electronAPI.getSuperAgentDetails(agentId)
+      console.log('[DEBUG][SuperAgentView.loadAgent] Received details:', {
+        agentId: details?.agentId,
+        hasTaskInvocations: !!details?.taskInvocations,
+        taskInvocationsCount: details?.taskInvocations?.length || 0,
+        taskInvocations: details?.taskInvocations
+      })
       setAgent(details)
 
       // Restore UI state if available
@@ -510,6 +516,12 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
                   </div>
                 </div>
 
+                {/* DEBUG: Always render a placeholder to verify rendering */}
+                {console.log('[DEBUG][SuperAgentView.render] taskInvocations check:', {
+                  hasTaskInvocations: !!agent.taskInvocations,
+                  taskInvocationsLength: agent.taskInvocations?.length,
+                  condition: agent.taskInvocations && agent.taskInvocations.length > 0
+                })}
                 {agent.taskInvocations && agent.taskInvocations.length > 0 && (
                   <div className="tasks-section-wrapper">
                     <h3>Task Subagents ({agent.taskInvocations.length})</h3>

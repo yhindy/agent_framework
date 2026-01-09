@@ -516,16 +516,29 @@ export class AgentService {
 
     // 6. Get task invocations from JSONL if we have a session and service
     let taskInvocations: TaskInvocation[] = []
+    console.log('[DEBUG][AgentService.getSuperAgentDetails] Checking for taskInvocations:', {
+      claudeSessionId: agentInfo.claudeSessionId,
+      hasClaudeSessionInfoService: !!this.claudeSessionInfoService,
+      worktreePath: session.worktreePath
+    })
     if (agentInfo.claudeSessionId && this.claudeSessionInfoService) {
+      console.log('[DEBUG][AgentService.getSuperAgentDetails] Calling parseSessionInfo...')
       const sessionInfo = this.claudeSessionInfoService.parseSessionInfo(
         agentInfo.claudeSessionId,
         session.worktreePath
       )
+      console.log('[DEBUG][AgentService.getSuperAgentDetails] parseSessionInfo result:', {
+        hasSessionInfo: !!sessionInfo,
+        taskInvocationsCount: sessionInfo?.taskInvocations?.length || 0
+      })
       if (sessionInfo) {
         taskInvocations = sessionInfo.taskInvocations
       }
+    } else {
+      console.log('[DEBUG][AgentService.getSuperAgentDetails] SKIPPING parseSessionInfo - missing claudeSessionId or service')
     }
 
+    console.log('[DEBUG][AgentService.getSuperAgentDetails] Returning SuperAgentInfo with taskInvocations:', taskInvocations.length)
     return {
       ...agentInfo,
       isSuperMinion: true,

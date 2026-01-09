@@ -124,14 +124,22 @@ export class ClaudeSessionInfoService {
    * Find the session JSONL file for a given session ID.
    */
   findSessionFile(sessionId: string, worktreePath: string): string | null {
+    console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] Looking for session:', { sessionId, worktreePath })
     const projectPath = this.getClaudeProjectPath(worktreePath)
-    if (!projectPath) return null
+    console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] Claude project path:', projectPath)
+    if (!projectPath) {
+      console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] No Claude project path found')
+      return null
+    }
 
     const sessionFile = join(projectPath, `${sessionId}.jsonl`)
+    console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] Checking if file exists:', sessionFile)
     if (existsSync(sessionFile)) {
+      console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] File found!')
       return sessionFile
     }
 
+    console.log('[DEBUG][ClaudeSessionInfoService.findSessionFile] File NOT found')
     return null
   }
 
@@ -153,8 +161,13 @@ export class ClaudeSessionInfoService {
    * Uses smart caching to avoid re-parsing unchanged files.
    */
   parseSessionInfo(sessionId: string, worktreePath: string): ClaudeSessionInfo | null {
+    console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] Entry:', { sessionId, worktreePath })
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
-    if (!sessionFile) return null
+    console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] Session file path:', sessionFile)
+    if (!sessionFile) {
+      console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] No session file found, returning null')
+      return null
+    }
 
     try {
       // Check cache first - avoid re-parsing if file hasn't changed
@@ -238,7 +251,9 @@ export class ClaudeSessionInfoService {
             // Track Task tool invocations
             if (Array.isArray(msg.content)) {
               for (const block of msg.content) {
+                console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] Checking block:', { type: block.type, name: block.name })
                 if (block.type === 'tool_use' && block.name === 'Task') {
+                  console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] FOUND Task tool_use:', block)
                   const input = block.input || {}
                   taskInvocationsMap.set(block.id, {
                     toolUseId: block.id,
@@ -323,6 +338,10 @@ export class ClaudeSessionInfoService {
         })
       }
 
+      const taskInvocations = Array.from(taskInvocationsMap.values())
+      console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] Final taskInvocations count:', taskInvocations.length)
+      console.log('[DEBUG][ClaudeSessionInfoService.parseSessionInfo] Final taskInvocations:', taskInvocations)
+
       const info: ClaudeSessionInfo = {
         sessionId,
         actualModel,
@@ -332,7 +351,7 @@ export class ClaudeSessionInfoService {
         lastUpdated: lastTimestamp || new Date().toISOString(),
         modelHistory,
         state,
-        taskInvocations: Array.from(taskInvocationsMap.values())
+        taskInvocations
       }
 
       // Cache the result for future calls
