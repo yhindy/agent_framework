@@ -164,22 +164,54 @@ not valid json
   })
 
   describe('State Detection', () => {
-    it('detects waiting state when assistant finished with stop_sequence', () => {
+    it('detects waiting state ONLY when stop_reason is end_turn', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
 {"type":"user","message":{"role":"user","content":"Question?"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Answer."}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Answer."}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
       expect(result!.state).toBe('waiting')
     })
 
-    it('detects working state when assistant has tool_use', () => {
+    it('detects waiting when text-only (main sessions have stop_reason=null even when done)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"I am done."}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      // NOTE: Main sessions always have stop_reason=null even when done,
+      // so text-only is treated as waiting (may cause false positives)
+      expect(result!.state).toBe('waiting')
+    })
+
+    it('detects waiting when stop_reason is stop_sequence (edge case)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Done"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:01.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      expect(result!.state).toBe('waiting')
+    })
+
+    it('detects working when stop_reason is tool_use', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","id":"toolu_123","name":"Bash","input":{"command":"ls"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:01.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      expect(result!.state).toBe('working')
+    })
+
+    it('detects working state when assistant has tool_use content', () => {
       // Real JSONL structure: assistant with tool_use = working (tool is executing)
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","isSidechain":false,"userType":"external","cwd":"/Users/test/project","sessionId":"test-session","version":"2.1.1","gitBranch":"main","type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_123","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01U2sBQNa3JuqCFXDzjJuFoJ","name":"Bash","input":{"command":"ls -la"}}],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"def456","timestamp":"2026-01-07T10:00:01.000Z"}
+{"parentUuid":"abc123","isSidechain":false,"userType":"external","cwd":"/Users/test/project","sessionId":"test-session","version":"2.1.1","gitBranch":"main","type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_123","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01U2sBQNa3JuqCFXDzjJuFoJ","name":"Bash","input":{"command":"ls -la"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"def456","timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -208,11 +240,11 @@ not valid json
       expect(result!.state).toBe('working')
     })
 
-    it('detects waiting state when assistant finished with text only', () => {
-      // Real JSONL structure: assistant with only text = waiting (Claude finished responding)
+    it('detects waiting state when assistant finished with text and end_turn', () => {
+      // Real JSONL structure: assistant with text + end_turn = waiting (Claude finished responding)
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","isSidechain":false,"userType":"external","cwd":"/Users/test/project","sessionId":"test-session","version":"2.1.1","gitBranch":"main","type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_123","type":"message","role":"assistant","content":[{"type":"text","text":"I've completed the task. Let me know if you need anything else."}],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"def456","timestamp":"2026-01-07T10:00:01.000Z"}
+{"parentUuid":"abc123","isSidechain":false,"userType":"external","cwd":"/Users/test/project","sessionId":"test-session","version":"2.1.1","gitBranch":"main","type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_123","type":"message","role":"assistant","content":[{"type":"text","text":"I've completed the task. Let me know if you need anything else."}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"def456","timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
@@ -222,13 +254,13 @@ not valid json
     it('skips non-conversation entries (summary, file-history-snapshot)', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Done."}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:01.000Z"}
 {"type":"summary","summary":"Test summary"}
 {"type":"file-history-snapshot","messageId":"msg-1","snapshot":{"trackedFileBackups":{}}}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
-      // Should still be waiting because last CONVERSATION entry is assistant with text
+      // Should still be waiting because last CONVERSATION entry is assistant with text + end_turn
       expect(result!.state).toBe('waiting')
     })
 
@@ -236,11 +268,33 @@ not valid json
       // Real scenario: Claude says something then uses a tool
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Let me check that file."},{"type":"tool_use","id":"toolu_123","name":"Read","input":{"file_path":"/test.txt"}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Let me check that file."},{"type":"tool_use","id":"toolu_123","name":"Read","input":{"file_path":"/test.txt"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:01.000Z"}
       `.trim())
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
       expect(result!.state).toBe('working')
+    })
+
+    it('detects waiting when ExitPlanMode is used (human approval needed)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_123","name":"ExitPlanMode","input":{}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      // ExitPlanMode waits for HUMAN approval, not automatic tool result
+      expect(result!.state).toBe('waiting')
+    })
+
+    it('detects waiting when AskUserQuestion is used (human answer needed)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_456","name":"AskUserQuestion","input":{"questions":[{"question":"Which option?","options":["A","B"]}]}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+      // AskUserQuestion waits for HUMAN answer, not automatic tool result
+      expect(result!.state).toBe('waiting')
     })
   })
 
@@ -248,7 +302,7 @@ not valid json
     it('returns waiting when assistant finished with text only', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"I've finished the analysis."}],"stop_reason":null},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"parentUuid":"abc123","type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"I've finished the analysis."}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
       `.trim())
 
       const state = service.getSessionState('test', '/Users/test/project')
@@ -296,7 +350,7 @@ not valid json
     it('skips summary and file-history-snapshot entries', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(`
-{"parentUuid":"abc123","type":"assistant","message":{"content":[{"type":"text","text":"Done"}],"stop_reason":null},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"parentUuid":"abc123","type":"assistant","message":{"content":[{"type":"text","text":"Done"}],"stop_reason":"end_turn"},"timestamp":"2026-01-07T10:00:00.000Z"}
 {"type":"summary","summary":"Conversation summary"}
 {"type":"file-history-snapshot","messageId":"msg-1","snapshot":{"trackedFileBackups":{}}}
       `.trim())
