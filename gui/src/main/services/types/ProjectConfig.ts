@@ -99,6 +99,8 @@ export interface Assignment {
   lastActivity?: string
   hasUnread?: boolean
   prompt?: string
+  yolo?: boolean
+  chrome?: boolean
 }
 
 export interface TestEnvironment {
