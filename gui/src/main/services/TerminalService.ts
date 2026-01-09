@@ -32,6 +32,7 @@ interface TerminalSession {
   prompt?: string             // Store for restart
   model?: string              // Store for restart
   yolo?: boolean              // Store for restart
+  chrome?: boolean            // Store for restart
   idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
   statePollingInterval?: NodeJS.Timeout // JSONL-based state polling for Claude
 }
@@ -123,7 +124,8 @@ export class TerminalService {
     mode: string,
     prompt?: string,
     model?: string,
-    yolo?: boolean
+    yolo?: boolean,
+    chrome?: boolean
   ): Promise<void> {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
@@ -205,9 +207,14 @@ export class TerminalService {
           if (yolo) {
             args.push('--dangerously-skip-permissions')
           }
+
+          // Preserve chrome flag (default true)
+          if (agentInfo?.chrome !== false) {
+            args.push('--chrome')
+          }
         } else {
           // Create new session with specific ID
-          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, agentInfo)
+          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo)
           args.push('--session-id', sessionId)
         }
         break
@@ -359,6 +366,7 @@ export class TerminalService {
       prompt,
       model,
       yolo,
+      chrome,
       idleDetector,
       statePollingInterval
     }
@@ -380,6 +388,7 @@ export class TerminalService {
         claudeSessionActive: true,
         claudeLastSeen: new Date().toISOString(),
         yolo: yolo || false,
+        chrome: chrome !== false,
         mode,
         model,
         prompt
@@ -414,12 +423,17 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean, agentInfo?: any): string[] {
+  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any): string[] {
     const args: string[] = []
 
     // Add model if specified
     if (model) {
       args.push('--model', model)
+    }
+
+    // Add chrome flag (default true, only skip if explicitly false)
+    if (chrome !== false) {
+      args.push('--chrome')
     }
 
     if (mode === 'planning') {
