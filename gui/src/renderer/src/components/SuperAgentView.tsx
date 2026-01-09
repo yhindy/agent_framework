@@ -3,18 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
-import ChildStatusCard from './ChildStatusCard'
 import TaskStatusCard from './TaskStatusCard'
-import PlanApproval from './PlanApproval'
 import ConfirmModal from './ConfirmModal'
 import SessionInfoPanel from './SessionInfoPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
-import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
-import { SuperAgentInfo, AgentInfo } from '../../main/services/types/ProjectConfig'
+import { SuperAgentInfo } from '../../main/services/types/ProjectConfig'
 
 interface SuperAgentViewProps {
   activeProjects: any[]
@@ -24,8 +21,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
-  const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
-  const [isGridCollapsed, setIsGridCollapsed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
   const [isTearingDown, setIsTearingDown] = useState(false)
@@ -61,20 +56,9 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     autoCommit,
     setAutoCommit,
     isCreatingPR,
-    prMessages,
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
-
-  // Auto-poll PR status for all child agents with open PRs
-  const childPRAssignments = agent?.children
-    .filter(child => child.status === 'pr_open')
-    .map(child => child.id) || []
-
-  usePRPolling({
-    assignmentIds: childPRAssignments,
-    enabled: childPRAssignments.length > 0
-  })
 
   const loadAgent = async () => {
     if (!agentId) return
@@ -199,23 +183,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     }
   }
 
-  const handleApprovePlan = async (planId: string) => {
-    if (!agent) return
-    try {
-      await window.electronAPI.approvePlan(agent.agentId, planId)
-      // Reload agent data to show updated state
-      await loadAgent()
-    } catch (err: any) {
-      console.error('Failed to approve plan:', err)
-      setError('Failed to approve plan: ' + (err.message || 'Unknown error'))
-    }
-  }
-
-  const handleRejectPlan = async (planId: string) => {
-    // TODO: Implement plan rejection
-    console.log('Rejected plan:', planId)
-  }
-
   const handleConfirmCreatePR = async () => {
     if (!agent) return
     await handleConfirmCreatePRHook(agent.agentId, loadAgent)
@@ -320,6 +287,8 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     )
   }
 
+  const hasTasks = agent.taskInvocations && agent.taskInvocations.length > 0
+
   return (
     <div className="super-agent-view">
       <div className="agent-header">
@@ -365,195 +334,139 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
         <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
       )}
 
-      <div className="super-content">
-        <div className={`collapsible-section ${isTerminalCollapsed ? 'collapsed' : ''} ${agent.mode === 'planning' || isGridCollapsed ? 'full-screen' : ''}`}>
-          <div className="section-header" onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
-            <h3>{isTerminalCollapsed ? '▶' : '▼'} Terminals & Test Environments</h3>
-            <span className="section-hint">{isTerminalCollapsed ? 'Click to expand' : 'Orchestration, test environments, and shells'}</span>
+      <div className="agent-content">
+        {/* Full-width tab bar */}
+        <div className="unified-tabs">
+          {/* Orchestration Terminal Tab */}
+          <div
+            className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
+            onClick={() => setActiveTab('orchestration')}
+          >
+            <span className="tab-icon">👑</span>
+            <span className="tab-name">Orchestration</span>
           </div>
-          {!isTerminalCollapsed && (
-            <div className="tab-section">
-              <div className="unified-tabs">
-                {/* Orchestration Terminal Tab */}
-                <div
-                  className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('orchestration')}
-                >
-                  <span className="tab-icon">👑</span>
-                  <span className="tab-name">Orchestration</span>
-                </div>
 
-                {/* Test Environment Tabs */}
-                {testEnvCommands.map(cmd => {
-                  const isRunning = getTestEnvStatus(cmd.id)
-                  return (
-                    <div
-                      key={cmd.id}
-                      className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
-                      onClick={() => setActiveTab(cmd.id)}
-                    >
-                      <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
-                      <span className="tab-name">{cmd.name}</span>
-                      {cmd.port && <span className="tab-port">:{cmd.port}</span>}
-                      {isRunning ? (
-                        <button
-                          className="tab-action stop"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStopTestEnv(cmd.id)
-                          }}
-                        >
-                          ⬛
-                        </button>
-                      ) : (
-                        <button
-                          className="tab-action start"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStartTestEnv(cmd.id)
-                          }}
-                        >
-                          ▶
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {/* Plain Terminal Tabs */}
-                {plainTerminals.map((terminalId, index) => (
-                  <div
-                    key={terminalId}
-                    className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
-                    onClick={() => setActiveTab(terminalId)}
+          {/* Test Environment Tabs */}
+          {testEnvCommands.map(cmd => {
+            const isRunning = getTestEnvStatus(cmd.id)
+            return (
+              <div
+                key={cmd.id}
+                className={`unified-tab ${activeTab === cmd.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(cmd.id)}
+              >
+                <span className={`status-dot ${isRunning ? 'running' : 'stopped'}`} />
+                <span className="tab-name">{cmd.name}</span>
+                {cmd.port && <span className="tab-port">:{cmd.port}</span>}
+                {isRunning ? (
+                  <button
+                    className="tab-action stop"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStopTestEnv(cmd.id)
+                    }}
                   >
-                    <span className="tab-icon">⌨️</span>
-                    <span className="tab-name">Terminal {index + 1}</span>
-                    <button
-                      className="tab-action close"
-                      onClick={(e) => handleCloseTerminal(terminalId, e)}
-                      title="Close terminal"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-
-                {/* Add Terminal Button */}
-                <div
-                  className="unified-tab add-tab"
-                  onClick={handleAddTerminal}
-                  title="Add new terminal"
-                >
-                  <span className="tab-icon">➕</span>
-                </div>
-              </div>
-
-              <div className="unified-terminal-container">
-                {activeTab === 'orchestration' && (
-                  <Terminal
-                    agentId={agent.agentId}
-                    autoFocus={!hasAutoFocused.current}
-                    onMount={() => { hasAutoFocused.current = true }}
-                  />
+                    ⬛
+                  </button>
+                ) : (
+                  <button
+                    className="tab-action start"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStartTestEnv(cmd.id)
+                    }}
+                  >
+                    ▶
+                  </button>
                 )}
-                {plainTerminals.map(terminalId => (
-                  activeTab === terminalId && (
-                    <PlainTerminal
-                      key={terminalId}
-                      agentId={agent.agentId}
-                      terminalId={terminalId}
-                      autoFocus={!hasAutoFocused.current}
-                      onMount={() => { hasAutoFocused.current = true }}
-                    />
-                  )
-                ))}
-                {testEnvCommands.map(cmd => (
-                  activeTab === cmd.id && (
-                    <TestEnvTerminal
-                      key={cmd.id}
-                      agentId={agent.agentId}
-                      commandId={cmd.id}
-                      autoFocus={!hasAutoFocused.current}
-                      onMount={() => { hasAutoFocused.current = true }}
-                    />
-                  )
+              </div>
+            )
+          })}
+
+          {/* Plain Terminal Tabs */}
+          {plainTerminals.map((terminalId, index) => (
+            <div
+              key={terminalId}
+              className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
+              onClick={() => setActiveTab(terminalId)}
+            >
+              <span className="tab-icon">⌨️</span>
+              <span className="tab-name">Terminal {index + 1}</span>
+              <button
+                className="tab-action close"
+                onClick={(e) => handleCloseTerminal(terminalId, e)}
+                title="Close terminal"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {/* Add Terminal Button */}
+          <div
+            className="unified-tab add-tab"
+            onClick={handleAddTerminal}
+            title="Add new terminal"
+          >
+            <span className="tab-icon">➕</span>
+          </div>
+        </div>
+
+        {/* Terminal area with optional sidebar */}
+        <div className={`terminal-area ${hasTasks ? 'with-sidebar' : ''}`}>
+          <div className="unified-terminal-container">
+            {activeTab === 'orchestration' && (
+              <Terminal
+                agentId={agent.agentId}
+                autoFocus={!hasAutoFocused.current}
+                onMount={() => { hasAutoFocused.current = true }}
+              />
+            )}
+            {plainTerminals.map(terminalId => (
+              activeTab === terminalId && (
+                <PlainTerminal
+                  key={terminalId}
+                  agentId={agent.agentId}
+                  terminalId={terminalId}
+                  autoFocus={!hasAutoFocused.current}
+                  onMount={() => { hasAutoFocused.current = true }}
+                />
+              )
+            ))}
+            {testEnvCommands.map(cmd => (
+              activeTab === cmd.id && (
+                <TestEnvTerminal
+                  key={cmd.id}
+                  agentId={agent.agentId}
+                  commandId={cmd.id}
+                  autoFocus={!hasAutoFocused.current}
+                  onMount={() => { hasAutoFocused.current = true }}
+                />
+              )
+            ))}
+          </div>
+
+          {/* Task sidebar - only shown when tasks exist */}
+          {hasTasks && (
+            <div className="task-sidebar">
+              <h3>Tasks ({agent.taskInvocations?.length || 0})</h3>
+              <div className="task-list">
+                {agent.taskInvocations?.map(task => (
+                  <TaskStatusCard
+                    key={task.toolUseId}
+                    task={task}
+                  />
                 ))}
               </div>
             </div>
           )}
         </div>
-
-        {/* Show subagents section when not in planning OR when tasks have been spawned */}
-        {(agent.mode !== 'planning' || (agent.taskInvocations && agent.taskInvocations.length > 0)) && (
-          <div className={`collapsible-section ${isGridCollapsed ? 'collapsed' : ''}`}>
-            <div className="section-header" onClick={() => setIsGridCollapsed(!isGridCollapsed)}>
-              <h3>{isGridCollapsed ? '▶' : '▼'} Subagents & Status</h3>
-              <span className="section-hint">
-                {isGridCollapsed ? 'Click to expand' : `${agent.taskInvocations?.length || 0} tasks${agent.children.length > 0 ? `, ${agent.children.length} children` : ''}`}
-              </span>
-            </div>
-            {!isGridCollapsed && (
-              <div className="super-grid">
-                {/* Task Subagents - Primary mechanism for autonomous execution */}
-                <div className="tasks-section-wrapper">
-                  <h3>Task Subagents ({agent.taskInvocations?.length || 0})</h3>
-                  <div className="tasks-section">
-                    <div className="task-cards">
-                      {agent.taskInvocations && agent.taskInvocations.length > 0 ? (
-                        agent.taskInvocations.map(task => (
-                          <TaskStatusCard
-                            key={task.toolUseId}
-                            task={task}
-                          />
-                        ))
-                      ) : (
-                        <p className="empty-hint">No tasks spawned yet. Super Minion will use Task tool to spawn subagents.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Children - Legacy/manual child minions */}
-                {agent.children.length > 0 && (
-                  <div className="children-section-wrapper">
-                    <h3>Child Minions ({agent.children.length})</h3>
-                    <div className="children-section">
-                      <div className="child-cards">
-                        {agent.children.map(child => (
-                          <ChildStatusCard
-                            key={child.id}
-                            child={child}
-                            onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Pending Plans - Show only if there are pending plans */}
-                {agent.pendingPlans.filter(p => p.status === 'pending').length > 0 && (
-                  <div className="plans-section-wrapper">
-                    <div className="plans-section">
-                      <PlanApproval
-                        plans={agent.pendingPlans.filter(p => p.status === 'pending')}
-                        onApprove={handleApprovePlan}
-                        onReject={handleRejectPlan}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <ConfirmModal
         isOpen={showTeardownConfirm}
         title="Cleanup Super Minion?"
-        message="This will delete the agent worktree and all data. Child minions will NOT be automatically deleted yet. Are you sure?"
+        message="This will delete the agent worktree and all data. Are you sure?"
         confirmText="Cleanup"
         confirmVariant="danger"
         onConfirm={handleTeardown}
@@ -606,4 +519,3 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
 }
 
 export default SuperAgentView
-

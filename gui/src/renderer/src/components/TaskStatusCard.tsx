@@ -10,6 +10,7 @@ const PERSONA_ICONS: Record<string, string> = {
   'general-purpose': '🔨',
   'Explore': '🔍',
   'Plan': '📋',
+  'debugger': '🐛',
   'Bash': '⌨️'
 }
 
