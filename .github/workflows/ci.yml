@@ -1,0 +1,198 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      full_run:
+        description: 'Run all tests'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Determine what to test
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_all_tests: ${{ steps.detect.outputs.run_all_tests }}
+      test_gui: ${{ steps.detect.outputs.test_gui }}
+      test_minions: ${{ steps.detect.outputs.test_minions }}
+      gui_test_pattern: ${{ steps.detect.outputs.gui_test_pattern }}
+      minions_test_pattern: ${{ steps.detect.outputs.minions_test_pattern }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff analysis
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Detect changes and select tests
+        id: detect
+        run: |
+          node .github/scripts/analyze-changes.js
+
+      - name: Report test selection
+        run: |
+          echo "### Test Selection Results 🧪" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run all tests**: \`${{ steps.detect.outputs.run_all_tests }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test GUI**: \`${{ steps.detect.outputs.test_gui }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Minions**: \`${{ steps.detect.outputs.test_minions }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GUI test pattern**: \`${{ steps.detect.outputs.gui_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Minions test pattern**: \`${{ steps.detect.outputs.minions_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Changed files**:" >> $GITHUB_STEP_SUMMARY
+          git diff --name-only ${{ github.event.before || 'HEAD^' }} HEAD | head -20 >> $GITHUB_STEP_SUMMARY
+
+  # Job 2: Lint and Type Check
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check GUI
+        run: npm run typecheck -w gui
+
+      - name: Lint (if configured)
+        run: npm run lint --if-present
+
+  # Job 3: Test GUI
+  test-gui:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.test_gui == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules
+        run: npm run rebuild -w gui
+
+      - name: Cache Vitest
+        uses: actions/cache@v4
+        with:
+          path: |
+            gui/node_modules/.vitest
+          key: vitest-${{ runner.os }}-${{ hashFiles('gui/package-lock.json') }}
+          restore-keys: |
+            vitest-${{ runner.os }}-
+
+      - name: Run GUI tests (intelligent selection)
+        if: needs.detect-changes.outputs.run_all_tests != 'true'
+        run: |
+          cd gui
+          npm run test -- --run --coverage ${{ needs.detect-changes.outputs.gui_test_pattern }}
+
+      - name: Run GUI tests (all)
+        if: needs.detect-changes.outputs.run_all_tests == 'true'
+        run: npm run test -w gui -- --run --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          files: ./gui/coverage/coverage-final.json
+          flags: gui
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Job 4: Test Minions
+  test-minions:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.test_minions == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Vitest
+        uses: actions/cache@v4
+        with:
+          path: |
+            minions/node_modules/.vitest
+          key: vitest-minions-${{ runner.os }}-${{ hashFiles('minions/package-lock.json') }}
+          restore-keys: |
+            vitest-minions-${{ runner.os }}-
+
+      - name: Run Minions tests (intelligent selection)
+        if: needs.detect-changes.outputs.run_all_tests != 'true'
+        run: |
+          cd minions
+          npm run test -- --run --coverage ${{ needs.detect-changes.outputs.minions_test_pattern }}
+
+      - name: Run Minions tests (all)
+        if: needs.detect-changes.outputs.run_all_tests == 'true'
+        run: npm run test -w minions -- --run --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          files: ./minions/coverage/coverage-final.json
+          flags: minions
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Job 5: Build GUI (smoke test)
+  build-gui:
+    needs: [lint, test-gui, test-minions]
+    if: always() && needs.lint.result == 'success' && (needs.test-gui.result == 'success' || needs.test-gui.result == 'skipped') && (needs.test-minions.result == 'success' || needs.test-minions.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build GUI
+        run: npm run build -w gui
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-build
+          path: gui/out/
+          retention-days: 7

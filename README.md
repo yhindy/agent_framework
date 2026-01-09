@@ -1,5 +1,8 @@
 # Minion Framework 🍌
 
+[![CI](https://github.com/yhindy/agent_framework/workflows/CI/badge.svg)](https://github.com/yhindy/agent_framework/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/yhindy/agent_framework/branch/main/graph/badge.svg)](https://codecov.io/gh/yhindy/agent_framework)
+
 A lightweight framework for running multiple AI coding minions in parallel on any codebase.
 
 ## Quick Start
