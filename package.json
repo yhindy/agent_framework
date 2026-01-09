@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/yhindy/agent_framework#readme",
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^3.2.4",
     "vitest": "^3.2.4"
   }
 }
