@@ -134,7 +134,8 @@ function initializeServices(): void {
                   result.agentInfo.mode || 'dev',
                   result.agentInfo.prompt,
                   result.agentInfo.model,
-                  false
+                  false,
+                  result.agentInfo.chrome !== false
                 )
                 mainWindow?.webContents.send('agents:updated')
               } catch (error) {
@@ -173,7 +174,8 @@ function initializeServices(): void {
                       agent.mode || 'dev',
                       agent.prompt,
                       agent.model,
-                      agent.yolo || false  // Restore yolo flag for dangerously-skip-permissions
+                      agent.yolo || false,  // Restore yolo flag for dangerously-skip-permissions
+                      agent.chrome !== false  // Restore chrome flag (default true)
                     )
 
                     mainWindow?.webContents.send('agents:updated')
@@ -294,7 +296,8 @@ function setupIPC(): void {
                 result.agentInfo.mode || 'dev',
                 result.agentInfo.prompt,
                 result.agentInfo.model,
-                false
+                false,
+                result.agentInfo.chrome !== false
               )
               mainWindow?.webContents.send('agents:updated')
             } catch (error) {
@@ -420,7 +423,7 @@ function setupIPC(): void {
     const projectPath = await findProjectForAgent(superAgentId)
     const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
     // Auto-start the child agent with the prompt and model from the plan
-    await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode, childAgent.prompt, childAgent.model)
+    await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode, childAgent.prompt, childAgent.model, childAgent.yolo, childAgent.chrome !== false)
   })
 
   // Terminal handlers
@@ -491,7 +494,8 @@ function setupIPC(): void {
             assignment.mode,
             assignment.prompt,
             assignment.model,
-            assignment.yolo
+            assignment.yolo,
+            assignment.chrome
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
@@ -524,7 +528,8 @@ function setupIPC(): void {
             assignment.mode,
             assignment.prompt,
             assignment.model,
-            assignment.yolo
+            assignment.yolo,
+            assignment.chrome
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
@@ -556,7 +561,8 @@ function setupIPC(): void {
             'planning',
             assignment.prompt,
             assignment.model,
-            assignment.yolo || false
+            assignment.yolo || false,
+            assignment.chrome !== false
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {

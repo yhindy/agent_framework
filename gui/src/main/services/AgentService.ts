@@ -30,6 +30,7 @@ interface AgentSession {
   prompt?: string
   model?: string
   yolo?: boolean
+  chrome?: boolean
 
   // UI state persistence
   uiState?: UIState
@@ -95,7 +96,8 @@ export class AgentService {
       model: agentInfo.model,
       uiState: agentInfo.uiState,
       branch: agentInfo.branch,
-      yolo: agentInfo.yolo
+      yolo: agentInfo.yolo,
+      chrome: agentInfo.chrome
     }
   }
 
@@ -118,7 +120,8 @@ export class AgentService {
       model: agentInfo.model,
       uiState: agentInfo.uiState,
       branch: agentInfo.branch,
-      yolo: agentInfo.yolo
+      yolo: agentInfo.yolo,
+      chrome: agentInfo.chrome
     })
   }
 
@@ -395,6 +398,8 @@ export class AgentService {
       tool: assignment.tool || 'claude',
       model: assignment.model,
       mode: assignment.mode as any || 'auto',
+      yolo: assignment.yolo,
+      chrome: assignment.chrome !== false,
       prompt: assignment.prompt,
       prUrl: undefined,
       prStatus: undefined,
@@ -1199,6 +1204,7 @@ export class AgentService {
       mode: 'dev',
       prompt: `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the main branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`,
       model: 'opus',
+      chrome: true,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       isBaseBranchAgent: true
