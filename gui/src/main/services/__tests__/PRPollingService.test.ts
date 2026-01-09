@@ -87,8 +87,8 @@ describe('PRPollingService', () => {
       await service.startPolling(assignmentId, 'subscriber-1')
       const initialCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
-      // Advance time by 30 seconds
-      vi.advanceTimersByTime(30000)
+      // Advance time by 30 seconds - this should trigger the interval
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(
         initialCalls
@@ -121,7 +121,7 @@ describe('PRPollingService', () => {
       await service.stopPolling(assignmentId, subscriberId)
 
       // After stopping, intervals should be cleared
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should not have called more times since we stopped
       const calls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
@@ -144,7 +144,7 @@ describe('PRPollingService', () => {
       await service.stopPolling(assignmentId, 'subscriber-1')
 
       // Should still be polling
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       const callsAfter = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
       expect(callsAfter).toBeGreaterThan(callsBefore)
@@ -164,7 +164,7 @@ describe('PRPollingService', () => {
       // Clear the mock to verify no more calls
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should not have been called again
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
@@ -186,7 +186,7 @@ describe('PRPollingService', () => {
 
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -223,9 +223,9 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance timers to trigger retries
-      vi.advanceTimersByTime(30000)
-      vi.advanceTimersByTime(30000)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // After 3 errors, should stop polling
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeLessThanOrEqual(3)
@@ -244,7 +244,7 @@ describe('PRPollingService', () => {
       const initialCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
       // Advance time by 1 minute (less than 5 minute backoff)
-      vi.advanceTimersByTime(60000)
+      await vi.advanceTimersByTimeAsync(60000)
 
       // Should not have made new calls due to rate limit backoff
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toEqual(initialCalls)
@@ -262,7 +262,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance time
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should not make more calls for merged PR
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
@@ -280,7 +280,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance time
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should not make more calls for closed PR
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
@@ -322,7 +322,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance 30 seconds
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should only call once, not once per subscriber
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
@@ -344,7 +344,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Should not make any more calls
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
   })
@@ -365,7 +365,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 30 seconds
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should have called for new PR interval
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
@@ -386,11 +386,11 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 30 seconds - should not call for recent PR
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
       // Advance by 60 more seconds (total 90)
-      vi.advanceTimersByTime(60000)
+      await vi.advanceTimersByTimeAsync(60000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
 
@@ -409,11 +409,11 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 2 minutes - should not call for stale PR
-      vi.advanceTimersByTime(120000)
+      await vi.advanceTimersByTimeAsync(120000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
       // Advance by 3 more minutes (total 5)
-      vi.advanceTimersByTime(180000)
+      await vi.advanceTimersByTimeAsync(180000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
 
@@ -430,11 +430,11 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 30 seconds - should not call with default interval
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
       // Advance by 30 more seconds (total 60)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
   })
@@ -456,7 +456,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 30 seconds
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should have retried
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
@@ -477,11 +477,11 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance past first retry (30s) but not second (2m)
-      vi.advanceTimersByTime(60000)
+      await vi.advanceTimersByTimeAsync(60000)
       const callsAfter1Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
       // Advance to 2 minutes total
-      vi.advanceTimersByTime(60000)
+      await vi.advanceTimersByTimeAsync(60000)
       const callsAfter2Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
       expect(callsAfter2Min).toBeGreaterThan(callsAfter1Min)
@@ -499,9 +499,9 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Trigger multiple retry attempts
-      vi.advanceTimersByTime(30000) // First error's backoff
-      vi.advanceTimersByTime(120000) // Second error's backoff
-      vi.advanceTimersByTime(600000) // Third error's backoff
+      await vi.advanceTimersByTimeAsync(30000) // First error's backoff
+      await vi.advanceTimersByTimeAsync(120000) // Second error's backoff
+      await vi.advanceTimersByTimeAsync(600000) // Third error's backoff
 
       // After 3 errors, should stop polling completely
       const finalCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
@@ -523,13 +523,13 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 5 minutes (less than backoff)
-      vi.advanceTimersByTime(5 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
 
       // Should not make new calls during backoff
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
       // Advance by 6 more minutes (total 11 minutes, past backoff)
-      vi.advanceTimersByTime(6 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000)
 
       // Should be able to call now
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
@@ -548,7 +548,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 5 minutes
-      vi.advanceTimersByTime(5 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
 
       // Should not call during backoff
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
@@ -567,7 +567,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 5 minutes
-      vi.advanceTimersByTime(5 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
 
       // Should not call during backoff
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
@@ -588,13 +588,13 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance by 30 seconds (within new PR polling interval)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should use cache instead of calling API
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
       // Advance past cache TTL (5 minutes from initial call + 30s = 5.5 minutes)
-      vi.advanceTimersByTime(4 * 60 * 1000 + 40 * 1000)
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000 + 40 * 1000)
 
       // Now should call API again because cache is stale
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
@@ -638,10 +638,10 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance to trigger error
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // After error, next call should not use stale cache
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
     })
@@ -665,7 +665,7 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Trigger rate limit
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Manual refresh should work despite rate limit
       await (service as any).refreshPRNow(assignmentId)
@@ -688,8 +688,8 @@ describe('PRPollingService', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Trigger two errors
-      vi.advanceTimersByTime(30000)
-      vi.advanceTimersByTime(120000)
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(120000)
 
       // Manual refresh should reset error count
       await (service as any).refreshPRNow(assignmentId)
