@@ -69,13 +69,21 @@ branch refs/heads/main`
   it('listAgents filters by .agent-info existence', async () => {
     // This integration test logic mimics listAgents flow
     const projectPath = '/path/to/myrepo'
-    
+
     // Mock execAsync response for git worktree list
     // We can't easily mock the private execAsync, so we'll test the public logic if possible
     // or rely on unit tests for parseWorktrees which is public
-    
-    // Let's verify parseWorktrees allows broad matching, 
+
+    // Let's verify parseWorktrees allows broad matching,
     // and assume listAgents does the file check (which we see in source code)
+  })
+
+  it('should return relative path for super minion rules', () => {
+    const agentService = new AgentService()
+    const rulesPath = agentService.getSuperMinionRulesPath()
+
+    expect(rulesPath).toBe('minions/rules/super-minion-rules.md')
+    expect(rulesPath).not.toContain('gui/resources')
   })
 })
 
