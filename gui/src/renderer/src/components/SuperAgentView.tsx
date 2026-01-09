@@ -539,7 +539,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
                 )}
 
                 <div className="plans-section-wrapper">
-                  <h3>Proposed Plans ({agent.pendingPlans.filter(p => p.status === 'pending').length})</h3>
                   <div className="plans-section">
                     <PlanApproval
                       plans={agent.pendingPlans.filter(p => p.status === 'pending')}

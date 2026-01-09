@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import './PlanApproval.css'
 import { ChildPlan } from '../../main/services/types/ProjectConfig'
 
@@ -9,6 +9,20 @@ interface PlanApprovalProps {
 }
 
 const PlanApproval: React.FC<PlanApprovalProps> = ({ plans, onApprove, onReject }) => {
+  const [expandedPlans, setExpandedPlans] = useState<Set<string>>(new Set())
+
+  const toggleExpand = (planId: string) => {
+    setExpandedPlans(prev => {
+      const next = new Set(prev)
+      if (next.has(planId)) {
+        next.delete(planId)
+      } else {
+        next.add(planId)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="plan-approval-container">
       <h3>Proposed Plans ({plans.length})</h3>
@@ -24,15 +38,30 @@ const PlanApproval: React.FC<PlanApprovalProps> = ({ plans, onApprove, onReject 
               )}
             </div>
             <p className="plan-desc">{plan.description}</p>
+
+            {plan.prompt && (
+              <div className="plan-prompt-section">
+                <button
+                  className="expand-prompt-btn"
+                  onClick={() => toggleExpand(plan.id)}
+                >
+                  {expandedPlans.has(plan.id) ? '▼ Hide Details' : '▶ View Details'}
+                </button>
+                {expandedPlans.has(plan.id) && (
+                  <pre className="plan-prompt">{plan.prompt}</pre>
+                )}
+              </div>
+            )}
+
             <div className="plan-actions">
-              <button 
-                className="approve-btn" 
+              <button
+                className="approve-btn"
                 onClick={() => onApprove(plan.id)}
               >
                 ✓ Approve
               </button>
-              <button 
-                className="reject-btn" 
+              <button
+                className="reject-btn"
                 onClick={() => onReject(plan.id)}
               >
                 ✗ Reject
