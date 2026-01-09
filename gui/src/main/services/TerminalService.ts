@@ -193,8 +193,9 @@ export class TerminalService {
 
             // Preserve system prompt file for super minions
             const isSuperMinion = agentInfo?.isSuperMinion === true
-            if (isSuperMinion) {
-              args.push('--system-prompt-file', 'super-minion-rules.md')
+            if (isSuperMinion && this.agentService) {
+              const rulesPath = this.agentService.getSuperMinionRulesPath()
+              args.push('--system-prompt-file', rulesPath)
             }
           } else if (mode === 'dev') {
             args.push('--permission-mode', 'acceptEdits')
@@ -427,10 +428,10 @@ export class TerminalService {
 
       // For super minions, load the rules file as system prompt
       const isSuperMinion = agentInfo?.isSuperMinion === true
-      if (isSuperMinion) {
-        // The super-minion-rules.md file is copied to the worktree during setup
-        // Path is relative to the working directory where claude command will be run
-        args.push('--system-prompt-file', 'super-minion-rules.md')
+      if (isSuperMinion && this.agentService) {
+        // Use absolute path to the bundled rules file
+        const rulesPath = this.agentService.getSuperMinionRulesPath()
+        args.push('--system-prompt-file', rulesPath)
       }
 
       if (prompt) {

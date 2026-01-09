@@ -99,6 +99,9 @@ function initializeServices(): void {
   terminalService.setAgentService(agentService)
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
 
+  // Set service references in AgentService
+  agentService.setClaudeSessionInfoService(claudeSessionInfoService)
+
   services = {
     project: projectService,
     agent: agentService,
@@ -552,7 +555,8 @@ function setupIPC(): void {
             assignment.tool,
             'planning',
             assignment.prompt,
-            assignment.model
+            assignment.model,
+            assignment.yolo || false
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {

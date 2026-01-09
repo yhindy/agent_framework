@@ -125,3 +125,40 @@
   padding: 32px;
 }
 
+/* Expandable prompt section */
+.plan-prompt-section {
+  margin: 12px 0;
+}
+
+.expand-prompt-btn {
+  background: transparent;
+  border: 1px solid #4a4a4a;
+  color: #9cdcfe;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+.expand-prompt-btn:hover {
+  background: #3a3a3a;
+  border-color: #9cdcfe;
+}
+
+.plan-prompt {
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+

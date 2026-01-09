@@ -503,3 +503,68 @@
   overflow-y: auto;
 }
 
+/* Task items in sidebar */
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 1px 0;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #a0a0a0;
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.task-item:hover {
+  background: #2a2d2e;
+}
+
+.task-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.task-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.task-item.running {
+  color: #dcdcaa;
+}
+
+.task-item.running .task-icon {
+  animation: pulse-task 1.5s ease-in-out infinite;
+}
+
+.task-item.completed {
+  color: #4ec9b0;
+}
+
+.task-item.completed .task-icon {
+  color: #4ec9b0;
+}
+
+.task-item.failed {
+  color: #f48771;
+}
+
+.task-item.failed .task-icon {
+  color: #f48771;
+}
+
+@keyframes pulse-task {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+

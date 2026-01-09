@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { app } from 'electron'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
+import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -36,9 +37,14 @@ interface AgentSession {
 
 export class AgentService {
   private sessions: Map<string, AgentSession>
+  private claudeSessionInfoService?: ClaudeSessionInfoService
 
   constructor() {
     this.sessions = new Map()
+  }
+
+  setClaudeSessionInfoService(service: ClaudeSessionInfoService): void {
+    this.claudeSessionInfoService = service
   }
 
   async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {
@@ -317,6 +323,10 @@ export class AgentService {
       : join(app.getAppPath(), 'resources', 'minions')
   }
 
+  getSuperMinionRulesPath(): string {
+    return join(this.getMinionsPath(), 'rules', 'super-minion-rules.md')
+  }
+
   private getProjectConfigPath(projectPath: string): string {
     return join(projectPath, 'minions', 'config.json')
   }
@@ -493,12 +503,25 @@ export class AgentService {
       this.updateAgentInfo(session.worktreePath, { mode: 'dev' })
     }
 
+    // 6. Get task invocations from JSONL if we have a session and service
+    let taskInvocations: TaskInvocation[] = []
+    if (agentInfo.claudeSessionId && this.claudeSessionInfoService) {
+      const sessionInfo = this.claudeSessionInfoService.parseSessionInfo(
+        agentInfo.claudeSessionId,
+        session.worktreePath
+      )
+      if (sessionInfo) {
+        taskInvocations = sessionInfo.taskInvocations
+      }
+    }
+
     return {
       ...agentInfo,
       isSuperMinion: true,
       minionBudget: (agentInfo as any).minionBudget || 5,
       children,
-      pendingPlans
+      pendingPlans,
+      taskInvocations
     } as SuperAgentInfo
   }
 

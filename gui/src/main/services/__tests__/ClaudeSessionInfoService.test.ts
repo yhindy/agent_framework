@@ -482,4 +482,111 @@ not valid json
       expect(mockWatcher.close).toHaveBeenCalled()
     })
   })
+
+  describe('Task Tool Invocation Parsing', () => {
+    it('parses a running Task tool invocation', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Help me implement auth"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"I'll spawn a subagent."},{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Implement login component","subagent_type":"general-purpose","prompt":"Create a login form..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result).not.toBeNull()
+      expect(result!.taskInvocations).toHaveLength(1)
+      expect(result!.taskInvocations[0]).toEqual({
+        toolUseId: 'toolu_task_001',
+        description: 'Implement login component',
+        subagentType: 'general-purpose',
+        prompt: 'Create a login form...',
+        status: 'running',
+        startedAt: '2026-01-07T10:00:05.000Z'
+      })
+    })
+
+    it('parses a completed Task tool invocation', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Help me implement auth"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Implement login","subagent_type":"general-purpose","prompt":"Create login..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Task completed successfully. Created Login.tsx and LoginForm.tsx files."}]},"timestamp":"2026-01-07T10:05:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result).not.toBeNull()
+      expect(result!.taskInvocations).toHaveLength(1)
+      expect(result!.taskInvocations[0].status).toBe('completed')
+      expect(result!.taskInvocations[0].completedAt).toBe('2026-01-07T10:05:00.000Z')
+      expect(result!.taskInvocations[0].resultSummary).toBe('Task completed successfully. Created Login.tsx and LoginForm.tsx files.')
+    })
+
+    it('parses a failed Task tool invocation', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_task_002","name":"Task","input":{"description":"Fix bug","subagent_type":"general-purpose","prompt":"Fix the bug..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_002","content":"Error: Could not complete task","is_error":true}]},"timestamp":"2026-01-07T10:01:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.taskInvocations).toHaveLength(1)
+      expect(result!.taskInvocations[0].status).toBe('failed')
+    })
+
+    it('parses multiple Task tool invocations (parallel tasks)', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Task 1","subagent_type":"general-purpose","prompt":"Do task 1"}},{"type":"tool_use","id":"toolu_task_002","name":"Task","input":{"description":"Task 2","subagent_type":"Explore","prompt":"Do task 2"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Task 1 done"}]},"timestamp":"2026-01-07T10:01:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.taskInvocations).toHaveLength(2)
+      expect(result!.taskInvocations[0].description).toBe('Task 1')
+      expect(result!.taskInvocations[0].status).toBe('completed')
+      expect(result!.taskInvocations[1].description).toBe('Task 2')
+      expect(result!.taskInvocations[1].subagentType).toBe('Explore')
+      expect(result!.taskInvocations[1].status).toBe('running')
+    })
+
+    it('ignores non-Task tool uses', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_read_001","name":"Read","input":{"file_path":"/test.txt"}},{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Real task","subagent_type":"general-purpose","prompt":"Do something"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.taskInvocations).toHaveLength(1)
+      expect(result!.taskInvocations[0].description).toBe('Real task')
+    })
+
+    it('returns empty array when no Task tools used', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Hello"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Hi there!"}],"stop_reason":"stop_sequence"},"timestamp":"2026-01-07T10:00:05.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.taskInvocations).toHaveLength(0)
+    })
+
+    it('truncates long result summaries to 500 chars', () => {
+      const longResult = 'A'.repeat(1000)
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Task","subagent_type":"general-purpose","prompt":"Do it"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"${longResult}"}]},"timestamp":"2026-01-07T10:01:00.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      expect(result!.taskInvocations[0].resultSummary).toHaveLength(500)
+    })
+  })
 })
