@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, master]
   push:
-    branches: [main, master, 'feature/**']
+    branches: [main, master]
   workflow_dispatch:
     inputs:
       full_run:
