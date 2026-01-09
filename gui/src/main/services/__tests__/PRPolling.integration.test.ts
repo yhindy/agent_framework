@@ -74,7 +74,7 @@ describe('PR Polling Integration Tests', () => {
 
       await pollingService.stopPolling(assignmentId, subscriberId)
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -93,7 +93,7 @@ describe('PR Polling Integration Tests', () => {
 
       await pollingService.stopAllPolling(subscriberId)
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -115,7 +115,7 @@ describe('PR Polling Integration Tests', () => {
       const initialCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
 
       // After 30 seconds, should have polled all 3
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       const totalCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
       expect(totalCalls - initialCalls).toBe(3)
@@ -148,7 +148,7 @@ describe('PR Polling Integration Tests', () => {
       // Dashboard unmounts and stops all polling
       await pollingService.stopAllPolling(dashboardId)
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -171,7 +171,7 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Should only call API once (deduplication)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
@@ -194,7 +194,7 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Should still poll because Dashboard is still subscribed
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
@@ -217,7 +217,7 @@ describe('PR Polling Integration Tests', () => {
 
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -240,7 +240,7 @@ describe('PR Polling Integration Tests', () => {
       ;(mockMainWindow.webContents!.send as any).mockClear()
 
       // Advance 30 seconds for next poll
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should have detected merge and emitted update
       expect(mockMainWindow.webContents!.send).toHaveBeenCalledWith('assignments:updated')
@@ -248,7 +248,7 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Next interval should not poll (PR is merged)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
 
@@ -271,13 +271,13 @@ describe('PR Polling Integration Tests', () => {
 
       ;(mockMainWindow.webContents!.send as any).mockClear()
 
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect(mockMainWindow.webContents!.send).toHaveBeenCalledWith('assignments:updated')
 
       // After merge, polling should stop
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
@@ -296,7 +296,7 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Advance and check recovery
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // Should have recovered and called again
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThanOrEqual(0)
@@ -314,9 +314,9 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Try multiple times
-      vi.advanceTimersByTime(30000)
-      vi.advanceTimersByTime(30000)
-      vi.advanceTimersByTime(30000)
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(30000)
 
       // After 3 failures, should stop polling
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeLessThanOrEqual(3)
