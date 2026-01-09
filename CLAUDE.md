@@ -1,17 +1,89 @@
-# CLAUDE.md - Agent Framework Guidelines
+# CLAUDE.md - AI Assistant Guide for Agent Framework
 
-This document provides AI assistants with comprehensive guidance for working on this codebase.
+This document provides essential context for AI assistants working with the Agent Framework codebase.
+
+## Instructions for AI Assistants
+
+### Git & Version Control
+- **Never commit or push without explicit user approval.** Always ask before running `git commit` or `git push`.
+- When proposing commits, show the user what files will be committed and the proposed commit message.
+- Use conventional commit messages: `[type] description` (e.g., `[feat]`, `[fix]`, `[docs]`, `[test]`, `[refactor]`).
+- Keep commits focused and atomic - one logical change per commit.
+
+### Testing Requirements
+- **Always write tests for new functionality.** No feature is complete without tests.
+- **Run tests before proposing commits** to ensure nothing is broken: `npm test` or target specific tests.
+- Follow existing test patterns in `gui/src/main/services/__tests__/` - use the established fixtures.
+- For new services:
+  - Add unit tests for new functions/methods
+  - Mock external dependencies (child_process, fs, Electron APIs)
+- Aim for tests that are:
+  - **Isolated**: Don't depend on external state or other tests
+  - **Deterministic**: Same input always produces same output
+  - **Fast**: Mock slow operations (network, file system where appropriate)
+  - **Readable**: Clear test names that describe the expected behavior
+
+### Documentation Maintenance
+- **Update this CLAUDE.md file** when making significant changes to:
+  - Architecture or system design
+  - New services or major components
+  - Development workflows or commands
+  - Environment variables or configuration
+  - Directory structure
+- Keep the Key Files Reference table current when adding important new files.
+- Document non-obvious decisions in code comments or relevant docs.
+
+### Code Quality Standards
+- Run type checking before committing: `npm run typecheck -w gui`
+- Follow existing patterns in the codebase - consistency over personal preference.
+- Don't introduce new dependencies without discussing with the user first.
+- Prefer editing existing files over creating new ones when reasonable.
+- Keep functions focused and reasonably sized.
+- Use TypeScript types throughout - this is a strictly typed codebase.
+
+### Communication
+- Explain your reasoning for significant decisions.
+- When you encounter ambiguity, ask clarifying questions rather than assuming.
+- If you notice potential issues or improvements outside the current task scope, mention them but don't act without approval.
+- Summarize what you've done after completing a task.
+
+### Error Handling
+- When tests fail, investigate and fix the root cause - don't just skip or delete tests.
+- If you break something, acknowledge it and fix it before moving on.
+- When encountering unexpected behavior, investigate before making changes.
+
+---
 
 ## Project Overview
 
-The **Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase. It uses git worktrees to give each agent an isolated copy of the codebase, preventing conflicts between parallel workers.
+**Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase. Users can text articles, links, reminders, and other content to save for later.
 
-**Key Components:**
-- **GUI (Agent Orchestrator)**: Electron desktop app for managing agents visually
-- **Minions CLI**: Shell scripts for worktree management and agent setup
-- **Signal Protocol**: Communication system between agents and the orchestrator
+### Core Features
+- GUI (Agent Orchestrator): Electron desktop app for managing agents visually
+- Minions CLI: Shell scripts for worktree management and agent setup
+- Signal Protocol: Communication system between agents and the orchestrator
+- Git worktree isolation for parallel agent work without conflicts
 
-## Repository Structure
+## Tech Stack
+
+### GUI (Electron App)
+- **Framework**: Electron 28.x with electron-vite
+- **Frontend**: React 18 with Zustand state management
+- **Terminal**: node-pty + xterm.js
+- **Testing**: Vitest
+- **Language**: TypeScript (strict mode)
+
+### CLI (Minions)
+- **Shell**: Bash scripts
+- **Dependencies**: git, python3, gh (GitHub CLI)
+
+### Runtime Requirements
+- Node.js 20.x
+- npm (workspaces)
+- Git (for worktrees)
+- Python 3 (for JSON parsing in shell scripts)
+
+## Directory Structure
 
 ```
 agent_framework/
@@ -20,172 +92,101 @@ agent_framework/
 │   │   ├── main/               # Main process (Node.js/Electron)
 │   │   │   ├── index.ts        # Entry point, IPC handlers
 │   │   │   └── services/       # Core services
-│   │   │       ├── AgentService.ts           # Agent lifecycle management
-│   │   │       ├── TerminalService.ts        # PTY terminal management
-│   │   │       ├── ProjectService.ts         # Project/workspace management
-│   │   │       ├── ClaudeSessionInfoService.ts  # Claude session parsing
-│   │   │       ├── PRPollingService.ts       # GitHub PR status polling
-│   │   │       ├── NotificationService.ts    # System notifications
-│   │   │       ├── FileWatcherService.ts     # File change detection
-│   │   │       └── TestEnvService.ts         # Test environment management
 │   │   ├── preload/            # Electron preload scripts (IPC bridge)
 │   │   └── renderer/           # React frontend
 │   │       └── src/
-│   │           ├── components/ # React components (Dashboard, AgentView, etc.)
+│   │           ├── components/ # React components
 │   │           ├── contexts/   # React contexts
 │   │           ├── hooks/      # Custom React hooks
 │   │           └── types/      # TypeScript type definitions
 │   ├── resources/              # App resources (icons, bundled scripts)
-│   │   └── minions/           # Bundled minion scripts for distribution
-│   ├── vitest.config.ts       # Main process test config
+│   ├── vitest.config.ts        # Main process test config
 │   └── vitest.config.renderer.ts  # Renderer test config
 ├── minions/                    # CLI framework (installed into target projects)
-│   ├── bin/                   # Shell scripts
-│   │   ├── setup.sh           # Create agent worktree
-│   │   ├── teardown.sh        # Remove agent worktree
-│   │   ├── list.sh            # List worktrees
-│   │   ├── dashboard.sh       # Launch GUI
-│   │   ├── init.sh            # One-time setup
-│   │   └── preflight.sh       # Verify environment
-│   ├── rules/                 # Agent behavior rules
-│   │   ├── orchestrator_signals.md  # Signal protocol documentation
-│   │   └── super-minion-rules.md    # Super minion orchestration rules
-│   └── templates/             # Assignment templates
-├── .cursor/rules/             # Cursor IDE rules for agents
-│   └── agent-rules.mdc        # Agent development guidelines
+│   ├── bin/                    # Shell scripts (setup.sh, teardown.sh, etc.)
+│   ├── rules/                  # Agent behavior rules
+│   └── templates/              # Assignment templates
+├── .cursor/rules/              # Cursor IDE rules for agents
 ├── .github/
-│   ├── workflows/ci.yml       # GitHub Actions CI
-│   └── scripts/analyze-changes.js  # Intelligent test selection
-├── install.sh                 # Install framework into a project
-└── uninstall.sh               # Remove framework from a project
+│   ├── workflows/ci.yml        # GitHub Actions CI
+│   └── scripts/                # CI helper scripts
+├── install.sh                  # Install framework into a project
+└── uninstall.sh                # Remove framework from a project
 ```
 
 ## Development Commands
 
-### Root Level (npm workspaces)
+### Running Locally
 ```bash
-npm install                  # Install all dependencies
-npm test                     # Run all tests (gui + minions)
-npm run gui:dev              # Start GUI in development mode
-npm run gui:build            # Build GUI for production
-npm run gui:test             # Run GUI tests only
-npm run minions:test         # Run minions tests only
+# Install dependencies (root)
+npm install
+
+# Start GUI in development mode
+npm run gui:dev
 ```
 
-### GUI Package (`cd gui`)
+### Testing
 ```bash
-npm run dev                  # Start Electron in dev mode (hot reload)
-npm run build                # Build for production
-npm run preview              # Preview production build
-npm run typecheck            # TypeScript type checking
-npm run rebuild              # Rebuild native modules (node-pty)
-npm test                     # Run tests with Vitest
-npm test -- --coverage       # Run tests with coverage
-```
+# Run all tests
+npm test
 
-### Test Commands
-```bash
+# GUI tests only
+npm run gui:test
+cd gui && npm test
+
+# Minions tests only
+npm run minions:test
+
 # Run specific test file
-npm test -- src/main/services/__tests__/AgentService.test.ts
+cd gui && npm test -- src/main/services/__tests__/AgentService.test.ts
 
-# Run tests in watch mode
-npm test -- --watch
-
-# Run tests with coverage
-npm test -- --coverage
-
-# Run only changed tests (intelligent selection)
-npm test -- --changed
+# Run with coverage
+cd gui && npm test -- --coverage
 ```
 
-## Architecture Overview
+### Building
+```bash
+# Build GUI for production
+npm run gui:build
 
-### Electron Architecture (gui/)
+# Type check
+cd gui && npm run typecheck
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Main Process (Node.js)                   │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │AgentService │  │TerminalSvc │  │ClaudeSessionInfoSvc │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ProjectService│ │PRPollingSvc │  │NotificationService  │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│                                                             │
-│                    ▲ IPC (ipcMain.handle) ▲                 │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                     ipcRenderer.invoke
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                    Preload Script                            │
-│              (contextBridge.exposeInMainWorld)              │
-│                   window.electronAPI                         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                   Renderer Process (React)                   │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  Dashboard  │  │  AgentView  │  │   PlanApproval      │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│                                                             │
-│  Uses: React, Zustand (state), xterm.js (terminals)        │
-└─────────────────────────────────────────────────────────────┘
+# Rebuild native modules (node-pty)
+cd gui && npm run rebuild
 ```
 
-### Key Services
-
-| Service | Purpose |
-|---------|---------|
-| `AgentService` | CRUD for agents, worktree creation, PR management |
-| `TerminalService` | PTY management, Claude session lifecycle |
-| `ProjectService` | Multi-project workspace management |
-| `ClaudeSessionInfoService` | Parse Claude JSONL session files |
-| `PRPollingService` | Poll GitHub for PR status updates |
-| `NotificationService` | System notifications (macOS/Windows) |
-
-### Agent Lifecycle
-
-1. **Create Assignment** - User creates via GUI with prompt, tool, model
-2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
-3. **Start Agent** - TerminalService spawns PTY with Claude/Cursor
-4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes
-5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
-6. **Teardown** - Clean up worktree when done
-
-## Code Conventions
+## Code Style
 
 ### TypeScript
-- Use strict TypeScript (`"strict": true` in tsconfig)
+- Strict mode enabled
 - Prefer `interface` over `type` for object shapes
-- Export types alongside implementations
-- Use explicit return types for public functions
+- Explicit return types for public functions
+- Use `vi.mock()` and `vi.spyOn()` for test mocking
 
 ### File Organization
-- One service class per file in `services/`
-- Tests in `__tests__/` subdirectories
-- Test fixtures in `__tests__/fixtures/`
-
-### Naming Conventions
-- Services: `PascalCase` + `Service` suffix (e.g., `AgentService`)
-- Components: `PascalCase` (e.g., `AgentView.tsx`)
-- Hooks: `camelCase` with `use` prefix (e.g., `useAgentState`)
-- Test files: `*.test.ts` or `*.spec.ts`
+- Services: One class per file in `services/`
+- Tests: `__tests__/` subdirectories with `*.test.ts` files
+- Components: PascalCase naming (e.g., `AgentView.tsx`)
 
 ### IPC Communication
-- Handler names use colon-separated namespaces: `project:select`, `agents:list`
+- Handler names: colon-separated namespaces (`project:select`, `agents:list`)
 - Use `ipcMain.handle` for async request/response
 - Use `ipcMain.on`/`send` for fire-and-forget events
-- All IPC APIs defined in `preload/index.ts`
+- All APIs defined in `preload/index.ts`
 
-### Error Handling
-- Wrap IPC handlers in try/catch
-- Log errors with `console.error` including context
-- Return meaningful error messages to renderer
+## Testing Conventions
 
-## Testing Guidelines
+### Vitest (GUI)
+- Test files: `src/main/services/__tests__/*.test.ts`
+- Use `describe`/`it`/`expect` from vitest
+- Mock external modules with `vi.mock()`
+- Clear mocks in `beforeEach`
+
+### Coverage Thresholds
+- GUI Main Process: 60% (lines, functions, branches, statements)
+- GUI Renderer: 50%
+- Minions: 70% lines/functions, 60% branches
 
 ### Test Structure
 ```typescript
@@ -206,81 +207,40 @@ describe('ServiceName', () => {
 })
 ```
 
-### Mocking
-- Use `vi.mock()` for module mocking
-- Use `vi.spyOn()` for method spying
-- Mock `child_process`, `fs`, and Electron modules in tests
+## Architecture Patterns
 
-### Coverage Thresholds
-- GUI Main Process: 60% (lines, functions, branches, statements)
-- GUI Renderer: 50%
-- Minions: 70% lines/functions, 60% branches
-
-### Test Categories
-- Unit tests: `*.test.ts` (fast, isolated)
-- Integration tests: `*.integration.test.ts` (slower, more realistic)
-
-## Git Workflow
-
-### Branching Strategy
+### Electron Process Model
 ```
-main (protected)
-  └── feature branches
-        ├── feature/agent-1/user-profile
-        ├── feature/agent-2/search-api
-        └── claude/... (AI agent branches)
-```
-
-### Commit Message Format
-```
-[area] brief description
-
-- Detail 1
-- Detail 2
+Main Process (Node.js)
+    ├── AgentService        # Agent lifecycle, worktrees, PRs
+    ├── TerminalService     # PTY management, Claude sessions
+    ├── ProjectService      # Multi-project workspace management
+    ├── ClaudeSessionInfoService  # Parse Claude JSONL files
+    ├── PRPollingService    # GitHub PR status polling
+    └── NotificationService # System notifications
+         │
+         │ IPC (ipcMain.handle)
+         ▼
+Preload Script (contextBridge)
+         │
+         │ window.electronAPI
+         ▼
+Renderer Process (React)
+    ├── Dashboard           # Main view
+    ├── AgentView           # Agent details + terminal
+    └── PlanApproval        # Super minion plan review
 ```
 
-**Areas:** `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `chore`
+### Agent Lifecycle
+1. **Create Assignment** - User creates via GUI with prompt, tool, model
+2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
+3. **Start Agent** - TerminalService spawns PTY with Claude/Cursor
+4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes
+5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
+6. **Teardown** - Clean up worktree when done
 
-### Example Commits
-```
-[feat] add user profile page
-
-- Create ProfileCard component
-- Add profile route
-- Connect to user API
-
-[fix] resolve login redirect issue
-
-- Fix redirect URL encoding
-- Add error handling for invalid tokens
-```
-
-### Rules
-- One feature/fix per commit
-- All tests must pass before committing
-- Never commit: secrets, node_modules, build outputs, IDE files
-
-## CI/CD Pipeline
-
-The CI workflow (`.github/workflows/ci.yml`) runs on PRs and pushes to main.
-
-### Jobs
-1. **detect-changes**: Analyze changed files for intelligent test selection
-2. **lint**: TypeScript type checking
-3. **test-gui**: Run GUI tests (macOS runner for node-pty)
-4. **test-minions**: Run minions package tests
-5. **build-gui**: Smoke test the production build
-
-### Intelligent Test Selection
-- Changes to CI config → full test run
-- Changes to `gui/**` → run GUI tests
-- Changes to `minions/**` → run minions tests
-- Feature branch commits are 50-70% faster
-
-## Signal Protocol
-
+### Signal Protocol
 Agents communicate with the orchestrator via stdout signals:
-
 ```bash
 ===SIGNAL:PLAN_READY===     # Plan needs human review
 ===SIGNAL:DEV_COMPLETED===  # Implementation complete
@@ -290,29 +250,17 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
 
-**Rules:**
-- Signals must be on their own line
-- Output context before the signal
-- One signal per milestone
+## CI/CD Pipeline
 
-## Super Minion Protocol
+GitHub Actions workflow (`.github/workflows/ci.yml`):
 
-Super minions orchestrate child agents by:
+1. **detect-changes**: Determines which packages changed
+2. **lint**: TypeScript type checking
+3. **test-gui**: Runs GUI tests (macOS runner for node-pty)
+4. **test-minions**: Runs minions package tests
+5. **build-gui**: Smoke test the production build
 
-1. Writing `.pending-plans.json` with task breakdowns
-2. Outputting `===SIGNAL:PLANS_READY===`
-3. Monitoring `.children-status.json` for child progress
-4. NOT using the Task tool (bypasses orchestration)
-
-## Key Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `minions/config.json` | Project-specific agent config (installed per-project) |
-| `.agent-info` | Agent metadata (created per worktree) |
-| `.claude/settings.local.json` | Claude Code permissions |
-| `electron-builder.json` | Electron build config |
-| `electron.vite.config.ts` | Vite config for Electron |
+CI uses intelligent test selection - only runs tests related to changed files.
 
 ## Common Tasks
 
@@ -332,23 +280,17 @@ Super minions orchestrate child agents by:
 2. Create styles in `ComponentName.css`
 3. Export from component or use directly
 
-## Dependencies
+## Key Files Reference
 
-### GUI Key Dependencies
-- **electron**: Desktop app framework
-- **electron-vite**: Build tooling for Electron
-- **react**: UI framework
-- **zustand**: State management
-- **node-pty**: Terminal emulation
-- **chokidar**: File watching
-- **xterm**: Terminal rendering
-- **vitest**: Testing framework
-
-### Shell Dependencies (minions scripts)
-- `bash`: Shell execution
-- `git`: Worktree management
-- `python3`: JSON parsing in shell scripts
-- `gh`: GitHub CLI for PR operations
+| File | Purpose |
+|------|---------|
+| `gui/src/main/index.ts` | Electron entry point, IPC handlers |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs |
+| `gui/src/main/services/TerminalService.ts` | PTY management |
+| `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
+| `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `minions/bin/setup.sh` | Worktree creation script |
+| `minions/rules/orchestrator_signals.md` | Signal protocol docs |
 
 ## Troubleshooting
 
@@ -367,9 +309,9 @@ cd gui && npm run rebuild
 - Verify session ID matches in `.agent-info`
 - Check ClaudeSessionInfoService logs
 
-## Links
+## Git Workflow
 
-- [GUI README](gui/README.md) - Detailed GUI documentation
-- [Minions README](minions/README.md) - CLI usage guide
-- [CI Documentation](.github/CI_README.md) - CI pipeline details
-- [Testing Guide](gui/TESTING.md) - Comprehensive testing docs
+- Main branch: `main`
+- Feature branches: `feature/<name>` or `claude/<session-id>`
+- All tests must pass before merging
+- CI runs on all PRs to main
