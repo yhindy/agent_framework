@@ -18,6 +18,7 @@ export interface AgentInfo {
   model?: string
   mode: 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
   yolo?: boolean              // Dangerously skip permissions flag
+  chrome?: boolean            // Enable Chrome integration (default: true)
   prUrl?: string
   prStatus?: string
   prompt?: string
@@ -98,6 +99,8 @@ export interface Assignment {
   lastActivity?: string
   hasUnread?: boolean
   prompt?: string
+  yolo?: boolean
+  chrome?: boolean
 }
 
 export interface TestEnvironment {

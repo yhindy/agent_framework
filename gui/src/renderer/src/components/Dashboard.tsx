@@ -82,6 +82,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     mode: 'planning',
     status: 'pending',
     yolo: true,
+    chrome: true,
     isSuper: false,
     minionBudget: 3
   })
@@ -195,7 +196,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
           model: formData.model,
           prompt: formData.prompt,
           status: 'in_progress',
-          yolo: formData.yolo
+          yolo: formData.yolo,
+          chrome: formData.chrome
         })
       } else {
         result = await window.electronAPI.createAssignmentForProject(projectPath, {
@@ -206,7 +208,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
           prompt: formData.prompt,
           mode: formData.mode,
           status: 'in_progress',
-          yolo: formData.yolo
+          yolo: formData.yolo,
+          chrome: formData.chrome
         })
       }
 
@@ -232,6 +235,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         mode: 'planning',
         status: 'pending',
         yolo: false,
+        chrome: true,
         isSuper: false,
         minionBudget: 3
       })
@@ -736,17 +740,27 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
               </div>
 
               {formData.tool === 'claude' && (
-                <div className="form-group checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.yolo}
-                      onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
-                    />
-                    <span className="checkbox-text">Yolo mode 🔥</span>
-                  </label>
+                <div className="form-group">
+                  <div style={{ display: 'flex', gap: '30px', marginBottom: '8px' }}>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.yolo}
+                        onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
+                      />
+                      <span className="checkbox-text">Yolo mode 🔥</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.chrome}
+                        onChange={(e) => setFormData({ ...formData, chrome: e.target.checked })}
+                      />
+                      <span className="checkbox-text">Chrome integration 🌐</span>
+                    </label>
+                  </div>
                   <div className="form-hint">
-                    Automatically approve edits and run commands without confirmation. Don't say I didn't warn you!
+                    Yolo: Auto-approve edits and commands. Chrome: Enable browser automation.
                   </div>
                 </div>
               )}
