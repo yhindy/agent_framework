@@ -73,14 +73,39 @@ Task(subagent_type="general-purpose", description="Implement API", prompt="...")
 2. **Implement** - Execute with `subagent_type="general-purpose"`
 3. **Review** - Validate with another subagent
 
-## 🔧 Available Subagent Types
+## 🔧 Tools vs Subagents
 
+**Tools** (direct calls, no LLM spawned):
+- `Bash` - Run shell commands
+- `Read`, `Write`, `Edit` - File operations
+- `Grep`, `Glob` - Search operations
+- Use these for quick operations you can do yourself
+
+**Subagents** (via Task tool, spawns separate LLM):
 | Type | Purpose |
 |------|---------|
 | `Explore` | Quick codebase reconnaissance |
 | `general-purpose` | Full implementation (TDD) |
 | `Plan` | Architecture planning |
-| `Bash` | Shell commands |
+| `debugger` | Debug unexpected behavior, trace bugs |
+
+Use subagents for complex work that benefits from a dedicated context.
+
+### Spawning the Debugger
+
+When you encounter bugs or unexpected behavior, spawn the debugger agent:
+
+```
+Task(subagent_type="debugger", description="Debug auth failure", prompt="""
+The login function returns 401 even with valid credentials.
+
+Steps to reproduce:
+1. Call login() with test user
+2. Observe 401 response
+
+Expected: 200 with token
+Actual: 401 unauthorized
+""")
 
 ## 🚨 Human Escalation
 

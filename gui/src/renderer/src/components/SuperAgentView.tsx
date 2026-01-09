@@ -81,12 +81,6 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
     try {
       setError(null)
       const details = await window.electronAPI.getSuperAgentDetails(agentId)
-      console.log('[DEBUG][SuperAgentView.loadAgent] Received details:', {
-        agentId: details?.agentId,
-        hasTaskInvocations: !!details?.taskInvocations,
-        taskInvocationsCount: details?.taskInvocations?.length || 0,
-        taskInvocations: details?.taskInvocations
-      })
       setAgent(details)
 
       // Restore UI state if available
@@ -333,7 +327,7 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           <div className="agent-title">
             <h2>
               👑 {extractBranchName(agent.branch) || agent.agentId}
-              <span className="budget-badge">Budget: {agent.children.length}/{agent.minionBudget}</span>
+              <span className="budget-badge">Tasks: {agent.taskInvocations?.length || 0}</span>
             </h2>
           </div>
 
@@ -490,47 +484,47 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
           )}
         </div>
 
-        {agent.mode !== 'planning' && (
+        {/* Show subagents section when not in planning OR when tasks have been spawned */}
+        {(agent.mode !== 'planning' || (agent.taskInvocations && agent.taskInvocations.length > 0)) && (
           <div className={`collapsible-section ${isGridCollapsed ? 'collapsed' : ''}`}>
             <div className="section-header" onClick={() => setIsGridCollapsed(!isGridCollapsed)}>
-              <h3>{isGridCollapsed ? '▶' : '▼'} Children, Tasks & Plans</h3>
+              <h3>{isGridCollapsed ? '▶' : '▼'} Subagents & Status</h3>
               <span className="section-hint">
-                {isGridCollapsed ? 'Click to expand' : `${agent.children.length} children, ${agent.taskInvocations?.length || 0} tasks, ${agent.pendingPlans.filter(p => p.status === 'pending').length} pending`}
+                {isGridCollapsed ? 'Click to expand' : `${agent.taskInvocations?.length || 0} tasks${agent.children.length > 0 ? `, ${agent.children.length} children` : ''}`}
               </span>
             </div>
             {!isGridCollapsed && (
               <div className="super-grid">
-                <div className="children-section-wrapper">
-                  <h3>Active Children ({agent.children.length})</h3>
-                  <div className="children-section">
-                    <div className="child-cards">
-                      {agent.children.map(child => (
-                        <ChildStatusCard
-                          key={child.id}
-                          child={child}
-                          onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
-                        />
-                      ))}
-                      {agent.children.length === 0 && <p className="empty-hint">No active children yet.</p>}
+                {/* Task Subagents - Primary mechanism for autonomous execution */}
+                <div className="tasks-section-wrapper">
+                  <h3>Task Subagents ({agent.taskInvocations?.length || 0})</h3>
+                  <div className="tasks-section">
+                    <div className="task-cards">
+                      {agent.taskInvocations && agent.taskInvocations.length > 0 ? (
+                        agent.taskInvocations.map(task => (
+                          <TaskStatusCard
+                            key={task.toolUseId}
+                            task={task}
+                          />
+                        ))
+                      ) : (
+                        <p className="empty-hint">No tasks spawned yet. Super Minion will use Task tool to spawn subagents.</p>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* DEBUG: Always render a placeholder to verify rendering */}
-                {console.log('[DEBUG][SuperAgentView.render] taskInvocations check:', {
-                  hasTaskInvocations: !!agent.taskInvocations,
-                  taskInvocationsLength: agent.taskInvocations?.length,
-                  condition: agent.taskInvocations && agent.taskInvocations.length > 0
-                })}
-                {agent.taskInvocations && agent.taskInvocations.length > 0 && (
-                  <div className="tasks-section-wrapper">
-                    <h3>Task Subagents ({agent.taskInvocations.length})</h3>
-                    <div className="tasks-section">
-                      <div className="task-cards">
-                        {agent.taskInvocations.map(task => (
-                          <TaskStatusCard
-                            key={task.toolUseId}
-                            task={task}
+                {/* Children - Legacy/manual child minions */}
+                {agent.children.length > 0 && (
+                  <div className="children-section-wrapper">
+                    <h3>Child Minions ({agent.children.length})</h3>
+                    <div className="children-section">
+                      <div className="child-cards">
+                        {agent.children.map(child => (
+                          <ChildStatusCard
+                            key={child.id}
+                            child={child}
+                            onClick={() => navigate(`/workspace/agent/${child.agentId}`)}
                           />
                         ))}
                       </div>
@@ -538,15 +532,18 @@ function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
                   </div>
                 )}
 
-                <div className="plans-section-wrapper">
-                  <div className="plans-section">
-                    <PlanApproval
-                      plans={agent.pendingPlans.filter(p => p.status === 'pending')}
-                      onApprove={handleApprovePlan}
-                      onReject={handleRejectPlan}
-                    />
+                {/* Pending Plans - Show only if there are pending plans */}
+                {agent.pendingPlans.filter(p => p.status === 'pending').length > 0 && (
+                  <div className="plans-section-wrapper">
+                    <div className="plans-section">
+                      <PlanApproval
+                        plans={agent.pendingPlans.filter(p => p.status === 'pending')}
+                        onApprove={handleApprovePlan}
+                        onReject={handleRejectPlan}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>

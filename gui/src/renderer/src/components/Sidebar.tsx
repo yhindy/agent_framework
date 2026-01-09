@@ -31,9 +31,21 @@ interface AgentsByProject {
   [projectPath: string]: AgentSession[]
 }
 
+interface TaskInvocation {
+  toolUseId: string
+  description: string
+  subagentType: string
+  status: 'running' | 'completed' | 'failed'
+}
+
+interface TasksByAgent {
+  [agentId: string]: TaskInvocation[]
+}
+
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: SidebarProps) {
   const location = useLocation()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
+  const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
@@ -72,6 +84,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
     const loadAgentsAndStates = async () => {
       const agentsByProj: AgentsByProject = {}
       const waitingFromFiles = new Set<string>()
+      const tasksByAg: TasksByAgent = {}
 
       for (const project of activeProjects) {
         try {
@@ -79,9 +92,22 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
           agentsByProj[project.path] = agents
 
           // Initialize waiting states from .agent-info (restored after app restart)
+          // Also fetch task invocations for super minions
           for (const agent of agents) {
             if ((agent as any).isWaitingForInput) {
               waitingFromFiles.add(agent.id)
+            }
+
+            // Fetch task invocations for super minions
+            if (agent.isSuperMinion) {
+              try {
+                const superDetails = await window.electronAPI.getSuperAgentDetails(agent.id)
+                if (superDetails?.taskInvocations) {
+                  tasksByAg[agent.id] = superDetails.taskInvocations
+                }
+              } catch (err) {
+                // Ignore errors fetching task invocations
+              }
             }
           }
         } catch (err) {
@@ -91,6 +117,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       }
 
       setAgentsByProject(agentsByProj)
+      setTasksByAgent(tasksByAg)
       // Use file-based state as source of truth, but only update if actually different
       // This avoids overwriting fresh IPC updates with stale file reads during race conditions
       setWaitingAgents(prev => {
@@ -475,8 +502,35 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
                       }
                     })
 
+                    const renderTaskItem = (task: TaskInvocation, depth: number) => {
+                      const statusIcon = task.status === 'running' ? '⏳' : task.status === 'completed' ? '✓' : '✗'
+                      const statusClass = task.status === 'running' ? 'running' : task.status === 'completed' ? 'completed' : 'failed'
+                      return (
+                        <div
+                          key={task.toolUseId}
+                          className={`task-item ${statusClass}`}
+                          style={{ paddingLeft: `${depth * 12 + 12}px` }}
+                          title={task.description}
+                        >
+                          <span className="task-icon">{statusIcon}</span>
+                          <span className="task-description">{task.description || task.subagentType}</span>
+                        </div>
+                      )
+                    }
+
                     const renderWithChildren = (agent: AgentSession, depth = 0): React.ReactNode[] => {
                       const items: React.ReactNode[] = [renderAgent(agent, project.path, depth)]
+
+                      // If super minion is not collapsed, show tasks and children
+                      if (agent.isSuperMinion && !collapsedSuperMinions.has(agent.id)) {
+                        // Render task invocations
+                        const tasks = tasksByAgent[agent.id] || []
+                        tasks.forEach(task => {
+                          items.push(renderTaskItem(task, depth + 1))
+                        })
+                      }
+
+                      // Render child agents
                       const children = childrenMap[agent.id] || []
                       if (children.length > 0 && !collapsedSuperMinions.has(agent.id)) {
                         children.forEach(child => {

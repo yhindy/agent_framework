@@ -191,7 +191,6 @@ export class TerminalService {
             const isSuperMinion = agentInfo?.isSuperMinion === true
             if (isSuperMinion && this.agentService) {
               const rulesPath = this.agentService.getSuperMinionRulesPath()
-              console.log('[SuperMinion Resume] Loading rules from:', rulesPath)
               args.push('--system-prompt-file', rulesPath)
             }
           } else if (mode === 'dev') {
@@ -421,8 +420,6 @@ export class TerminalService {
       if (isSuperMinion && this.agentService) {
         // Use absolute path to the bundled rules file
         const rulesPath = this.agentService.getSuperMinionRulesPath()
-        console.log('[SuperMinion] Loading rules from:', rulesPath)
-        console.log('[SuperMinion] Rules file exists:', existsSync(rulesPath))
         args.push('--system-prompt-file', rulesPath)
       }
 

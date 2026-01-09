@@ -11,7 +11,12 @@
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
       "Bash(timeout 15 npm run dev:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(npx vitest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep:*)",
+      "Bash(node -e:*)"
     ]
   }
 }
