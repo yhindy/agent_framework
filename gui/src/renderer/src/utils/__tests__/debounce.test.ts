@@ -2,16 +2,16 @@ import { debounce } from '../debounce'
 
 describe('debounce', () => {
   beforeEach(() => {
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   afterEach(() => {
-    jest.runOnlyPendingTimers()
-    jest.useRealTimers()
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
   })
 
   it('should debounce function calls', () => {
-    const mockFn = jest.fn()
+    const mockFn = vi.fn()
     const debouncedFn = debounce(mockFn, 1000)
 
     // Call multiple times
@@ -23,7 +23,7 @@ describe('debounce', () => {
     expect(mockFn).not.toHaveBeenCalled()
 
     // Fast-forward time
-    jest.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1000)
 
     // Should have been called only once with the last argument
     expect(mockFn).toHaveBeenCalledTimes(1)
@@ -31,42 +31,42 @@ describe('debounce', () => {
   })
 
   it('should delay execution by the specified wait time', () => {
-    const mockFn = jest.fn()
+    const mockFn = vi.fn()
     const debouncedFn = debounce(mockFn, 500)
 
     debouncedFn('test')
 
     // Not called before wait time
-    jest.advanceTimersByTime(499)
+    vi.advanceTimersByTime(499)
     expect(mockFn).not.toHaveBeenCalled()
 
     // Called after wait time
-    jest.advanceTimersByTime(1)
+    vi.advanceTimersByTime(1)
     expect(mockFn).toHaveBeenCalledWith('test')
   })
 
   it('should reset timer on subsequent calls', () => {
-    const mockFn = jest.fn()
+    const mockFn = vi.fn()
     const debouncedFn = debounce(mockFn, 1000)
 
     debouncedFn('call1')
-    jest.advanceTimersByTime(500)
+    vi.advanceTimersByTime(500)
 
     // Call again - should reset timer
     debouncedFn('call2')
-    jest.advanceTimersByTime(500)
+    vi.advanceTimersByTime(500)
 
     // Still not called (only 500ms passed since last call)
     expect(mockFn).not.toHaveBeenCalled()
 
     // Now it should be called
-    jest.advanceTimersByTime(500)
+    vi.advanceTimersByTime(500)
     expect(mockFn).toHaveBeenCalledTimes(1)
     expect(mockFn).toHaveBeenCalledWith('call2')
   })
 
   it('should have a cancel method that prevents execution', () => {
-    const mockFn = jest.fn()
+    const mockFn = vi.fn()
     const debouncedFn = debounce(mockFn, 1000)
 
     debouncedFn('test')
@@ -75,40 +75,40 @@ describe('debounce', () => {
     debouncedFn.cancel()
 
     // Fast-forward past wait time
-    jest.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1000)
 
     // Should not have been called
     expect(mockFn).not.toHaveBeenCalled()
   })
 
   it('should allow multiple cancel calls without error', () => {
-    const mockFn = jest.fn()
+    const mockFn = vi.fn()
     const debouncedFn = debounce(mockFn, 1000)
 
     debouncedFn('test')
     debouncedFn.cancel()
     debouncedFn.cancel() // Second cancel should not throw
 
-    jest.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1000)
     expect(mockFn).not.toHaveBeenCalled()
   })
 
   it('should work with functions that have multiple parameters', () => {
-    const mockFn = jest.fn((a: number, b: string, c: boolean) => {})
+    const mockFn = vi.fn((_a: number, _b: string, _c: boolean) => {})
     const debouncedFn = debounce(mockFn, 1000)
 
     debouncedFn(42, 'hello', true)
-    jest.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1000)
 
     expect(mockFn).toHaveBeenCalledWith(42, 'hello', true)
   })
 
   it('should preserve function context and return value', () => {
-    const mockFn = jest.fn((x: number) => x * 2)
+    const mockFn = vi.fn((x: number) => x * 2)
     const debouncedFn = debounce(mockFn, 1000)
 
     debouncedFn(5)
-    jest.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(1000)
 
     expect(mockFn).toHaveBeenCalledWith(5)
   })

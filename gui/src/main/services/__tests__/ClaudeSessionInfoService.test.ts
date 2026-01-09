@@ -12,15 +12,13 @@ vi.mock('fs', () => ({
   statSync: vi.fn(() => ({ mtimeMs: Date.now() }))
 }))
 
-// Get fixture paths
-const fixturesDir = join(__dirname, 'fixtures')
-
-// Helper to load real fixture file content
-function loadFixture(name: string): string {
-  // Use the actual fs to read fixtures (unmocked)
-  const { readFileSync: realReadFileSync } = jest.requireActual('fs') as typeof import('fs')
-  return realReadFileSync(join(fixturesDir, name), 'utf-8')
-}
+// Helper to load real fixture file content (unused but kept for future reference)
+// const fixturesDir = join(__dirname, 'fixtures')
+// async function loadFixture(name: string): Promise<string> {
+//   // Use the actual fs to read fixtures (unmocked)
+//   const { readFileSync: realReadFileSync } = await vi.importActual('fs') as typeof import('fs')
+//   return realReadFileSync(join(fixturesDir, name), 'utf-8')
+// }
 
 describe('ClaudeSessionInfoService', () => {
   let service: ClaudeSessionInfoService

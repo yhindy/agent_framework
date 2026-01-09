@@ -35,7 +35,7 @@ describe('PR Polling Integration Tests', () => {
       mockAgentService as AgentService
     )
 
-    pollingService.setFindProjectPath(async (assignmentId: string) => {
+    pollingService.setFindProjectPath(async (_assignmentId: string) => {
       return '/test/project'
     })
   })

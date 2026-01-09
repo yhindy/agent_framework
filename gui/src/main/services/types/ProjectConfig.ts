@@ -67,7 +67,7 @@ export interface ChildPlan {
 }
 
 // Re-export TaskInvocation for use in renderer
-export { TaskInvocation } from '../ClaudeSessionInfoService'
+export type { TaskInvocation } from '../ClaudeSessionInfoService'
 
 export interface SuperAgentInfo extends AgentInfo {
   isSuperMinion: true
@@ -90,7 +90,7 @@ export interface Assignment {
   status: 'active' | 'completed' | 'cancelled'
   tool: string
   model?: string
-  mode: 'auto' | 'manual' | 'interactive'
+  mode: 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
   prUrl?: string
   prStatus?: string
   branch?: string

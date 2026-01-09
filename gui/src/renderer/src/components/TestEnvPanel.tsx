@@ -31,13 +31,13 @@ function TestEnvPanel({ agentId }: TestEnvPanelProps) {
     loadStatus()
 
     // Listen for process lifecycle events
-    const unsubscribeStarted = window.electronAPI.onTestEnvStarted((id, commandId) => {
+    const unsubscribeStarted = window.electronAPI.onTestEnvStarted((id, _commandId) => {
       if (id === agentId) {
         loadStatus()
       }
     })
 
-    const unsubscribeStopped = window.electronAPI.onTestEnvStopped((id, commandId) => {
+    const unsubscribeStopped = window.electronAPI.onTestEnvStopped((id, _commandId) => {
       if (id === agentId) {
         loadStatus()
       }

@@ -42,8 +42,9 @@ describe.skip('TerminalService Integration', () => {
     // We can do this by adding a "test" tool to TerminalService or just hacking it for the test.
     // Or simpler: We subclass TerminalService for testing to override startAgent to run python.
     
+    // @ts-expect-error - TestTerminalService is for future implementation
     class TestTerminalService extends TerminalService {
-      async startPythonScript(agentId: string) {
+      async startPythonScript(_agentId: string) {
         // Use node-pty directly or expose a way to run arbitrary command
         // But easier to just use the public API if we can "fool" it?
         // No, startAgent is specific to tools.

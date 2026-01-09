@@ -1,8 +1,7 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join } from 'path'
-import { readFileSync, existsSync } from 'fs'
-import { execSync } from 'child_process'
+import { existsSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
@@ -98,23 +97,24 @@ export class TerminalService {
   }
 
   // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
-  private isProcessWaitingForInput(pid: number): boolean {
-    try {
-      if (process.platform === 'linux' && existsSync(`/proc/${pid}/stat`)) {
-        // Direct /proc read: ~0.1ms
-        const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
-        const state = stat.split(' ')[2]
-        return state === 'S' || state === 'I' // Sleeping (interruptible) or Idle
-      } else {
-        // macOS fallback: single ps call ~10ms
-        const result = execSync(`ps -o state= -p ${pid}`, { encoding: 'utf8' }).trim()
-        // On macOS, 'S' is sleeping, 'I' is idle. '+' means foreground.
-        return result.includes('S') || result.includes('I')
-      }
-    } catch {
-      return false
-    }
-  }
+  // Currently unused but kept for potential future use
+  // private _isProcessWaitingForInput(pid: number): boolean {
+  //   try {
+  //     if (process.platform === 'linux' && existsSync(`/proc/${pid}/stat`)) {
+  //       // Direct /proc read: ~0.1ms
+  //       const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+  //       const state = stat.split(' ')[2]
+  //       return state === 'S' || state === 'I' // Sleeping (interruptible) or Idle
+  //     } else {
+  //       // macOS fallback: single ps call ~10ms
+  //       const result = execSync(`ps -o state= -p ${pid}`, { encoding: 'utf8' }).trim()
+  //       // On macOS, 'S' is sleeping, 'I' is idle. '+' means foreground.
+  //       return result.includes('S') || result.includes('I')
+  //     }
+  //   } catch {
+  //     return false
+  //   }
+  // }
 
   async startAgent(
     projectPath: string,
@@ -192,7 +192,7 @@ export class TerminalService {
             args.push('--permission-mode', 'plan')
 
             // Preserve system prompt file for super minions
-            const isSuperMinion = agentInfo?.isSuperMinion === true
+            const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
             if (isSuperMinion && this.agentService) {
               const rulesPath = this.agentService.getSuperMinionRulesPath()
               args.push('--system-prompt-file', rulesPath)
@@ -380,7 +380,7 @@ export class TerminalService {
         claudeSessionActive: true,
         claudeLastSeen: new Date().toISOString(),
         yolo: yolo || false,
-        mode,
+        mode: mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle',
         model,
         prompt
       })

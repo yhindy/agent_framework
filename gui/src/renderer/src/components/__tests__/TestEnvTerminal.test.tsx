@@ -146,7 +146,6 @@ describe('TestEnvTerminal - Auto-Scroll Feature', () => {
 describe('TestEnvTerminal - Output Cache Limits', () => {
   const mockAgentId = 'test-agent-limit'
   const mockCommandId = 'cmd-limit'
-  const key = `${mockAgentId}:${mockCommandId}`
   let outputCallbacks: Array<(agentId: string, commandId: string, data: string) => void> = []
 
   beforeEach(() => {

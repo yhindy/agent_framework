@@ -26,6 +26,7 @@ declare global {
       approvePlan: (superAgentId: string, planId: string) => Promise<void>
       teardownAgent: (agentId: string, force: boolean) => Promise<void>
       unassignAgent: (agentId: string) => Promise<void>
+      saveUIState: (agentId: string, uiState: any) => Promise<void>
 
       // Terminal APIs
       sendTerminalInput: (agentId: string, data: string) => void
@@ -46,6 +47,7 @@ declare global {
       getAssignmentsForProject: (projectPath: string) => Promise<any>
       createAssignment: (assignment: any) => Promise<any>
       createAssignmentForProject: (projectPath: string, assignment: any) => Promise<any>
+      createSuperAssignment: (projectPath: string, assignment: any) => Promise<any>
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
       createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
       checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>
@@ -54,6 +56,7 @@ declare global {
       startPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>
       stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>
       stopAllPRPolling: (subscriberId: string) => Promise<void>
+      refreshPRNow: (assignmentId: string) => Promise<void>
 
       checkDependencies: () => Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }>
 
@@ -81,6 +84,10 @@ declare global {
       // Legacy (use onAgentStateChanged instead)
       onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => void
       onAgentResumedWork: (callback: (agentId: string) => void) => () => void
+
+      // Claude Session Info APIs
+      getClaudeSessionInfo: (agentId: string) => Promise<any>
+      onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => void
     }
   }
 }
