@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import './PlanApproval.css'
-import { ChildPlan } from '../../main/services/types/ProjectConfig'
+import { ChildPlan } from '../types/agent'
 
 interface PlanApprovalProps {
   plans: ChildPlan[]

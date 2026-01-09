@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AgentService } from '../AgentService'
-import * as fs from 'fs'
-import * as path from 'path'
 
 // Mock fs
 vi.mock('fs', () => ({
@@ -68,8 +66,7 @@ branch refs/heads/main`
 
   it('listAgents filters by .agent-info existence', async () => {
     // This integration test logic mimics listAgents flow
-    const projectPath = '/path/to/myrepo'
-    
+
     // Mock execAsync response for git worktree list
     // We can't easily mock the private execAsync, so we'll test the public logic if possible
     // or rely on unit tests for parseWorktrees which is public

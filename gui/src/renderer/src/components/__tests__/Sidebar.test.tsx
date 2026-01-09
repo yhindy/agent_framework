@@ -210,7 +210,8 @@ describe('Sidebar plain terminal waiting', () => {
     })
 
     // Trigger agent waiting (not plain terminal)
-    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+    expect(agentWaitingCallback).toBeTruthy()
+    agentWaitingCallback!('agent-1', 'Claude is waiting')
 
     // Should show badge
     await waitFor(() => {
@@ -283,7 +284,7 @@ describe('Sidebar waiting indicator suppression', () => {
     })
 
     // Trigger agent-1 waiting
-    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
 
     // Should show badge for agent-1 (we're viewing agent-2)
     await waitFor(() => {
@@ -310,7 +311,7 @@ describe('Sidebar waiting indicator suppression', () => {
     })
 
     // Trigger agent-1 waiting
-    agentWaitingCallback?.('agent-1', 'Claude is waiting')
+    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
 
     // Should NOT show badge for agent-1 (we're viewing it)
     await waitFor(() => {
@@ -343,8 +344,8 @@ describe('Sidebar waiting indicator suppression', () => {
     })
 
     // Trigger both agents waiting
-    agentWaitingCallback?.('agent-1', 'Claude is waiting')
-    agentWaitingCallback?.('agent-2', 'Claude is waiting')
+    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
+    agentWaitingCallback && agentWaitingCallback('agent-2', 'Claude is waiting')
 
     // Badge should show for agent-1 (not viewing it)
     // Badge should NOT show for agent-2 (viewing it)

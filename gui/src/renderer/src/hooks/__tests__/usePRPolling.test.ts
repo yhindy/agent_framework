@@ -146,14 +146,14 @@ describe('usePRPolling Hook', () => {
   })
 
   it('should generate unique subscriberId for each component instance', () => {
-    const { result: result1 } = renderHook(() =>
+    renderHook(() =>
       usePRPolling({
         assignmentIds: ['assignment-1'],
         enabled: true
       })
     )
 
-    const { result: result2 } = renderHook(() =>
+    renderHook(() =>
       usePRPolling({
         assignmentIds: ['assignment-1'],
         enabled: true

@@ -38,6 +38,12 @@ interface AgentSession {
   terminalPid: number | null
   hasUnread: boolean
   lastActivity: string
+  uiState?: {
+    lastActiveTab: string
+    plainTerminals: string[]
+    terminalCounter: number
+    lastFocusTime: string
+  }
 }
 
 function AgentView({ activeProjects }: AgentViewProps) {
@@ -76,7 +82,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     autoCommit,
     setAutoCommit,
     isCreatingPR,
-    prMessages,
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
@@ -409,10 +414,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 </span>
               </div>
 
-              <div className="info-badge agent-id-badge" title={`${agentId} (click to copy)`}>
+              <div className="info-badge agent-id-badge" title={`${agentId || ''} (click to copy)`}>
                 <span
                   className="info-badge-value copyable"
-                  onClick={(e) => handleCopyToClipboard(agentId, e as any)}
+                  onClick={(e) => handleCopyToClipboard(agentId || '', e as any)}
                   role="button"
                   tabIndex={0}
                 >

@@ -77,6 +77,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
+    return undefined
   }, [showDropdown, openSubmenuProject])
 
   useEffect(() => {
@@ -282,11 +283,12 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
     const showSpinner = !isCursor && agent.terminalPid && !isWaiting
     const isCollapsed = collapsedSuperMinions.has(agent.id)
 
-    const handleAgentItemClick = (e: React.MouseEvent) => {
+    const handleAgentItemClick = () => {
       handleAgentClick(agent, projectPath)
     }
 
     const handleCollapseClick = (e: React.MouseEvent) => {
+      e.stopPropagation()
       toggleSuperMinionCollapse(agent.id, e)
     }
 

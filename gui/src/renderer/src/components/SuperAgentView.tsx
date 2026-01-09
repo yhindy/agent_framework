@@ -11,13 +11,13 @@ import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
-import { SuperAgentInfo } from '../../main/services/types/ProjectConfig'
+import { SuperAgentInfo } from '../types/agent'
 
 interface SuperAgentViewProps {
   activeProjects: any[]
 }
 
-function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
+function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)

@@ -86,7 +86,7 @@ interface SessionJSONLEntry {
   message?: {
     model?: string
     role?: string
-    content?: Array<{ type: string; [key: string]: any }>
+    content?: string | Array<{ type: string; [key: string]: any }>
     stop_reason?: string | null
     usage?: {
       input_tokens?: number
@@ -218,7 +218,6 @@ export class ClaudeSessionInfoService {
       let lastModel = ''
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
       let lastTimestamp = ''
-      let lastEntry: SessionJSONLEntry | null = null
 
       // Track Task tool invocations
       const taskInvocationsMap = new Map<string, TaskInvocation>()
@@ -228,11 +227,6 @@ export class ClaudeSessionInfoService {
 
         try {
           const entry = JSON.parse(line) as SessionJSONLEntry
-
-          // Track last meaningful entry for state detection (skip queue-operation, etc.)
-          if (entry.type === 'assistant' || entry.type === 'user') {
-            lastEntry = entry
-          }
 
           // Extract timestamp
           if (entry.timestamp) {
@@ -342,7 +336,7 @@ export class ClaudeSessionInfoService {
           }
 
           // Skip slash command entries (not real user input)
-          if (entry.type === 'user') {
+          if (entry.type === 'user' && entry.message) {
             const isSlashCommand = typeof entry.message.content === 'string' &&
               entry.message.content.includes('<command-name>')
 
@@ -490,7 +484,7 @@ export class ClaudeSessionInfoService {
           }
 
           // Skip slash command entries (not real user input)
-          if (entry.type === 'user') {
+          if (entry.type === 'user' && entry.message) {
             const isSlashCommand = typeof entry.message.content === 'string' &&
               entry.message.content.includes('<command-name>')
 

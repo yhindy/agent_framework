@@ -1,6 +1,6 @@
 import { AgentService } from '../AgentService'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
 import { vi } from 'vitest'
