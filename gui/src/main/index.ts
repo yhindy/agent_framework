@@ -383,6 +383,31 @@ function setupIPC(): void {
     return services!.agent.clearUnread(agentId)
   })
 
+  // Get current state of an agent (for frontend sync on reload)
+  ipcMain.handle('agent:getState', async (_event, agentId: string) => {
+    try {
+      const projectPath = await findProjectForAgent(agentId)
+      const agents = await services!.agent.listAgents(projectPath)
+      const agent = agents.find(a => a.id === agentId)
+
+      if (!agent || !agent.claudeSessionId || agent.tool !== 'claude') {
+        return 'unknown'
+      }
+
+      // Read current state from JSONL (source of truth)
+      const state = services!.claudeSessionInfo.getSessionState(
+        agent.claudeSessionId,
+        agent.worktreePath
+      )
+
+      console.log(`[IPC] agent:getState for ${agentId}: ${state}`)
+      return state
+    } catch (error) {
+      console.error(`Failed to get state for ${agentId}:`, error)
+      return 'unknown'
+    }
+  })
+
   ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
     return services!.agent.getSuperAgentDetails(projectPath, agentId)

@@ -68,20 +68,30 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
   }, [showDropdown, openSubmenuProject])
 
   useEffect(() => {
-    // Load agents and initialize waiting states from persisted data
+    // Load agents and query current state from backend
     const loadAgentsAndStates = async () => {
       const agentsByProj: AgentsByProject = {}
-      const waitingFromFiles = new Set<string>()
+      const currentWaitingAgents = new Set<string>()
 
       for (const project of activeProjects) {
         try {
           const agents = await window.electronAPI.listAgentsForProject(project.path)
           agentsByProj[project.path] = agents
 
-          // Initialize waiting states from .agent-info (restored after app restart)
+          // Query backend for CURRENT state of each active Claude agent
+          // This fixes the "stuck state" bug on page reload
           for (const agent of agents) {
-            if ((agent as any).isWaitingForInput) {
-              waitingFromFiles.add(agent.id)
+            if (agent.terminalPid && agent.tool === 'claude') {
+              try {
+                const state = await window.electronAPI.getAgentState(agent.id)
+                console.log(`[Sidebar] Queried state for ${agent.id}: ${state}`)
+
+                if (state === 'waiting') {
+                  currentWaitingAgents.add(agent.id)
+                }
+              } catch (err) {
+                console.error(`Failed to query state for ${agent.id}:`, err)
+              }
             }
           }
         } catch (err) {
@@ -91,18 +101,9 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       }
 
       setAgentsByProject(agentsByProj)
-      // Use file-based state as source of truth, but only update if actually different
-      // This avoids overwriting fresh IPC updates with stale file reads during race conditions
-      setWaitingAgents(prev => {
-        // If file says waiting but we don't have it, add it (restore from persistence)
-        // If file says not waiting but we have it, remove it (file is authoritative)
-        // This ensures file persistence works while IPC provides real-time updates
-        const next = new Set<string>()
-        for (const agentId of waitingFromFiles) {
-          next.add(agentId)
-        }
-        console.log('[Sidebar] loadAgentsAndStates - waiting from files:', [...waitingFromFiles], 'prev:', [...prev])
-        return next
+      setWaitingAgents(currentWaitingAgents)
+      console.log('[Sidebar] Loaded agents with current states:', {
+        waiting: [...currentWaitingAgents]
       })
     }
 
@@ -113,17 +114,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
       loadAgentsAndStates()
     })
 
-    // Listen for waiting state changes
-    const unsubWaiting = window.electronAPI.onAgentWaitingForInput((agentId) => {
-      console.log('[Sidebar] Received waitingForInput event for:', agentId)
-      setWaitingAgents(prev => new Set([...prev, agentId]))
-    })
+    // Listen for state changes (NEW: replaces individual waiting/resumed events)
+    const unsubStateChanged = window.electronAPI.onAgentStateChanged((agentId, state) => {
+      console.log('[Sidebar] State changed:', agentId, state)
 
-    const unsubResumed = window.electronAPI.onAgentResumedWork((agentId) => {
-      console.log('[Sidebar] Received resumedWork event for:', agentId)
       setWaitingAgents(prev => {
         const next = new Set(prev)
-        next.delete(agentId)
+        if (state === 'waiting') {
+          next.add(agentId)
+        } else {
+          next.delete(agentId)
+        }
         return next
       })
     })
@@ -143,8 +144,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
 
     return () => {
       unsubscribe()
-      unsubWaiting()
-      unsubResumed()
+      unsubStateChanged()
       unsubPlainWaiting()
       unsubPlainResumed()
     }
