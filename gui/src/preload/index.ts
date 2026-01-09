@@ -98,7 +98,18 @@ const api = {
     return () => ipcRenderer.removeListener('assignments:updated', subscription)
   },
 
-  // Agent Waiting Events
+  // Agent State APIs
+  getAgentState: (agentId: string) => ipcRenderer.invoke('agent:getState', agentId),
+
+  onAgentStateChanged: (callback: (agentId: string, state: 'working' | 'waiting' | 'unknown') => void) => {
+    const subscription = (_event: any, agentId: string, state: 'working' | 'waiting' | 'unknown') => {
+      callback(agentId, state)
+    }
+    ipcRenderer.on('agent:stateChanged', subscription)
+    return () => ipcRenderer.removeListener('agent:stateChanged', subscription)
+  },
+
+  // Agent Waiting Events (legacy, use onAgentStateChanged instead)
   onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => {
     const subscription = (_event: any, agentId: string, promptText: string) =>
       callback(agentId, promptText)

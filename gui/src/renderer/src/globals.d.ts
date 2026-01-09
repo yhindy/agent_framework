@@ -73,6 +73,12 @@ declare global {
       // Event listeners
       onAgentListUpdate: (callback: () => void) => () => void
       onAssignmentsUpdate: (callback: () => void) => () => void
+
+      // Agent State APIs
+      getAgentState: (agentId: string) => Promise<'working' | 'waiting' | 'unknown'>
+      onAgentStateChanged: (callback: (agentId: string, state: 'working' | 'waiting' | 'unknown') => void) => () => void
+
+      // Legacy (use onAgentStateChanged instead)
       onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => void
       onAgentResumedWork: (callback: (agentId: string) => void) => () => void
     }

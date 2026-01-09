@@ -10,6 +10,34 @@ import { homedir } from 'os'
  * internal session state.
  */
 
+/**
+ * Claude API stop_reason values
+ * These indicate why Claude stopped generating (finished turn, tool use, etc.)
+ * @see https://docs.anthropic.com/en/api/messages
+ */
+export const CLAUDE_STOP_REASONS = {
+  /** Claude finished its turn and is ready for user input */
+  END_TURN: 'end_turn',
+
+  /** Claude wants to use a tool (waiting for tool results, NOT user input) */
+  TOOL_USE: 'tool_use',
+
+  /** Claude hit a stop sequence */
+  STOP_SEQUENCE: 'stop_sequence',
+
+  /** Maximum tokens reached */
+  MAX_TOKENS: 'max_tokens',
+} as const
+
+type ClaudeStopReason = typeof CLAUDE_STOP_REASONS[keyof typeof CLAUDE_STOP_REASONS] | null
+
+/**
+ * Tools that wait for HUMAN input (not automatic tool results)
+ * When these tools are used, Claude is waiting for the user to respond,
+ * not waiting for tool execution to complete.
+ */
+const HUMAN_INPUT_TOOLS = ['ExitPlanMode', 'AskUserQuestion'] as const
+
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
@@ -126,6 +154,7 @@ export class ClaudeSessionInfoService {
   findSessionFile(sessionId: string, worktreePath: string): string | null {
     const projectPath = this.getClaudeProjectPath(worktreePath)
     if (!projectPath) {
+      console.warn(`[ClaudeSessionInfoService] Could not find Claude project directory for worktree: ${worktreePath}`)
       return null
     }
 
@@ -134,6 +163,7 @@ export class ClaudeSessionInfoService {
       return sessionFile
     }
 
+    console.warn(`[ClaudeSessionInfoService] Session file not found: ${sessionFile}`)
     return null
   }
 
@@ -292,30 +322,92 @@ export class ClaudeSessionInfoService {
         }
       }
 
-      // Determine state from the LAST entry only
-      // waiting = assistant finished with text (no tool_use, no thinking)
-      // working = everything else
-      if (lastEntry) {
-        if (lastEntry.type === 'assistant' && lastEntry.message) {
-          const content = lastEntry.message.content
-          if (Array.isArray(content)) {
-            const hasToolUse = content.some(c => c.type === 'tool_use')
-            const hasThinking = content.some(c => c.type === 'thinking')
-            const hasText = content.some(c => c.type === 'text')
+      // Determine state from the LAST REAL entry (skip slash commands)
+      //
+      // ACCEPTANCE CRITERIA: Only show "waiting" when Claude is expecting human input
+      //
+      // 3-state logic:
+      // - waiting: Claude FINISHED turn and is ready for human input
+      // - working: Claude is processing, using tools, or waiting for tool results
+      // - unknown: any other case (safe default)
 
-            // Only waiting if Claude sent text without tool_use or thinking
-            if (hasText && !hasToolUse && !hasThinking) {
-              state = 'waiting'
-            } else {
-              state = 'working'
-            }
-          } else {
-            // No content array = working (still processing)
-            state = 'working'
+      // Scan backwards to find last REAL conversation entry (skip slash commands)
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]) as SessionJSONLEntry
+
+          // Skip non-conversation entries
+          if (entry.type !== 'user' && entry.type !== 'assistant') {
+            continue
           }
-        } else if (lastEntry.type === 'user') {
-          // User sent message/tool_result = Claude is processing
-          state = 'working'
+
+          // Skip slash command entries (not real user input)
+          if (entry.type === 'user') {
+            const isSlashCommand = typeof entry.message.content === 'string' &&
+              entry.message.content.includes('<command-name>')
+
+            if (isSlashCommand) {
+              continue // Skip this, look for earlier entry
+            }
+
+            // Real user message/tool_result = Claude is processing
+            state = 'working'
+            break
+          }
+
+          if (entry.type === 'assistant' && entry.message) {
+            const message = entry.message
+            const content = message.content
+            const stopReason = message.stop_reason as ClaudeStopReason
+
+            if (Array.isArray(content)) {
+              const hasToolUse = content.some(c => c.type === 'tool_use')
+              const hasThinking = content.some(c => c.type === 'thinking')
+              const hasText = content.some(c => c.type === 'text')
+
+              // Check for tools that wait for HUMAN input (not automatic tool results)
+              const humanInputTool = content.find(c =>
+                c.type === 'tool_use' && HUMAN_INPUT_TOOLS.includes(c.name as any)
+              )
+
+              // CRITICAL: Some tools like ExitPlanMode and AskUserQuestion are waiting
+              // for HUMAN input, not tool execution. Detect these first.
+              if (humanInputTool) {
+                // Waiting for human to approve plan or answer question
+                state = 'waiting'
+
+              } else if (stopReason === CLAUDE_STOP_REASONS.END_TURN) {
+                // Claude explicitly finished its turn - ready for human input
+                // NOTE: This only appears in sidechain agents, not main sessions
+                state = 'waiting'
+
+              } else if (stopReason === CLAUDE_STOP_REASONS.TOOL_USE || hasToolUse) {
+                // Claude wants to use tools - waiting for TOOL results, not human
+                state = 'working'
+
+              } else if (hasThinking) {
+                // Claude in extended thinking mode
+                state = 'working'
+
+              } else if (hasText && !hasToolUse && !hasThinking) {
+                // Text-only message
+                // NOTE: Main sessions always have stop_reason=null even when done,
+                // so we can't rely on stop_reason to detect completion.
+                // For now, treat text-only as waiting (may cause false positives)
+                state = 'waiting'
+
+              } else {
+                // Any other case (streaming, unknown format, etc.)
+                state = 'working'
+              }
+            } else {
+              // No content array = unknown (unexpected format)
+              state = 'unknown'
+            }
+            break
+          }
+        } catch {
+          continue
         }
       }
 
@@ -382,8 +474,10 @@ export class ClaudeSessionInfoService {
       const lines = tail.split('\n').filter(l => l.trim())
 
       // Process lines from end to find latest state
-      // waiting = assistant finished with text (no tool_use, no thinking)
-      // working = everything else
+      // Same 3-state logic as parseSessionInfo (check stop_reason):
+      // - waiting: Claude FINISHED turn and is ready for human input
+      // - working: Claude is processing, using tools, or waiting for tool results
+      // - unknown: any other case (safe default)
       let state: 'working' | 'waiting' | 'unknown' = 'unknown'
 
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -395,28 +489,69 @@ export class ClaudeSessionInfoService {
             continue
           }
 
+          // Skip slash command entries (not real user input)
+          if (entry.type === 'user') {
+            const isSlashCommand = typeof entry.message.content === 'string' &&
+              entry.message.content.includes('<command-name>')
+
+            if (isSlashCommand) {
+              continue // Skip this, look for earlier entry
+            }
+
+            // Real user message/tool_result = Claude is processing
+            state = 'working'
+            break
+          }
+
           if (entry.type === 'assistant' && entry.message) {
-            const content = entry.message.content
+            const message = entry.message
+            const content = message.content
+            const stopReason = message.stop_reason as ClaudeStopReason
+
             if (Array.isArray(content)) {
               const hasToolUse = content.some(c => c.type === 'tool_use')
               const hasThinking = content.some(c => c.type === 'thinking')
               const hasText = content.some(c => c.type === 'text')
 
-              // Only waiting if Claude sent text without tool_use or thinking
-              if (hasText && !hasToolUse && !hasThinking) {
+              // Check for tools that wait for HUMAN input (not automatic tool results)
+              const humanInputTool = content.find(c =>
+                c.type === 'tool_use' && HUMAN_INPUT_TOOLS.includes(c.name as any)
+              )
+
+              // CRITICAL: Some tools like ExitPlanMode and AskUserQuestion are waiting
+              // for HUMAN input, not tool execution. Detect these first.
+              if (humanInputTool) {
+                // Waiting for human to approve plan or answer question
                 state = 'waiting'
+
+              } else if (stopReason === CLAUDE_STOP_REASONS.END_TURN) {
+                // Claude explicitly finished its turn - ready for human input
+                // NOTE: This only appears in sidechain agents, not main sessions
+                state = 'waiting'
+
+              } else if (stopReason === CLAUDE_STOP_REASONS.TOOL_USE || hasToolUse) {
+                // Claude wants to use tools - waiting for TOOL results, not human
+                state = 'working'
+
+              } else if (hasThinking) {
+                // Claude in extended thinking mode
+                state = 'working'
+
+              } else if (hasText && !hasToolUse && !hasThinking) {
+                // Text-only message
+                // NOTE: Main sessions always have stop_reason=null even when done,
+                // so we can't rely on stop_reason to detect completion.
+                // For now, treat text-only as waiting (may cause false positives)
+                state = 'waiting'
+
               } else {
+                // Any other case (streaming, unknown format, etc.)
                 state = 'working'
               }
             } else {
-              state = 'working'
+              // No content array = unknown (unexpected format)
+              state = 'unknown'
             }
-            break
-          }
-
-          if (entry.type === 'user') {
-            // User sent message/tool_result = Claude is processing
-            state = 'working'
             break
           }
 

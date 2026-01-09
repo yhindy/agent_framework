@@ -125,8 +125,12 @@ export class TerminalService {
     model?: string,
     yolo?: boolean
   ): Promise<void> {
-    // Stop existing terminal if any
-    this.stopAgent(agentId)
+    // Stop existing terminal if any (clean up orphaned sessions)
+    const existingSession = this.terminals.get(agentId)
+    if (existingSession) {
+      console.log(`[TerminalService] Cleaning up existing terminal for ${agentId} before starting`)
+      this.stopAgent(agentId)
+    }
 
     // Determine worktree path
     let worktreePath: string
@@ -249,63 +253,67 @@ export class TerminalService {
       // JSONL-based state detection for Claude (more reliable than pattern matching)
       let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
 
-      // Poll JSONL state every 2 seconds for notification triggers
-      // Smart caching (mtime check) makes frequent polling efficient - cache hits are ~0.1ms
-      console.log(`[TerminalService] Starting JSONL state polling for ${agentId} (session: ${sessionId})`)
-      statePollingInterval = setInterval(() => {
+      // Extract state check logic for reuse (immediate check + polling)
+      const checkAndBroadcastState = () => {
         if (!sessionId) return
 
         const currentState = this.claudeSessionInfoService!.getSessionState(sessionId, worktreePath)
 
+        console.log(`[TerminalService] State check for ${agentId}: ${currentState} (previous: ${lastKnownState})`)
+
         // Detect state transitions
         if (currentState !== lastKnownState) {
-          console.log(`[TerminalService] State transition for ${agentId}: ${lastKnownState} -> ${currentState} (session: ${sessionId})`)
-          if (currentState === 'waiting' && lastKnownState !== 'waiting') {
-            // Transitioned to waiting - emit notification
-            console.log(`[TerminalService] ${agentId} now waiting for input - sending IPC event`)
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+          console.log(`[TerminalService] State changed: ${lastKnownState} -> ${currentState}`)
+
+          // Broadcast new state via IPC
+          this.mainWindow.webContents.send('agent:stateChanged', agentId, currentState)
+
+          if (currentState === 'waiting') {
+            // Transitioned to waiting - send notification
+            console.log(`[TerminalService] ${agentId} now waiting for input`)
+
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
               body: `Agent ${agentId} is waiting for your input`,
               agentId
             })
+
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,
+              claudeState: 'waiting',
               claudeLastSeen: new Date().toISOString()
             }).then(() => {
-              // Also emit agents:updated to ensure sidebar reloads from files
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
-          } else if (currentState === 'working' && lastKnownState === 'waiting') {
-            // Transitioned to working - clear notification
-            console.log(`[TerminalService] ${agentId} resumed work - sending IPC event`)
-            this.mainWindow.webContents.send('agent:resumedWork', agentId)
+
+          } else if (currentState === 'working') {
+            // Transitioned to working - clear waiting state
+            console.log(`[TerminalService] ${agentId} is working`)
+
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,
+              claudeState: 'working',
               claudeLastSeen: new Date().toISOString()
             }).then(() => {
-              // Also emit agents:updated to ensure sidebar reloads from files
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
           }
 
           lastKnownState = currentState
         }
-      }, 2000) // 2 second interval - mtime caching makes this efficient
-
-      // Initialize state if resuming - and emit current state to ensure sidebar is in sync
-      if (isResume) {
-        const initialState = this.claudeSessionInfoService.getSessionState(sessionId, worktreePath)
-        lastKnownState = initialState
-        console.log(`[TerminalService] Resume: initial JSONL state for ${agentId} is '${initialState}'`)
-
-        // Emit initial state event so sidebar is immediately in sync
-        if (initialState === 'waiting') {
-          console.log(`[TerminalService] Resume: emitting initial waitingForInput for ${agentId}`)
-          this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
-        }
       }
+
+      // Check state IMMEDIATELY (no delay for fast Claude responses)
+      console.log(`[TerminalService] Performing immediate state check for ${agentId}`)
+      checkAndBroadcastState()
+
+      // Then poll every 1 second (faster than 2s, still efficient with caching)
+      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${sessionId})`)
+      statePollingInterval = setInterval(() => {
+        checkAndBroadcastState()
+      }, 1000) // 1 second interval - mtime caching makes this efficient
+
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
       idleDetector = new IdleDetector(
@@ -384,7 +392,10 @@ export class TerminalService {
     })
 
     // Handle exit
-    terminal.onExit(() => {
+    terminal.onExit((data) => {
+      const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
+      console.log(`[TerminalService] Terminal exited for ${agentId} - ${exitInfo}`)
+
       // Clean up idle detector (legacy, for non-Claude tools)
       session.idleDetector?.dispose()
 
