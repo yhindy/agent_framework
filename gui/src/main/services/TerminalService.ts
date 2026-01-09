@@ -279,6 +279,9 @@ export class TerminalService {
             // Transitioned to waiting - send notification
             console.log(`[TerminalService] ${agentId} now waiting for input`)
 
+            // Also send legacy event for backward compatibility
+            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Waiting for input')
+
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
@@ -297,6 +300,9 @@ export class TerminalService {
           } else if (currentState === 'working') {
             // Transitioned to working - clear waiting state
             console.log(`[TerminalService] ${agentId} is working`)
+
+            // Also send legacy event for backward compatibility
+            this.mainWindow.webContents.send('agent:resumedWork', agentId)
 
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,
