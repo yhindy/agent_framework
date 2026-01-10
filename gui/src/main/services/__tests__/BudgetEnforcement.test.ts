@@ -74,7 +74,7 @@ describe('Budget Enforcement', () => {
       mode: 'dev' as const,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
-      parentAgentId: 'test-super'
+      parentAgentId: 'super-1'
     }
 
     const child2Info = {
@@ -88,7 +88,7 @@ describe('Budget Enforcement', () => {
       mode: 'dev' as const,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
-      parentAgentId: 'test-super'
+      parentAgentId: 'super-1'
     }
 
     const child1Worktree = join(tmpdir(), 'test-child-1')
@@ -120,8 +120,9 @@ describe('Budget Enforcement', () => {
     createAssignmentSpy.mockRejectedValueOnce(new Error('Should not be called'))
 
     // Mock listAgents to return our test setup
+    // Note: approvePlan calls listAgents twice (once directly, once via getSuperAgentDetails)
     const listAgentsSpy = vi.spyOn(agentService, 'listAgents')
-    listAgentsSpy.mockResolvedValueOnce([
+    listAgentsSpy.mockResolvedValue([
       {
         id: 'super-1',
         assignmentId: 'super-1',
@@ -142,7 +143,7 @@ describe('Budget Enforcement', () => {
         lastActivity: new Date().toISOString(),
         mode: 'dev',
         tool: 'claude',
-        parentAgentId: 'test-super'
+        parentAgentId: 'super-1'
       },
       {
         id: 'child-2',
@@ -153,7 +154,7 @@ describe('Budget Enforcement', () => {
         lastActivity: new Date().toISOString(),
         mode: 'dev',
         tool: 'claude',
-        parentAgentId: 'test-super'
+        parentAgentId: 'super-1'
       }
     ] as any)
 
