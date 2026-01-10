@@ -289,12 +289,10 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
    - **Timeout**: 10 minutes
    - **Dependencies**: Requires lint, test-gui, test-minions to pass or be skipped
    - **Key steps**:
-     1. Install root dependencies: `npm ci`
-     2. Install workspace dependencies: `npm ci -w gui`
-     3. Verify electron package available
-     4. Build: `npm run build -w gui`
-     5. Verify artifacts created
-     6. Upload artifacts (7-day retention)
+     1. Install dependencies: `npm ci` (installs all workspace deps including electron at root)
+     2. Build: `npm run build -w gui`
+     3. Verify artifacts created (main, preload, renderer bundles)
+     4. Upload artifacts (7-day retention)
 
 CI uses intelligent test selection - only runs tests related to changed files.
 

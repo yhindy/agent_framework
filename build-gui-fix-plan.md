@@ -1,5 +1,7 @@
 # Plan: Fix build-gui CI Test Failure
 
+> **⚠️ Note**: This document represents the initial plan. During implementation, we discovered the root cause was different than originally diagnosed. The **actual solution** was much simpler: add `electron` to root `package.json` devDependencies. See the "Actual Implementation" section at the end for what was actually done.
+
 ## Problem Statement
 
 The `build-gui` job in CI is failing with the error:
@@ -451,3 +453,81 @@ ls -lh gui/out/main/index.js gui/out/preload/index.js gui/out/renderer/index.htm
 2. Monitor build times over next week
 3. Evaluate if cross-platform builds are needed
 4. Consider adding E2E tests (see Automated Testing Section)
+
+---
+
+## Actual Implementation (What We Actually Did)
+
+### Root Cause Discovery
+
+During implementation, a debugger agent discovered the **actual root cause** was different from the initial diagnosis:
+
+**Real Problem**: 
+- `electron-vite` is installed at root level (hoisted by npm workspaces)
+- `electron` was only in `gui/devDependencies`, so installed in `gui/node_modules/`
+- When `electron-vite` calls `require.resolve('electron/package.json')`, Node's module resolution starts from where electron-vite is located (root)
+- Node couldn't find electron because it wasn't in root `node_modules/`
+
+**Why Initial Testing Passed Locally**:
+- The `ELECTRON_MAJOR_VER` environment variable persisted in the shell from a previous build
+- When set, electron-vite skips the `require.resolve()` call entirely
+- This masked the underlying module resolution issue
+
+### Actual Solution
+
+**Simple and Clean**: Add `electron` to root `package.json` devDependencies
+
+```json
+{
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "electron": "^28.2.3",  // Added this
+    "vitest": "^3.2.4"
+  }
+}
+```
+
+This ensures:
+1. npm installs electron at root level where electron-vite can find it
+2. Node's module resolution works correctly
+3. No workarounds or extra CI steps needed
+
+### Files Actually Changed
+
+1. **`package.json`**: Added electron to root devDependencies
+2. **`package-lock.json`**: Updated with proper dependency tree
+3. **`.github/workflows/ci.yml`**: Kept simple (just `npm ci`, no workarounds)
+4. **`CLAUDE.md`**: 
+   - Added "Dependency Management" section with clear conventions
+   - Updated CI/CD Pipeline documentation to reflect simplified workflow
+   - Updated troubleshooting guide
+
+### Key Learnings
+
+1. **Dependency Placement Matters**: Build tools at root need their dependencies at root too
+2. **Environment Variables Can Mask Bugs**: Always test in a clean environment
+3. **Simpler is Better**: The workaround (adding `npm ci -w gui`) was unnecessary complexity
+4. **Document Conventions**: Established clear rules for where to place dependencies in a monorepo
+
+### Final CI Results
+
+✅ All checks passed on PR #60:
+- detect-changes: SUCCESS
+- lint: SUCCESS  
+- test-gui: SUCCESS
+- test-minions: SUCCESS
+- **build-gui: SUCCESS** ← Fixed!
+
+Build time: ~1 second for all three bundles
+
+### Dependency Convention (Documented)
+
+**Root `package.json`** → Build/test tools used across workspaces
+- Examples: `electron`, `electron-vite`, `vitest`, `@vitest/coverage-v8`
+
+**Workspace `package.json`** → Runtime-only dependencies
+- Examples: `node-pty`, `electron-store`, `react`, `zustand`
+
+**Key Rule**: If a root-level build tool needs to `require()` or `import` a package, that package must be in root devDependencies.
+
+This prevents Node module resolution issues caused by npm workspace hoisting behavior.
