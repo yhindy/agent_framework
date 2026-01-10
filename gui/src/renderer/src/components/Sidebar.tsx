@@ -9,6 +9,8 @@ interface SidebarProps {
   onNavigate: (path: string) => void
   onProjectRemove: (path: string) => void
   onProjectAdd: () => void
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
 interface AgentSession {
@@ -42,7 +44,7 @@ interface TasksByAgent {
   [agentId: string]: TaskInvocation[]
 }
 
-function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: SidebarProps) {
+function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse }: SidebarProps) {
   const location = useLocation()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
   const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
@@ -341,7 +343,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd }: 
   }
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+      <button
+        className="collapse-sidebar-btn"
+        onClick={onToggleCollapse}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        <span className="collapse-icon">{isCollapsed ? '▶' : '◀'}</span>
+      </button>
       <div className="sidebar-nav">
         <div
           className={`nav-item ${isHomeActive ? 'active' : ''}`}

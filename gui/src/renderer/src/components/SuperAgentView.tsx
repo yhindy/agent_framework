@@ -31,6 +31,24 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   const [plainTerminals, setPlainTerminals] = useState<string[]>([])
   const [terminalCounter, setTerminalCounter] = useState(0)
 
+  // Task sidebar collapse state
+  const [isTaskSidebarCollapsed, setIsTaskSidebarCollapsed] = useState(false)
+
+  // Load task sidebar collapsed state from localStorage
+  useEffect(() => {
+    const savedState = localStorage.getItem('taskSidebarCollapsed')
+    if (savedState !== null) {
+      setIsTaskSidebarCollapsed(savedState === 'true')
+    }
+  }, [])
+
+  // Toggle task sidebar collapse
+  const toggleTaskSidebar = () => {
+    const newState = !isTaskSidebarCollapsed
+    setIsTaskSidebarCollapsed(newState)
+    localStorage.setItem('taskSidebarCollapsed', String(newState))
+  }
+
   // Test environment management
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
@@ -413,7 +431,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         </div>
 
         {/* Terminal area with optional sidebar */}
-        <div className={`terminal-area ${hasTasks ? 'with-sidebar' : ''}`}>
+        <div className={`terminal-area ${hasTasks ? (isTaskSidebarCollapsed ? 'with-sidebar-collapsed' : 'with-sidebar') : ''}`}>
           <div className="unified-terminal-container">
             {activeTab === 'orchestration' && (
               <Terminal
@@ -448,8 +466,17 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
 
           {/* Task sidebar - only shown when tasks exist */}
           {hasTasks && (
-            <div className="task-sidebar">
-              <h3>Tasks ({agent.taskInvocations?.length || 0})</h3>
+            <div className={`task-sidebar ${isTaskSidebarCollapsed ? 'collapsed' : ''}`}>
+              <button
+                className="collapse-task-sidebar-btn"
+                onClick={toggleTaskSidebar}
+                title={isTaskSidebarCollapsed ? 'Expand task sidebar' : 'Collapse task sidebar'}
+              >
+                {isTaskSidebarCollapsed ? '◀' : '▶'}
+              </button>
+              <div className="task-sidebar-header">
+                <h3>Tasks ({agent.taskInvocations?.length || 0})</h3>
+              </div>
               <div className="task-list">
                 {agent.taskInvocations?.map(task => (
                   <TaskStatusCard

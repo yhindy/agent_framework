@@ -4,6 +4,140 @@ import Sidebar from '../Sidebar'
 import { MemoryRouter } from 'react-router-dom'
 import React from 'react'
 
+describe('Sidebar Collapse', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  const mockAgents = [
+    {
+      id: 'agent-1',
+      agentId: 'agent-1',
+      terminalPid: 123,
+      hasUnread: false,
+      lastActivity: new Date().toISOString(),
+      branch: 'feature/test-project/test-feature'
+    }
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+  })
+
+  it('renders collapse button', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    const collapseButton = screen.getByTitle('Collapse sidebar')
+    expect(collapseButton).toBeInTheDocument()
+  })
+
+  it('calls onToggleCollapse when collapse button is clicked', async () => {
+    const mockToggle = vi.fn()
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={mockToggle}
+        />
+      </MemoryRouter>
+    )
+
+    const collapseButton = screen.getByTitle('Collapse sidebar')
+    fireEvent.click(collapseButton)
+
+    expect(mockToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies collapsed class when isCollapsed is true', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={true}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    const sidebar = container.querySelector('.sidebar')
+    expect(sidebar).toHaveClass('collapsed')
+  })
+
+  it('does not apply collapsed class when isCollapsed is false', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    const sidebar = container.querySelector('.sidebar')
+    expect(sidebar).not.toHaveClass('collapsed')
+  })
+
+  it('shows correct icon when collapsed', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={true}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    const collapseButton = screen.getByTitle('Expand sidebar')
+    expect(collapseButton.textContent).toContain('▶')
+  })
+
+  it('shows correct icon when expanded', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    const collapseButton = screen.getByTitle('Collapse sidebar')
+    expect(collapseButton.textContent).toContain('◀')
+  })
+})
+
 describe('Sidebar Integration', () => {
   const mockProjects = [
     { name: 'test-project', path: '/path/to/project' }
@@ -36,11 +170,13 @@ describe('Sidebar Integration', () => {
   it('renders super minion and its child', async () => {
     render(
       <MemoryRouter>
-        <Sidebar 
-          activeProjects={mockProjects} 
-          onNavigate={() => {}} 
-          onProjectRemove={() => {}} 
-          onProjectAdd={() => {}} 
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -52,7 +188,7 @@ describe('Sidebar Integration', () => {
 
     // Child should also be visible by default (since not collapsed)
     expect(screen.getByText('child-1')).toBeInTheDocument()
-    
+
     // Super minion should have the crown icon (or at least the container)
     const superItem = screen.getByText('super-1').closest('.agent-item')
     expect(superItem).toContainHTML('👑')
@@ -66,6 +202,8 @@ describe('Sidebar Integration', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -131,6 +269,8 @@ describe('Sidebar plain terminal waiting', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -161,6 +301,8 @@ describe('Sidebar plain terminal waiting', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -201,6 +343,8 @@ describe('Sidebar plain terminal waiting', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -275,6 +419,8 @@ describe('Sidebar waiting indicator suppression', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -302,6 +448,8 @@ describe('Sidebar waiting indicator suppression', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -334,6 +482,8 @@ describe('Sidebar waiting indicator suppression', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -396,6 +546,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -431,6 +583,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -464,6 +618,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -502,6 +658,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -538,6 +696,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -571,6 +731,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -605,6 +767,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
@@ -638,6 +802,8 @@ describe('Sidebar branch name display', () => {
           onNavigate={() => {}}
           onProjectRemove={() => {}}
           onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
         />
       </MemoryRouter>
     )
