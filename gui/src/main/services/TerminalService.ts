@@ -275,6 +275,7 @@ export class TerminalService {
             // Transitioned to waiting - send notification and event
             this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
 
+            // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
               body: `Agent ${agentId} is waiting for your input`,
@@ -296,8 +297,10 @@ export class TerminalService {
             // Clear notification cooldown when user provides input
             if (lastKnownState === 'waiting') {
               this.notificationService?.clearCooldown(agentId)
-              this.mainWindow.webContents.send('agent:resumedWork', agentId)
             }
+
+            // Send event for UI updates
+            this.mainWindow.webContents.send('agent:resumedWork', agentId)
 
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,

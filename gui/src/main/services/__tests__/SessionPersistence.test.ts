@@ -355,11 +355,11 @@ describe('Session Persistence', () => {
       // Advance 1000ms to trigger first poll (returns waiting, transitions from unknown -> waiting)
       vi.advanceTimersByTime(1000)
 
-      // Verify waiting state was detected (transition from unknown -> waiting)
+      // Verify waiting state was detected (Claude uses agent:stateChanged event)
       expect(mockWebContents.send).toHaveBeenCalledWith(
-        'agent:waitingForInput',
+        'agent:stateChanged',
         'agent-1',
-        expect.anything()
+        'waiting'
       )
 
       // Clear mock to see new calls
@@ -368,7 +368,8 @@ describe('Session Persistence', () => {
       // Advance another 1000ms to trigger next poll (returns working, transitions from waiting -> working)
       vi.advanceTimersByTime(1000)
 
-      expect(mockWebContents.send).toHaveBeenCalledWith('agent:resumedWork', 'agent-1')
+      // Claude uses agent:stateChanged event for state transitions
+      expect(mockWebContents.send).toHaveBeenCalledWith('agent:stateChanged', 'agent-1', 'working')
     })
   })
 
@@ -512,15 +513,17 @@ describe('Session Persistence', () => {
       vi.advanceTimersByTime(2000)
 
       // Agent 1 should be waiting (state transitioned from unknown to waiting)
+      // Claude uses agent:stateChanged event for state transitions
       expect(mockWebContents.send).toHaveBeenCalledWith(
-        'agent:waitingForInput',
+        'agent:stateChanged',
         'agent-1',
-        expect.anything()
+        'waiting'
       )
 
       // Agent 2 should NOT be waiting (state is working, no transition to waiting)
+      // Claude uses agent:stateChanged event, so check for that
       const waitingCalls = mockWebContents.send.mock.calls.filter(
-        call => call[0] === 'agent:waitingForInput' && call[1] === 'agent-2'
+        call => call[0] === 'agent:stateChanged' && call[1] === 'agent-2' && call[2] === 'waiting'
       )
       expect(waitingCalls.length).toBe(0)
     })
