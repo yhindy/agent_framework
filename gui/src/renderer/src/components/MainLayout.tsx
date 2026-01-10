@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Dashboard from './Dashboard'
@@ -14,18 +15,35 @@ interface MainLayoutProps {
 
 function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }: MainLayoutProps) {
   const navigate = useNavigate()
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
+
+  // Load collapsed state from localStorage on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('leftSidebarCollapsed')
+    if (savedState !== null) {
+      setIsLeftSidebarCollapsed(savedState === 'true')
+    }
+  }, [])
 
   const handleNavigate = (path: string) => {
     navigate(path)
   }
 
+  const toggleLeftSidebar = () => {
+    const newState = !isLeftSidebarCollapsed
+    setIsLeftSidebarCollapsed(newState)
+    localStorage.setItem('leftSidebarCollapsed', String(newState))
+  }
+
   return (
     <div className="main-layout">
-      <Sidebar 
+      <Sidebar
         activeProjects={activeProjects}
         onNavigate={handleNavigate}
         onProjectRemove={onProjectRemove}
         onProjectAdd={onProjectAdd}
+        isCollapsed={isLeftSidebarCollapsed}
+        onToggleCollapse={toggleLeftSidebar}
       />
       <div className="content-area">
         <Routes>
