@@ -6,7 +6,7 @@ export interface NotificationOptions {
   agentId?: string
 }
 
-const COOLDOWN_MS = 60000 // 60 seconds between notifications for the same agent
+const COOLDOWN_MS = 30000 // 30 seconds between notifications for the same agent
 
 export class NotificationService {
   private cooldowns: Map<string, number> = new Map()
