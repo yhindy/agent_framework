@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AgentService } from '../AgentService'
 
+// Mock electron
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false,
+    getAppPath: vi.fn(() => '/app')
+  }
+}))
+
 // Mock fs
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
@@ -75,12 +83,13 @@ branch refs/heads/main`
     // and assume listAgents does the file check (which we see in source code)
   })
 
-  it('should return relative path for super minion rules', () => {
+  it('should return absolute path for super minion rules from bundled resources', () => {
     const agentService = new AgentService()
     const rulesPath = agentService.getSuperMinionRulesPath()
 
-    expect(rulesPath).toBe('minions/rules/super-minion-rules.md')
-    expect(rulesPath).not.toContain('gui/resources')
+    // In dev mode (app.isPackaged = false), path is /app/resources/minions/rules/super-minion-rules.md
+    expect(rulesPath).toContain('minions/rules/super-minion-rules.md')
+    expect(rulesPath).toContain('/app/resources/minions')
   })
 })
 
