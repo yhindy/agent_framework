@@ -401,7 +401,7 @@ export class TerminalService {
       })
 
       // Set up JSONL watcher for super minions to emit updates on task invocation changes
-      if (agentInfo?.isSuperMinion && this.claudeSessionInfoService) {
+      if ((agentInfo as any)?.isSuperMinion && this.claudeSessionInfoService) {
         this.claudeSessionInfoService.watchSession(sessionId, worktreePath, () => {
           this.mainWindow.webContents.send('agents:updated')
         })
