@@ -5,6 +5,9 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  padding-bottom: 40px;
 }
 
 .sidebar-nav {
@@ -566,5 +569,81 @@
   50% {
     opacity: 0.5;
   }
+}
+
+/* Sidebar collapse button */
+.collapse-sidebar-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  color: #858585;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  z-index: 100;
+}
+
+.collapse-sidebar-btn:hover {
+  background: #3c3c3c;
+  color: #ffffff;
+}
+
+.collapse-sidebar-btn .collapse-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Center button when collapsed */
+.sidebar.collapsed .collapse-sidebar-btn {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+/* Collapsed sidebar styles */
+.sidebar.collapsed {
+  width: 48px;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .project-name-sidebar,
+.sidebar.collapsed .agent-id,
+.sidebar.collapsed .agent-branch,
+.sidebar.collapsed .task-description,
+.sidebar.collapsed .dropdown-label,
+.sidebar.collapsed .projects-section,
+.sidebar.collapsed .add-mission-btn,
+.sidebar.collapsed .remove-project-btn {
+  display: none !important;
+}
+
+.sidebar.collapsed .sidebar-nav {
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 8px;
+  min-width: auto;
+}
+
+.sidebar.collapsed .dropdown-container {
+  width: 100%;
+}
+
+.sidebar.collapsed .dropdown-trigger {
+  width: 100%;
+  justify-content: center;
 }
 

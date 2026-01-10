@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SuperAgentView from '../SuperAgentView'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -188,6 +188,236 @@ describe('SuperAgentView', () => {
       const budgetBadge = screen.getByText('Budget: 1/5')
       expect(budgetBadge).toBeInTheDocument()
       expect(budgetBadge.classList.contains('budget-badge')).toBe(true)
+    })
+  })
+})
+
+describe('SuperAgentView Task Sidebar Collapse', () => {
+  const mockSuperAgentWithTasks = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/test-project/master-coordination',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'active',
+    tool: 'claude',
+    mode: 'planning',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    minionBudget: 5,
+    children: [],
+    pendingPlans: [],
+    taskInvocations: [
+      {
+        toolUseId: 'task-1',
+        description: 'Test task 1',
+        subagentType: 'general-purpose',
+        status: 'running' as const
+      },
+      {
+        toolUseId: 'task-2',
+        description: 'Test task 2',
+        subagentType: 'Explore',
+        status: 'completed' as const
+      }
+    ]
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithTasks)
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+  })
+
+  it('renders task sidebar when tasks exist', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const taskSidebar = container.querySelector('.task-sidebar')
+      expect(taskSidebar).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Tasks (2)')).toBeInTheDocument()
+  })
+
+  it('renders collapse button in task sidebar', async () => {
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Collapse task sidebar')).toBeInTheDocument()
+    })
+  })
+
+  it('loads collapsed state from localStorage on mount', async () => {
+    localStorage.setItem('taskSidebarCollapsed', 'true')
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const taskSidebar = container.querySelector('.task-sidebar')
+      expect(taskSidebar).toHaveClass('collapsed')
+    })
+  })
+
+  it('does not collapse task sidebar when localStorage is not set', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const taskSidebar = container.querySelector('.task-sidebar')
+      expect(taskSidebar).not.toHaveClass('collapsed')
+    })
+  })
+
+  it('saves collapsed state to localStorage when toggled', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Collapse task sidebar')).toBeInTheDocument()
+    })
+
+    const collapseButton = screen.getByTitle('Collapse task sidebar')
+    fireEvent.click(collapseButton)
+
+    await waitFor(() => {
+      expect(localStorage.getItem('taskSidebarCollapsed')).toBe('true')
+      const taskSidebar = container.querySelector('.task-sidebar')
+      expect(taskSidebar).toHaveClass('collapsed')
+    })
+  })
+
+  it('shows correct icon when collapsed', async () => {
+    localStorage.setItem('taskSidebarCollapsed', 'true')
+
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const expandButton = screen.getByTitle('Expand task sidebar')
+      expect(expandButton.textContent).toContain('◀')
+    })
+  })
+
+  it('shows correct icon when expanded', async () => {
+    render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const collapseButton = screen.getByTitle('Collapse task sidebar')
+      expect(collapseButton.textContent).toContain('▶')
+    })
+  })
+
+  it('applies with-sidebar-collapsed class to terminal area when collapsed', async () => {
+    localStorage.setItem('taskSidebarCollapsed', 'true')
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const terminalArea = container.querySelector('.terminal-area')
+      expect(terminalArea).toHaveClass('with-sidebar-collapsed')
+    })
+  })
+
+  it('applies with-sidebar class to terminal area when expanded', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const terminalArea = container.querySelector('.terminal-area')
+      expect(terminalArea).toHaveClass('with-sidebar')
+      expect(terminalArea).not.toHaveClass('with-sidebar-collapsed')
+    })
+  })
+
+  it('persists collapsed state across component remounts', async () => {
+    const { container, unmount } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Collapse task sidebar')).toBeInTheDocument()
+    })
+
+    const collapseButton = screen.getByTitle('Collapse task sidebar')
+    fireEvent.click(collapseButton)
+
+    await waitFor(() => {
+      const taskSidebar = container.querySelector('.task-sidebar')
+      expect(taskSidebar).toHaveClass('collapsed')
+    })
+
+    unmount()
+
+    // Remount the component
+    const { container: newContainer } = render(
+      <MemoryRouter initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const taskSidebar = newContainer.querySelector('.task-sidebar')
+      expect(taskSidebar).toHaveClass('collapsed')
     })
   })
 })
