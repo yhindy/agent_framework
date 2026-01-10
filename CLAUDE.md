@@ -83,6 +83,31 @@ This document provides essential context for AI assistants working with the Agen
 - Git (for worktrees)
 - Python 3 (for JSON parsing in shell scripts)
 
+## Dependency Management
+
+### Workspace Structure
+This project uses npm workspaces with `gui` and `minions` as separate packages, but they're all part of one monorepo (not separate published packages).
+
+### Dependency Placement Convention
+Since this is a single project, we don't need strict workspace isolation. Follow these rules for where to place dependencies:
+
+**Root `package.json` (Shared Tools)**:
+- Place dependencies here when they're used by build/test tools that need to resolve from the root
+- Examples: `electron`, `electron-vite`, `vitest`, `@vitest/coverage-v8`
+- **Why**: Tools like `electron-vite` (installed at root) need to resolve `electron` via Node's module resolution
+
+**Workspace `package.json` (Workspace-Specific)**:
+- Runtime dependencies for that workspace only
+- Examples in `gui/`: `node-pty`, `electron-store`, `react`, `zustand`
+- Examples in `minions/`: workspace-specific test utilities
+
+**Key Rule**: If a root-level build tool needs to `require()` or `import` a package, that package must be in root devDependencies. This prevents module resolution issues where npm hoists packages to different locations.
+
+### When Adding Dependencies
+1. **Build/test tools used across workspaces** → Root `package.json`
+2. **Runtime dependencies for a specific workspace** → Workspace `package.json`
+3. **When in doubt** → Add to root if it's used during build/test, add to workspace if it's runtime-only
+
 ## Directory Structure
 
 ```
@@ -322,9 +347,10 @@ cd gui && npm run rebuild
 
 ### Build-GUI CI Failure (electron package not found)
 If build-gui fails with "Cannot find module 'electron/package.json'":
-- Ensure workspace dependencies are installed: `npm ci -w gui`
-- Verify electron is in gui/node_modules: `ls gui/node_modules/electron/`
-- Check that npm workspaces are configured correctly in root package.json
+- Verify `electron` is in root `package.json` devDependencies (required for electron-vite)
+- Check that `electron` is installed at root: `ls node_modules/electron/package.json`
+- Run `npm ci` to ensure all dependencies are properly installed
+- See the "Dependency Management" section for the convention on where to place dependencies
 
 ## Git Workflow
 
