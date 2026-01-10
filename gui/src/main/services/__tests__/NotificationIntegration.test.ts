@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NotificationService } from '../NotificationService'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
 import { BrowserWindow, Notification } from 'electron'
-import { readFileSync, existsSync, statSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 
 /**
  * Notification System Integration Tests
@@ -416,7 +416,7 @@ describe('Notification System Integration Tests', () => {
         }
       )
 
-      const { state, notificationSent } = simulateSessionFlow(jsonl)
+      const { state } = simulateSessionFlow(jsonl)
 
       // Slash command should be skipped, state stays waiting
       expect(state).toBe('waiting')
