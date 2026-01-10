@@ -259,6 +259,17 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
 3. **test-gui**: Runs GUI tests (macOS runner for node-pty)
 4. **test-minions**: Runs minions package tests
 5. **build-gui**: Smoke test the production build
+   - **Purpose**: Smoke test the production build
+   - **Runner**: ubuntu-latest (Linux/x64)
+   - **Timeout**: 10 minutes
+   - **Dependencies**: Requires lint, test-gui, test-minions to pass or be skipped
+   - **Key steps**:
+     1. Install root dependencies: `npm ci`
+     2. Install workspace dependencies: `npm ci -w gui`
+     3. Verify electron package available
+     4. Build: `npm run build -w gui`
+     5. Verify artifacts created
+     6. Upload artifacts (7-day retention)
 
 CI uses intelligent test selection - only runs tests related to changed files.
 
@@ -308,6 +319,12 @@ cd gui && npm run rebuild
 - Check JSONL file exists in `~/.claude/projects/`
 - Verify session ID matches in `.agent-info`
 - Check ClaudeSessionInfoService logs
+
+### Build-GUI CI Failure (electron package not found)
+If build-gui fails with "Cannot find module 'electron/package.json'":
+- Ensure workspace dependencies are installed: `npm ci -w gui`
+- Verify electron is in gui/node_modules: `ls gui/node_modules/electron/`
+- Check that npm workspaces are configured correctly in root package.json
 
 ## Git Workflow
 
