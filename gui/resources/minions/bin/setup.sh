@@ -195,6 +195,7 @@ if [ -d "$RULES_SRC" ]; then
         cp "$RULES_SRC/orchestrator_signals.md" "$RULES_DST/"
         echo "   Copied orchestrator_signals.md"
     fi
+    # Note: super-minion-rules.md is read directly from agent_framework, not copied to worktrees
     # Also copy agent rules if they exist
     if [ -f "$RULES_SRC/agent-rules.mdc" ]; then
         mkdir -p "$WORKTREE_PATH/.cursor/rules"
@@ -218,12 +219,7 @@ except: pass" | while read -r cmd; do
     fi
 done
 
-# Create agent info file
-cat > "$WORKTREE_PATH/.agent-info" << EOF
-AGENT_ID=$AGENT_ID
-BRANCH=$BRANCH
-PROJECT=$PROJECT_NAME
-EOF
+# Note: .agent-info file is now created by the GUI with full assignment data in JSON format
 
 echo ""
 echo -e "${GREEN}✅ Minion ready for service!${NC}"

@@ -393,6 +393,13 @@ export class TerminalService {
         model,
         prompt
       })
+
+      // Set up JSONL watcher for super minions to emit updates on task invocation changes
+      if (agentInfo?.isSuperMinion && this.claudeSessionInfoService) {
+        this.claudeSessionInfoService.watchSession(sessionId, worktreePath, () => {
+          this.mainWindow.webContents.send('agents:updated')
+        })
+      }
     }
 
     // Handle output
@@ -411,6 +418,11 @@ export class TerminalService {
       // Clean up JSONL state polling (Claude sessions)
       if (session.statePollingInterval) {
         clearInterval(session.statePollingInterval)
+      }
+
+      // Clean up JSONL watcher for super minions
+      if (tool === 'claude' && sessionId) {
+        this.claudeSessionInfoService?.unwatchSession(sessionId)
       }
 
       // Mark session as inactive on exit
