@@ -73,7 +73,9 @@ describe('Session Persistence', () => {
     claudeSessionInfoService = {
       getSessionState: vi.fn().mockReturnValue('unknown'),
       parseSessionInfo: vi.fn(),
-      findSessionFile: vi.fn()
+      findSessionFile: vi.fn(),
+      watchSession: vi.fn(),
+      unwatchSession: vi.fn()
     } as any
 
     terminalService = new TerminalService(mockMainWindow)

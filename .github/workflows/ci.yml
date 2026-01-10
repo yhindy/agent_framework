@@ -175,6 +175,7 @@ jobs:
     needs: [lint, test-gui, test-minions]
     if: always() && needs.lint.result == 'success' && (needs.test-gui.result == 'success' || needs.test-gui.result == 'skipped') && (needs.test-minions.result == 'success' || needs.test-minions.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -189,6 +190,14 @@ jobs:
 
       - name: Build GUI
         run: npm run build -w gui
+
+      - name: Verify build output
+        run: |
+          echo "Checking build artifacts..."
+          test -f gui/out/main/index.js || (echo "::error::main bundle missing" && exit 1)
+          test -f gui/out/preload/index.js || (echo "::error::preload bundle missing" && exit 1)
+          test -f gui/out/renderer/index.html || (echo "::error::renderer bundle missing" && exit 1)
+          echo "✓ All build artifacts present"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
