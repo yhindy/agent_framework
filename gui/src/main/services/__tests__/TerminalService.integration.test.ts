@@ -224,7 +224,7 @@ describe('TerminalService Integration', () => {
       mockWebContents.send.mockClear()
 
       // Send input to resume work
-      idleDetector.notifyInput()
+      idleDetector.recordInput()
       terminal.write('yes\n')
 
       // Wait for the script to process input and print response
