@@ -181,6 +181,44 @@ export class ClaudeSessionInfoService {
   }
 
   /**
+   * Check if a session entry is a slash command (should be skipped for state detection).
+   * Slash commands are not real user input and should not trigger "waiting for input" state.
+   *
+   * Detection criteria:
+   * - <command-name> tags (e.g., /model, /commit)
+   * - <local-command-stdout> tags (command output)
+   * - <local-command-result> tags (command results)
+   * - isMeta: true flag (meta messages)
+   */
+  private isSlashCommandEntry(entry: SessionJSONLEntry): boolean {
+    if (entry.type !== 'user' || !entry.message) {
+      return false
+    }
+
+    const content = entry.message.content
+
+    // Check for command-related XML tags in string content
+    if (typeof content === 'string') {
+      const hasCommandTag = content.includes('<command-name>') ||
+        content.includes('<local-command-stdout>') ||
+        content.includes('<local-command-result>')
+      if (hasCommandTag) {
+        return true
+      }
+    }
+
+    // Check for isMeta flag (can be on entry or message)
+    const entryIsMeta = (entry as any).isMeta === true
+    const messageIsMeta = (entry.message as any).isMeta === true
+
+    if (entryIsMeta || messageIsMeta) {
+      return true
+    }
+
+    return false
+  }
+
+  /**
    * Parse a session JSONL file and extract session info.
    * Uses smart caching to avoid re-parsing unchanged files.
    */
@@ -337,8 +375,7 @@ export class ClaudeSessionInfoService {
 
           // Skip slash command entries (not real user input)
           if (entry.type === 'user' && entry.message) {
-            const isSlashCommand = typeof entry.message.content === 'string' &&
-              entry.message.content.includes('<command-name>')
+            const isSlashCommand = this.isSlashCommandEntry(entry)
 
             if (isSlashCommand) {
               continue // Skip this, look for earlier entry
@@ -384,11 +421,21 @@ export class ClaudeSessionInfoService {
                 state = 'working'
 
               } else if (hasText && !hasToolUse && !hasThinking) {
-                // Text-only message
-                // NOTE: Main sessions always have stop_reason=null even when done,
-                // so we can't rely on stop_reason to detect completion.
-                // For now, treat text-only as waiting (may cause false positives)
-                state = 'waiting'
+                // Text-only message: Need to distinguish mid-work status updates from completion messages
+                // Extract text content to check for colon heuristic
+                const textContent = content.find(c => c.type === 'text')?.text || ''
+                const trimmedText = textContent.trim()
+
+                if (trimmedText.endsWith(':')) {
+                  // Messages ending with colon are ALWAYS status updates (100% accurate)
+                  // e.g., "Let me search for that:", "Now I'll read the file:"
+                  // These indicate more work is coming (tool_use follows)
+                  state = 'working'
+                } else {
+                  // Text not ending with colon - likely a completion message
+                  // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
+                  state = 'waiting'
+                }
 
               } else {
                 // Any other case (streaming, unknown format, etc.)
@@ -450,7 +497,9 @@ export class ClaudeSessionInfoService {
    */
   getSessionState(sessionId: string, worktreePath: string): 'working' | 'waiting' | 'unknown' {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
-    if (!sessionFile) return 'unknown'
+    if (!sessionFile) {
+      return 'unknown'
+    }
 
     try {
       // Check cache first - avoid reading file if it hasn't changed
@@ -485,8 +534,7 @@ export class ClaudeSessionInfoService {
 
           // Skip slash command entries (not real user input)
           if (entry.type === 'user' && entry.message) {
-            const isSlashCommand = typeof entry.message.content === 'string' &&
-              entry.message.content.includes('<command-name>')
+            const isSlashCommand = this.isSlashCommandEntry(entry)
 
             if (isSlashCommand) {
               continue // Skip this, look for earlier entry
@@ -532,11 +580,21 @@ export class ClaudeSessionInfoService {
                 state = 'working'
 
               } else if (hasText && !hasToolUse && !hasThinking) {
-                // Text-only message
-                // NOTE: Main sessions always have stop_reason=null even when done,
-                // so we can't rely on stop_reason to detect completion.
-                // For now, treat text-only as waiting (may cause false positives)
-                state = 'waiting'
+                // Text-only message: Need to distinguish mid-work status updates from completion messages
+                // Extract text content to check for colon heuristic
+                const textContent = content.find(c => c.type === 'text')?.text || ''
+                const trimmedText = textContent.trim()
+
+                if (trimmedText.endsWith(':')) {
+                  // Messages ending with colon are ALWAYS status updates (100% accurate)
+                  // e.g., "Let me search for that:", "Now I'll read the file:"
+                  // These indicate more work is coming (tool_use follows)
+                  state = 'working'
+                } else {
+                  // Text not ending with colon - likely a completion message
+                  // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
+                  state = 'waiting'
+                }
 
               } else {
                 // Any other case (streaming, unknown format, etc.)
@@ -562,7 +620,7 @@ export class ClaudeSessionInfoService {
       }
 
       return state
-    } catch {
+    } catch (error) {
       return 'unknown'
     }
   }

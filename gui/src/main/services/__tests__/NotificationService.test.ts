@@ -63,7 +63,7 @@ describe('NotificationService', () => {
       })
     })
 
-    it('blocks notification within cooldown period', () => {
+    it('should respect 30s cooldown for same agent', () => {
       notificationService.setWindowFocus(false)
 
       // First notification
@@ -74,13 +74,13 @@ describe('NotificationService', () => {
       })
       expect(result1).toBe(true)
 
-      // Advance time but not past cooldown (60s)
-      vi.advanceTimersByTime(30000)
+      // Advance time but not past cooldown (30s)
+      vi.advanceTimersByTime(15000) // 15 seconds
 
       // Clear mock to track new calls
       vi.mocked(Notification).mockClear()
 
-      // Second notification for same agent
+      // Second notification for same agent should be blocked
       const result2 = notificationService.notify({
         title: 'Input Required',
         body: 'Agent is waiting again',
@@ -90,7 +90,7 @@ describe('NotificationService', () => {
       expect(Notification).not.toHaveBeenCalled()
     })
 
-    it('allows notification after cooldown expires', () => {
+    it('should allow notification after 30s cooldown expires', () => {
       notificationService.setWindowFocus(false)
 
       // First notification
@@ -100,13 +100,13 @@ describe('NotificationService', () => {
         agentId: 'agent-1'
       })
 
-      // Advance time past cooldown (60s)
-      vi.advanceTimersByTime(61000)
+      // Advance time past cooldown (30s)
+      vi.advanceTimersByTime(31000)
 
       // Clear mock to track new calls
       vi.mocked(Notification).mockClear()
 
-      // Second notification for same agent
+      // Second notification for same agent should now work
       const result = notificationService.notify({
         title: 'Input Required',
         body: 'Agent is waiting again',
@@ -127,8 +127,8 @@ describe('NotificationService', () => {
       })
       expect(result1).toBe(true)
 
-      // Advance time 30s (within cooldown)
-      vi.advanceTimersByTime(30000)
+      // Advance time 15s (within cooldown)
+      vi.advanceTimersByTime(15000)
 
       vi.mocked(Notification).mockClear()
 
@@ -139,6 +139,73 @@ describe('NotificationService', () => {
         agentId: 'agent-2'
       })
       expect(result2).toBe(true)
+      expect(Notification).toHaveBeenCalled()
+    })
+
+    it('should clear cooldown when explicitly requested', () => {
+      notificationService.setWindowFocus(false)
+
+      // First notification
+      const result1 = notificationService.notify({
+        title: 'Input Required',
+        body: 'Agent is waiting',
+        agentId: 'agent-1'
+      })
+      expect(result1).toBe(true)
+
+      // Advance time by only 5 seconds (well within cooldown)
+      vi.advanceTimersByTime(5000)
+
+      // Clear mock
+      vi.mocked(Notification).mockClear()
+
+      // Without clearing cooldown, this should fail
+      const result2 = notificationService.notify({
+        title: 'Input Required',
+        body: 'Agent is waiting again',
+        agentId: 'agent-1'
+      })
+      expect(result2).toBe(false)
+
+      // Now clear the cooldown
+      notificationService.clearCooldown('agent-1')
+
+      // Clear mock again
+      vi.mocked(Notification).mockClear()
+
+      // Notification should now work immediately
+      const result3 = notificationService.notify({
+        title: 'Input Required',
+        body: 'Agent is waiting yet again',
+        agentId: 'agent-1'
+      })
+      expect(result3).toBe(true)
+      expect(Notification).toHaveBeenCalled()
+    })
+
+    it('should allow immediate notification after cooldown cleared', () => {
+      notificationService.setWindowFocus(false)
+
+      // Send notification
+      notificationService.notify({
+        title: 'Input Required',
+        body: 'Agent is waiting',
+        agentId: 'agent-1'
+      })
+
+      // Clear cooldown immediately (simulating user providing input)
+      notificationService.clearCooldown('agent-1')
+
+      // Clear mock
+      vi.mocked(Notification).mockClear()
+
+      // Immediate notification should work
+      const result = notificationService.notify({
+        title: 'Input Required',
+        body: 'Agent needs input again',
+        agentId: 'agent-1'
+      })
+      expect(result).toBe(true)
       expect(Notification).toHaveBeenCalled()
     })
   })

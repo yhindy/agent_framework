@@ -266,21 +266,14 @@ export class TerminalService {
 
         const currentState = this.claudeSessionInfoService!.getSessionState(sessionId, worktreePath)
 
-        console.log(`[TerminalService] State check for ${agentId}: ${currentState} (previous: ${lastKnownState})`)
-
         // Detect state transitions
         if (currentState !== lastKnownState) {
-          console.log(`[TerminalService] State changed: ${lastKnownState} -> ${currentState}`)
-
           // Broadcast new state via IPC
           this.mainWindow.webContents.send('agent:stateChanged', agentId, currentState)
 
           if (currentState === 'waiting') {
-            // Transitioned to waiting - send notification
-            console.log(`[TerminalService] ${agentId} now waiting for input`)
-
-            // Also send legacy event for backward compatibility
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Waiting for input')
+            // Transitioned to waiting - send notification and event
+            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
 
             // Send desktop notification
             this.notificationService?.notify({
@@ -301,7 +294,12 @@ export class TerminalService {
             // Transitioned to working - clear waiting state
             console.log(`[TerminalService] ${agentId} is working`)
 
-            // Also send legacy event for backward compatibility
+            // Clear notification cooldown when user provides input
+            if (lastKnownState === 'waiting') {
+              this.notificationService?.clearCooldown(agentId)
+            }
+
+            // Send event for UI updates
             this.mainWindow.webContents.send('agent:resumedWork', agentId)
 
             this.updateAgentInfo(worktreePath, {

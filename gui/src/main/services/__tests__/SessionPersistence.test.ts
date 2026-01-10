@@ -342,15 +342,20 @@ describe('Session Persistence', () => {
 
     it('clears waiting state when user sends input', async () => {
       // Setup: Mock getSessionState to simulate state transitions
-      let isWaiting = true
+      // Account for: 1 immediate call + polling every 1000ms
+      let callCount = 0
       vi.mocked(claudeSessionInfoService.getSessionState).mockImplementation(() => {
-        return isWaiting ? 'waiting' : 'working'
+        callCount++
+        if (callCount === 1) return 'unknown' // Immediate call on start
+        if (callCount === 2) return 'waiting' // First poll (1000ms)
+        return 'working' // Subsequent polls
       })
 
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 
-      // Advance timer to detect waiting state
-      vi.advanceTimersByTime(2100)
+      // Immediate call happens on start (returns unknown)
+      // Advance 1000ms to trigger first poll (returns waiting, transitions from unknown -> waiting)
+      vi.advanceTimersByTime(1000)
 
       // Verify waiting state was detected (Claude uses agent:stateChanged event)
       expect(mockWebContents.send).toHaveBeenCalledWith(
@@ -362,11 +367,8 @@ describe('Session Persistence', () => {
       // Clear mock to see new calls
       mockWebContents.send.mockClear()
 
-      // Simulate user sending input - JSONL would update to show working state
-      isWaiting = false
-
-      // Advance timer to detect the state change
-      vi.advanceTimersByTime(2100)
+      // Advance another 1000ms to trigger next poll (returns working, transitions from waiting -> working)
+      vi.advanceTimersByTime(1000)
 
       // Claude uses agent:stateChanged event for state transitions
       expect(mockWebContents.send).toHaveBeenCalledWith('agent:stateChanged', 'agent-1', 'working')
