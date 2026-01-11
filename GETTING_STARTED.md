@@ -101,97 +101,52 @@ your-project/
 
 ## Step 4: Create Your First Agent 🤖
 
-1. **In the GUI sidebar**, click **"+ Add Agent"**
-2. **Enter a branch name** like `feature/agent-1/add-dark-mode`
-3. **Click "Create"**
+1. **In the GUI sidebar**, click the **"+"** button next to your project name
+2. **Choose mission type**:
+   - **Regular Mission** - For straightforward features
+   - **👑 Super Mission** - For complex features that need multiple sub-agents
 
-This creates a git worktree - an isolated copy of your project where the agent can work safely.
+3. **Fill in the form**:
+   - **Branch name**: Like `user-auth` (auto-prefixed with `feature/`)
+   - **Task description**: Tell the agent what to build
+     ```
+     Add a dark mode toggle to the settings page.
+     Toggle should persist to localStorage and respect prefers-color-scheme.
+     ```
+   - **Tool**: Choose `claude`, `cursor`, `cursor-cli`, etc.
+   - **Mode**:
+     - **Planning** - Agent creates a plan for you to review first
+     - **Direct** - Agent implements immediately
+   - **Model**: `opus`, `sonnet`, or `haiku`
 
-Behind the scenes, this runs:
-```bash
-./minions/bin/setup.sh agent-1 feature/agent-1/add-dark-mode
-```
+4. **Click "Create Mission"**
 
-Your agent now has its own workspace at `../yourproject-agent-1/`
+That's it! The agent is created with your task description embedded. No separate files to create.
 
----
-
-## Step 5: Give Your Agent a Mission 📝
-
-Agents work best when they have clear instructions. Create a mission file:
-
-1. **Copy the template:**
-   ```bash
-   cd /path/to/your/project
-   cp minions/templates/FEATURE_SPEC.md minions/assignments/agent-1-dark-mode.md
-   ```
-
-2. **Edit the mission file** with your requirements:
-   ```markdown
-   # Mission: Add Dark Mode Toggle
-
-   ## Objective
-   Add a dark mode toggle to the application settings page.
-
-   ## Allowed Files
-   - src/components/Settings.tsx
-   - src/styles/theme.css
-   - src/hooks/useDarkMode.ts
-
-   ## Blocked Files
-   - src/database/**
-   - *.config.js
-
-   ## Requirements
-   - Toggle persists to localStorage
-   - Smooth transition between themes
-   - Accessibility: respects prefers-color-scheme
-   ```
-
-3. **In the GUI**, select your agent and click **"Assign Mission"** (if available), or just tell the AI to read the file
+Behind the scenes, this:
+- Creates a git worktree at `../yourproject-agent-user-auth/`
+- Stores your task description with the agent
+- Opens a terminal ready for the AI tool
 
 ---
 
-## Step 6: Start Your AI Tool 🎯
+## Step 5: Monitor Your Agent 👀
 
-The GUI has a built-in terminal for each agent. You can start any AI coding tool:
+Once created, your agent appears in the sidebar. Click on it to see:
 
-### Option A: Claude Code (CLI)
-```bash
-claude "Read minions/assignments/agent-1-dark-mode.md and implement the feature"
-```
+- **Live Terminal**: Watch the agent work in real-time
+- **Status**: Active, idle, or needs review
+- **Signals**: Agents emit status updates like:
+  - `===SIGNAL:PLAN_READY===` - Plan needs your review
+  - `===SIGNAL:DEV_COMPLETED===` - Implementation done
+  - `===SIGNAL:BLOCKER===` - Agent is stuck
+  - `===SIGNAL:QUESTION===` - Has a question
 
-### Option B: Cursor IDE
-1. Open the agent's worktree folder in Cursor: `../yourproject-agent-1/`
-2. Start a Cursor agent session
-3. Point it to the mission file
-
-### Option C: Any Other AI Tool
-Just navigate to the agent's worktree and start your tool:
-```bash
-cd ../yourproject-agent-1
-aider  # or any other tool
-```
+The terminal automatically starts with your chosen tool (Claude, Cursor, etc.)
 
 ---
 
-## Step 7: Monitor Progress 👀
-
-The GUI shows you what your agents are doing:
-
-- **Status Indicators**: 🟢 Active, 🟡 Idle, 🔴 Needs Review
-- **Live Terminal**: See exactly what the agent is doing
-- **Signals**: Agents can emit status signals like:
-  - `===SIGNAL:PLAN_READY===` - Agent has a plan for you to review
-  - `===SIGNAL:DEV_COMPLETED===` - Implementation done, ready for review
-  - `===SIGNAL:BLOCKER===` - Agent is stuck and needs help
-  - `===SIGNAL:QUESTION===` - Agent has a non-blocking question
-
-These signals appear in the terminal output and can trigger GUI notifications.
-
----
-
-## Step 8: Review and Merge 🎉
+## Step 6: Review and Merge 🎉
 
 When your agent finishes:
 
@@ -278,9 +233,9 @@ All commands run from your project root (where `minions/` is installed):
 Having trouble?
 
 1. **Check the GUI logs** - Look for error messages in the terminal output
-2. **Read the mission file** - Make sure instructions are clear
-3. **Verify git status** - Run `git status` in the agent's worktree
-4. **Review CLAUDE.md** - Detailed architecture and troubleshooting info
+2. **Verify git status** - Run `git status` in the agent's worktree
+3. **Review CLAUDE.md** - Detailed architecture and troubleshooting info
+4. **Check GitHub issues** - See if others had similar problems
 
 ---
 
