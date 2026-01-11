@@ -5,15 +5,41 @@
 
 A lightweight framework for running multiple AI coding minions in parallel on any codebase.
 
-## Quick Start
+---
 
+## 👋 New Here?
+
+**First time using Agent Framework?** Start here:
+
+1. **Setup** (one-time): `./setup.sh`
+2. **Launch GUI**: `./run.sh`
+3. **Read the guide**: [GETTING_STARTED.md](GETTING_STARTED.md) 📖
+
+The getting started guide walks you through everything step-by-step!
+
+---
+
+## Quick Reference
+
+For experienced users - quick commands to get started:
+
+### Using the GUI (Recommended)
 ```bash
-# 1. Install the framework into your project (CLI)
+./run.sh  # Launch the desktop app
+# Then: Select a project → Add agents → Assign missions
+```
+
+### Using the CLI
+```bash
+# Install framework into your project
 ./install.sh /path/to/your/project
 
-# OR use the GUI App (recommended)
-npm install && npm run gui:dev
-# Then select any project folder, and the GUI will offer to install the framework.
+# Create an agent
+cd /path/to/your/project
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
+
+# Clean up when done
+./minions/bin/teardown.sh agent-1
 ```
 
 ## What's Included
@@ -29,7 +55,7 @@ your-project/
 │   │   ├── dashboard.sh     # Launch GUI dashboard
 │   │   └── ...
 │   ├── assignments/         # Minion mission files
-│   ├── rules/               # Orchestrator signals
+│   ├── rules/               # Agent behavior rules
 │   ├── templates/           # Spec templates
 │   ├── assignments.json     # Track active missions
 │   └── README.md            # Minion guide
@@ -48,21 +74,22 @@ your-project/
 ./uninstall.sh /path/to/your/project
 ```
 
-## Creating Minion Missions
+## Creating Minions
 
-1. Copy the template:
-   ```bash
-   cp minions/templates/FEATURE_SPEC.md minions/assignments/agent-1-my-feature.md
-   ```
+**GUI Method (Recommended):**
+1. Click "+" next to your project in the sidebar
+2. Fill in branch name, task description, tool, and model
+3. Click "Create Mission"
 
-2. Fill in the feature requirements
+**CLI Method:**
+```bash
+# Create agent worktree manually
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
 
-3. Create the worktree:
-   ```bash
-   ./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
-   ```
-
-4. Point your AI minion at the mission file
+# Then start your AI tool in the worktree
+cd ../yourproject-agent-1
+claude "Implement the user authentication feature"
+```
 
 ## Configuration
 
@@ -95,7 +122,7 @@ Features:
 - **Auto-Install**: Initialize the framework in new projects via the GUI
 - **Dashboard**: View all missions and agents
 - **Terminal Integration**: Live terminals for minions
-- **Signals**: iMessage-style notifications for agent status
+- **Status Tracking**: Real-time agent status and notifications
 
 See [`gui/README.md`](gui/README.md) for details.
 

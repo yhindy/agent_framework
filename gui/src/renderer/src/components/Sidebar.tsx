@@ -308,22 +308,22 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
           style={{ paddingLeft: `${depth * 12 + 12}px` }}
         >
           <div className="agent-info">
-            {agent.isSuperMinion && (
-              <span
-                className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
-                onClick={handleCollapseClick}
-                title="Toggle child agents"
-              >
-                ▼
+            <div className="agent-leading-icons">
+              {agent.isSuperMinion ? (
+                <span
+                  className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
+                  onClick={handleCollapseClick}
+                  title="Toggle child agents"
+                >
+                  ▼
+                </span>
+              ) : (
+                <span className="chevron-placeholder" aria-hidden="true"></span>
+              )}
+              <span className="agent-type-icon">
+                {agent.isSuperMinion ? '👑' : agent.isBaseBranchAgent ? '🏠' : '🍌'}
               </span>
-            )}
-            {agent.isSuperMinion && (
-              <span className="super-minion-indicator">
-                👑
-              </span>
-            )}
-            {agent.isBaseBranchAgent && <span className="agent-icon">🏠</span>}
-            {!agent.isSuperMinion && !agent.isBaseBranchAgent && <span className="agent-icon"></span>}
+            </div>
             {agent.isBaseBranchAgent ? (
               <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
             ) : agent.branch ? (
