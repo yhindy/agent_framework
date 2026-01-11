@@ -14,7 +14,7 @@
     {
       "id": "frontend",
       "name": "Frontend",
-      "command": "rm -rf node_modules/.vite; npm run dev",
+      "command": "npm run rebuild; rm -rf node_modules/.vite; npm run dev",
       "cwd": "gui/",
       "port": 3000
     }
