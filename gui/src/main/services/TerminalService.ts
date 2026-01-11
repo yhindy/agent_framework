@@ -157,6 +157,10 @@ export class TerminalService {
     // Generate deterministic session ID
     const sessionId = this.generateSessionId(agentId, worktreePath)
 
+    // For teleported sessions, use the cloud session ID for JSONL lookups
+    // Claude CLI uses the teleport session ID for the JSONL file, not our generated UUID
+    const effectiveSessionId = teleportSessionId || sessionId
+
     // Read agent info to check for existing session
     const agentInfo = await this.readAgentInfo(worktreePath)
 
@@ -293,9 +297,9 @@ export class TerminalService {
 
       // Extract state check logic for reuse (immediate check + polling)
       const checkAndBroadcastState = () => {
-        if (!sessionId) return
+        if (!effectiveSessionId) return
 
-        const currentState = this.claudeSessionInfoService!.getSessionState(sessionId, worktreePath)
+        const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
 
         // Detect state transitions
         if (currentState !== lastKnownState) {
@@ -351,7 +355,7 @@ export class TerminalService {
       checkAndBroadcastState()
 
       // Then poll every 1 second (faster than 2s, still efficient with caching)
-      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${sessionId})`)
+      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${effectiveSessionId})`)
       statePollingInterval = setInterval(() => {
         checkAndBroadcastState()
       }, 1000) // 1 second interval - mtime caching makes this efficient
@@ -419,7 +423,7 @@ export class TerminalService {
     // Persist session ID and flags immediately
     if (tool === 'claude') {
       const agentInfoUpdate: Partial<AgentInfo> = {
-        claudeSessionId: sessionId,
+        claudeSessionId: effectiveSessionId,
         claudeSessionActive: true,
         claudeLastSeen: new Date().toISOString(),
         yolo: yolo || false,
@@ -438,7 +442,7 @@ export class TerminalService {
 
       // Set up JSONL watcher for super minions to emit updates on task invocation changes
       if ((agentInfo as any)?.isSuperMinion && this.claudeSessionInfoService) {
-        this.claudeSessionInfoService.watchSession(sessionId, worktreePath, () => {
+        this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
           this.mainWindow.webContents.send('agents:updated')
         })
       }
@@ -463,8 +467,8 @@ export class TerminalService {
       }
 
       // Clean up JSONL watcher for super minions
-      if (tool === 'claude' && sessionId) {
-        this.claudeSessionInfoService?.unwatchSession(sessionId)
+      if (tool === 'claude' && effectiveSessionId) {
+        this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
       }
 
       // Mark session as inactive on exit
