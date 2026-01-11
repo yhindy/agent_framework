@@ -40,4 +40,6 @@ export interface SuperAgentInfo {
   terminalPid: number | null
   taskInvocations?: TaskInvocation[]
   uiState?: UIState
+  prUrl?: string
+  prStatus?: string
 }
