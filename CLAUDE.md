@@ -260,20 +260,8 @@ Renderer Process (React)
 1. **Create Assignment** - User creates via GUI with prompt, tool, model
 2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
 3. **Start Agent** - TerminalService spawns PTY with Claude/Cursor
-4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes
-5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
-6. **Teardown** - Clean up worktree when done
-
-### Signal Protocol
-Agents communicate with the orchestrator via stdout signals:
-```bash
-===SIGNAL:PLAN_READY===     # Plan needs human review
-===SIGNAL:DEV_COMPLETED===  # Implementation complete
-===SIGNAL:BLOCKER===        # Blocked, needs intervention
-===SIGNAL:QUESTION===       # Has a question (non-blocking)
-===SIGNAL:WORKING===        # Actively working
-===SIGNAL:PLANS_READY===    # Super minion has plans for approval
-```
+4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes and emits IPC events
+5. **Teardown** - Clean up worktree when done
 
 ## CI/CD Pipeline
 
@@ -324,7 +312,6 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `minions/bin/setup.sh` | Worktree creation script |
-| `minions/rules/orchestrator_signals.md` | Signal protocol docs |
 
 ## Troubleshooting
 

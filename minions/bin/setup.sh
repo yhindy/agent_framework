@@ -183,18 +183,13 @@ if [ -d "$ASSIGNMENTS_SRC" ]; then
     done
 fi
 
-# Copy orchestrator signal rules
-echo -e "${BLUE}📋 Copying orchestrator integration rules...${NC}"
-# Rules are now bundled with the script in ../rules
+# Copy rules to worktree
+echo -e "${BLUE}📋 Copying rules...${NC}"
 RULES_SRC="$SCRIPT_DIR/../rules"
 RULES_DST="$WORKTREE_PATH/minions/rules"
 
 if [ -d "$RULES_SRC" ]; then
     mkdir -p "$RULES_DST"
-    if [ -f "$RULES_SRC/orchestrator_signals.md" ]; then
-        cp "$RULES_SRC/orchestrator_signals.md" "$RULES_DST/"
-        echo "   Copied orchestrator_signals.md"
-    fi
     # Note: super-minion-rules.md is read directly from agent_framework, not copied to worktrees
     # Also copy agent rules if they exist
     if [ -f "$RULES_SRC/agent-rules.mdc" ]; then

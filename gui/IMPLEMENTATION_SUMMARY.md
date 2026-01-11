@@ -11,14 +11,11 @@ All planned features have been successfully implemented and tested.
 ```
 agent_framework/
 ├── docs/agents/
-│   ├── assignments.json         # NEW: JSON format for assignments
-│   ├── types.ts                 # NEW: TypeScript type definitions
-│   └── rules/
-│       └── orchestrator_signals.md  # NEW: Signal protocol docs
+│   ├── assignments.json         # JSON format for assignments
+│   └── types.ts                 # TypeScript type definitions
 ├── scripts/agents/
-│   ├── setup.sh                 # UPDATED: Now copies signal rules
-│   ├── migrate-assignments.js   # NEW: Migration script
-│   └── test_signal.sh           # NEW: Test script for signals
+│   ├── setup.sh                 # Worktree creation script
+│   └── migrate-assignments.js   # Migration script
 ├── gui/                         # NEW: Complete Electron app
 │   ├── src/
 │   │   ├── main/               # Electron main process
@@ -72,14 +69,7 @@ agent_framework/
 - Automatic resize handling
 - Signal detection in output stream
 
-### 4. Signal Protocol ✅
-- Documented in `docs/agents/rules/orchestrator_signals.md`
-- Five signals: PLAN_READY, DEV_COMPLETED, BLOCKER, QUESTION, WORKING
-- Automatic detection via ANSI stripping and pattern matching
-- UI notifications for each signal type
-- Test script for validation
-
-### 5. UI Components ✅
+### 4. UI Components ✅
 
 #### ProjectPicker
 - Folder selection dialog
@@ -111,7 +101,7 @@ agent_framework/
 - Bidirectional communication
 - Fit addon for responsive sizing
 
-### 6. IPC Bridge ✅
+### 5. IPC Bridge ✅
 - Typed API between Main and Renderer
 - Project operations
 - Agent operations
@@ -119,10 +109,9 @@ agent_framework/
 - Assignment CRUD
 - Event listeners for updates
 
-### 7. Script Integration ✅
-- Updated `setup.sh` to copy signal rules
+### 6. Script Integration ✅
+- Setup script for worktree creation
 - Migration script for ASSIGNMENTS.md → JSON
-- Test signal script for validation
 
 ---
 
@@ -198,7 +187,6 @@ npm run typecheck
 | [`gui/README.md`](README.md) | Complete documentation |
 | [`gui/QUICKSTART.md`](QUICKSTART.md) | 5-minute setup guide |
 | [`gui/TESTING.md`](TESTING.md) | Test scenarios |
-| [`docs/agents/rules/orchestrator_signals.md`](../docs/agents/rules/orchestrator_signals.md) | Signal protocol |
 | [`docs/agents/types.ts`](../docs/agents/types.ts) | Type definitions |
 
 ---

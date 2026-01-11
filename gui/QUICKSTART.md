@@ -68,20 +68,10 @@ The app window will open automatically.
 3. Click "Open in Cursor"
 4. Work in Cursor normally
 
-### Option C: Test the Signal System
-
-1. Click `agent-1` in the sidebar
-2. In the terminal, type:
-   ```bash
-   ../../minions/bin/test_signal.sh
-   ```
-3. Watch the signals appear as notifications!
-
 ## What's Next?
 
 - Read [`TESTING.md`](TESTING.md) for comprehensive test scenarios
 - Read [`README.md`](README.md) for full documentation
-- Check out the signal protocol in `../minions/rules/orchestrator_signals.md`
 
 ## Troubleshooting
 
