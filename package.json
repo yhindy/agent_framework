@@ -13,9 +13,12 @@
   },
   "scripts": {
     "test": "npm run test -w gui && npm run test -w minions",
+    "test:changed": "NODE_OPTIONS='--max-old-space-size=2048' npm run test:changed -w gui && NODE_OPTIONS='--max-old-space-size=2048' npm run test:changed -w minions",
+    "test:smart": "npm run test:changed",
     "gui:dev": "npm run dev -w gui",
     "gui:build": "npm run build -w gui",
     "gui:test": "npm run test -w gui",
+    "gui:test:changed": "NODE_OPTIONS='--max-old-space-size=2048' npm run test:changed -w gui",
     "minions:test": "npm run test -w minions"
   },
   "repository": {

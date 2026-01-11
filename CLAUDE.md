@@ -12,7 +12,7 @@ This document provides essential context for AI assistants working with the Agen
 
 ### Testing Requirements
 - **Always write tests for new functionality.** No feature is complete without tests.
-- **Run tests before proposing commits** to ensure nothing is broken: `npm test` or target specific tests.
+- **Run smart tests before proposing commits** - use selective testing to save time and memory: `npm run test:changed`
 - Follow existing test patterns in `gui/src/main/services/__tests__/` - use the established fixtures.
 - For new services:
   - Add unit tests for new functions/methods
@@ -152,22 +152,42 @@ npm run gui:dev
 
 ### Testing
 ```bash
-# Run all tests
+# RECOMMENDED: Run only tests affected by your changes (fast, memory-efficient)
+npm run test:changed
+
+# Run all tests (slower, more memory - only when needed)
 npm test
 
-# GUI tests only
-npm run gui:test
-cd gui && npm test
+# GUI tests only (smart selection)
+npm run gui:test:changed
+cd gui && npm run test:changed
 
-# Minions tests only
-npm run minions:test
+# Minions tests only (smart selection)
+cd minions && npm run test:changed
 
-# Run specific test file
+# Run specific test file (when debugging)
 cd gui && npm test -- src/main/services/__tests__/AgentService.test.ts
 
-# Run with coverage
+# Run tests related to files you just edited
+cd gui && npm run test:related src/main/services/AgentService.ts
+
+# Run with coverage (CI only, memory-intensive)
 cd gui && npm test -- --coverage
 ```
+
+#### When to Run Full Tests
+
+Run the full test suite (`npm test`) only when:
+- You modified test configuration files (`vitest.config.ts`, `package.json`)
+- You changed shared types or interfaces used across many files
+- You're preparing a final commit to main/master
+- Selective tests pass but you want extra confidence
+
+#### Memory Management
+- Tests are configured to use max 4 concurrent workers
+- Node heap limited to 2GB via `NODE_OPTIONS`
+- Use `test:changed` to minimize memory usage
+- If system is slow, close other applications during test runs
 
 ### Building
 ```bash
@@ -325,6 +345,7 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `minions/bin/setup.sh` | Worktree creation script |
 | `minions/rules/orchestrator_signals.md` | Signal protocol docs |
+| `.github/scripts/analyze-changes.js` | CI test selection logic (reference for selective testing) |
 
 ## Troubleshooting
 

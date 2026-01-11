@@ -205,3 +205,36 @@ jobs:
           name: gui-build
           path: gui/out/
           retention-days: 7
+
+  # Job 6: Validate memory-constrained test execution
+  test-memory-limits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test that memory-limited scripts exist
+        run: |
+          npm run test:changed --help || exit 1
+          cd gui && npm run test:changed --help || exit 1
+          cd ../minions && npm run test:changed --help || exit 1
+
+      - name: Verify NODE_OPTIONS in scripts
+        run: |
+          grep -q "max-old-space-size" package.json || exit 1
+          echo "✓ Memory limits configured"
+
+      - name: Verify vitest pool configuration
+        run: |
+          grep -q "pool: 'forks'" gui/vitest.config.ts || exit 1
+          grep -q "maxWorkers: 4" gui/vitest.config.ts || exit 1
+          echo "✓ Vitest memory controls configured"

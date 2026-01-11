@@ -11,7 +11,11 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-rebuild -f -w node-pty",
-    "test": "vitest"
+    "test": "vitest",
+    "test:changed": "vitest --changed",
+    "test:related": "vitest related",
+    "test:watch": "vitest --changed --watch",
+    "test:memory": "NODE_OPTIONS='--max-old-space-size=2048' vitest"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",

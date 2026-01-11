@@ -4,7 +4,10 @@
   "description": "Core minion framework - agent workers for parallel coding tasks",
   "private": true,
   "scripts": {
-    "test": "vitest"
+    "test": "vitest",
+    "test:changed": "vitest --changed",
+    "test:related": "vitest related",
+    "test:memory": "NODE_OPTIONS='--max-old-space-size=2048' vitest"
   },
   "devDependencies": {
     "vitest": "^3.2.4"
