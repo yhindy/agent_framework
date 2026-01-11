@@ -483,16 +483,46 @@ describe('Super Minion System Prompt', () => {
   let mockPty: any
   let mockAgentService: any
 
-  beforeEach(() => {
-    // Setup Mock Window & WebContents
-    const mockWebContents = {
-      send: vi.fn()
-    }
-    mockMainWindow = {
-      webContents: mockWebContents
-    } as unknown as BrowserWindow
+  // Common test data
+  const TEST_PROJECT_PATH = '/path/to/project'
+  const TEST_AGENT_ID = 'agent-1'
+  const TEST_PROMPT = 'Create feature X'
+  const SUPER_MINION_RULES_PATH = '/path/to/super-minion-rules.md'
+  const SUPER_MINION_AGENT_INFO = { isSuperMinion: true, minionBudget: 5 }
+  const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
-    // Setup Mock PTY
+  const ACCEPTANCE_CRITERIA_KEYWORDS = [
+    'acceptance criteria',
+    'AskUserQuestion',
+    'BEFORE creating any implementation plan',
+    'WAIT for explicit approval'
+  ]
+
+  // Helper to get the command written to PTY
+  const getWrittenCommand = () => mockPty.write.mock.calls[0][0]
+
+  // Helper to setup agent info
+  const setupAgentInfo = (agentInfo: { isSuperMinion: boolean; minionBudget?: number }) => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(agentInfo))
+    mockAgentService.readAgentInfo.mockResolvedValue(agentInfo)
+  }
+
+  // Helper to start agent with default parameters
+  const startAgent = (prompt = TEST_PROMPT, agentId = TEST_AGENT_ID) => {
+    return terminalService.startAgent(
+      TEST_PROJECT_PATH,
+      agentId,
+      'claude',
+      'planning',
+      prompt,
+      'sonnet'
+    )
+  }
+
+  beforeEach(() => {
+    const mockWebContents = { send: vi.fn() }
+    mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+
     mockPty = {
       write: vi.fn(),
       onData: vi.fn(),
@@ -503,22 +533,14 @@ describe('Super Minion System Prompt', () => {
     }
     vi.mocked(pty.spawn).mockReturnValue(mockPty)
 
-    // Setup Mock AgentService
     mockAgentService = {
-      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/super-minion-rules.md'),
-      readAgentInfo: vi.fn().mockResolvedValue({
-        isSuperMinion: true,
-        minionBudget: 5
-      }),
+      getSuperMinionRulesPath: vi.fn().mockReturnValue(SUPER_MINION_RULES_PATH),
+      readAgentInfo: vi.fn().mockResolvedValue(SUPER_MINION_AGENT_INFO),
       updateAgentInfo: vi.fn().mockResolvedValue(undefined)
     }
 
-    // Mock fs.existsSync to return true
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      isSuperMinion: true,
-      minionBudget: 5
-    }))
+    setupAgentInfo(SUPER_MINION_AGENT_INFO)
 
     terminalService = new TerminalService(mockMainWindow)
     terminalService.setAgentService(mockAgentService)
@@ -529,90 +551,46 @@ describe('Super Minion System Prompt', () => {
   })
 
   it('should pass --system-prompt-file flag for super minion in planning mode', async () => {
-    await terminalService.startAgent(
-      '/path/to/project',
-      'agent-1',
-      'claude',
-      'planning',
-      'Create feature X',
-      'sonnet'
-    )
+    await startAgent()
 
-    const command = mockPty.write.mock.calls[0][0]
+    const command = getWrittenCommand()
     expect(command).toContain('--system-prompt-file')
-    expect(command).toContain('/path/to/super-minion-rules.md')
+    expect(command).toContain(SUPER_MINION_RULES_PATH)
   })
 
   it('should include acceptance criteria instructions in planning prompt for super minion', async () => {
-    await terminalService.startAgent(
-      '/path/to/project',
-      'agent-1',
-      'claude',
-      'planning',
-      'Create feature X',
-      'sonnet'
-    )
+    await startAgent()
 
-    const command = mockPty.write.mock.calls[0][0]
-    expect(command).toContain('acceptance criteria')
-    expect(command).toContain('AskUserQuestion')
-    expect(command).toContain('BEFORE creating any implementation plan')
-    expect(command).toContain('WAIT for explicit approval')
+    const command = getWrittenCommand()
+    ACCEPTANCE_CRITERIA_KEYWORDS.forEach(keyword => {
+      expect(command).toContain(keyword)
+    })
   })
 
   it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
-    // Setup non-super-minion agent info
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      isSuperMinion: false
-    }))
-    mockAgentService.readAgentInfo.mockResolvedValue({ isSuperMinion: false })
+    setupAgentInfo(REGULAR_AGENT_INFO)
 
-    await terminalService.startAgent(
-      '/path/to/project',
-      'agent-2',
-      'claude',
-      'planning',
-      'Create feature X',
-      'sonnet'
-    )
+    await startAgent(TEST_PROMPT, 'agent-2')
 
-    const command = mockPty.write.mock.calls[0][0]
+    const command = getWrittenCommand()
     expect(command).not.toContain('--system-prompt-file')
     expect(command).not.toContain('super-minion-rules.md')
   })
 
   it('should NOT include acceptance criteria instructions for regular planning mode', async () => {
-    // Setup non-super-minion agent info
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      isSuperMinion: false
-    }))
-    mockAgentService.readAgentInfo.mockResolvedValue({ isSuperMinion: false })
+    setupAgentInfo(REGULAR_AGENT_INFO)
 
-    await terminalService.startAgent(
-      '/path/to/project',
-      'agent-2',
-      'claude',
-      'planning',
-      'Create feature X',
-      'sonnet'
-    )
+    await startAgent(TEST_PROMPT, 'agent-2')
 
-    const command = mockPty.write.mock.calls[0][0]
+    const command = getWrittenCommand()
     expect(command).not.toContain('BEFORE creating any implementation plan')
     expect(command).not.toContain('acceptance criteria')
   })
 
   it('should include instruction to reference criteria throughout execution', async () => {
-    await terminalService.startAgent(
-      '/path/to/project',
-      'agent-1',
-      'claude',
-      'planning',
-      'Build feature Y',
-      'sonnet'
-    )
+    await startAgent('Build feature Y')
 
-    const command = mockPty.write.mock.calls[0][0]
+    const command = getWrittenCommand()
     expect(command).toContain('Reference your acceptance criteria throughout execution')
   })
 })
