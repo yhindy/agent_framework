@@ -121,32 +121,6 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     }
   }
 
-  const handleCopyTeleportUrl = async () => {
-    if (sessionInfo?.sessionId) {
-      try {
-        const url = `https://claude.ai/code/${sessionInfo.sessionId}`
-        await navigator.clipboard.writeText(url)
-        setCopyFeedback('url')
-        setTimeout(() => setCopyFeedback(null), 2000)
-      } catch (err) {
-        console.error('Failed to copy:', err)
-      }
-    }
-  }
-
-  const handleCopyTeleportCommand = async () => {
-    if (sessionInfo?.sessionId) {
-      try {
-        const command = `claude --teleport ${sessionInfo.sessionId}`
-        await navigator.clipboard.writeText(command)
-        setCopyFeedback('command')
-        setTimeout(() => setCopyFeedback(null), 2000)
-      } catch (err) {
-        console.error('Failed to copy:', err)
-      }
-    }
-  }
-
   // Show loading state if running but no session info yet
   if (!isRunning) {
     return null
@@ -262,35 +236,6 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
           <div className="info-row">
             <span className="info-label">Last Updated:</span>
             <span className="info-value">{timeAgo(sessionInfo.lastUpdated)}</span>
-          </div>
-
-          <div className="teleport-section">
-            <div className="teleport-header">
-              <span className="teleport-title">Continue on Cloud</span>
-              <span className="teleport-subtitle">Continue this session on mobile or web</span>
-            </div>
-            <div className="teleport-row">
-              <span className="teleport-icon" title="Open in browser">🔗</span>
-              <span className="teleport-value">{`https://claude.ai/code/${sessionInfo.sessionId}`}</span>
-              <button
-                className="copy-btn teleport-copy-btn"
-                onClick={handleCopyTeleportUrl}
-                title="Copy URL"
-              >
-                {copyFeedback === 'url' ? 'Copied!' : '📋'}
-              </button>
-            </div>
-            <div className="teleport-row">
-              <span className="teleport-icon" title="Run in terminal">📱</span>
-              <span className="teleport-value">{`claude --teleport ${sessionInfo.sessionId}`}</span>
-              <button
-                className="copy-btn teleport-copy-btn"
-                onClick={handleCopyTeleportCommand}
-                title="Copy command"
-              >
-                {copyFeedback === 'command' ? 'Copied!' : '📋'}
-              </button>
-            </div>
           </div>
         </div>
       )}
