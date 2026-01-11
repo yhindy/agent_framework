@@ -58,4 +58,15 @@ describe('Super Minion Rules File', () => {
     expect(rulesContent).toContain('List each agreed criterion')
     expect(rulesContent).toContain('State how it was satisfied')
   })
+
+  it('should require asking clarifying questions BEFORE proposing criteria', () => {
+    expect(rulesContent).toContain('Ask clarifying questions FIRST')
+    expect(rulesContent).toContain('NEVER include open questions IN the acceptance criteria')
+    expect(rulesContent).toContain('ASK questions first, THEN propose concrete criteria')
+  })
+
+  it('should prohibit ambiguity and conditionals in acceptance criteria', () => {
+    expect(rulesContent).toContain('No questions, no ambiguity')
+    expect(rulesContent).toContain('concrete and testable')
+  })
 })
