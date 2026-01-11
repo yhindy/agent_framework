@@ -15,7 +15,6 @@ describe('Super Minion Types', () => {
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       isSuperMinion: true,
-      minionBudget: 5,
       children: [],
       pendingPlans: [],
       taskInvocations: []

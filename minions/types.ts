@@ -34,7 +34,6 @@ export interface ChildPlan {
 
 export interface SuperAgentInfo extends Assignment {
   isSuperMinion: true;
-  minionBudget: number;
   children: Assignment[];
   pendingPlans: ChildPlan[];
 }

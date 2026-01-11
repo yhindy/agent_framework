@@ -610,21 +610,18 @@ export class TerminalService {
       }
 
       if (prompt) {
-        // Include budget info in the planning prompt
-        const minionBudget = agentInfo?.minionBudget || 5
-
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `You have a budget of ${minionBudget} child minions.
-
-BEFORE creating any implementation plan, you MUST:
+          planPrompt = `BEFORE creating any implementation plan, you MUST:
 1. Propose numbered acceptance criteria for this task
 2. Use AskUserQuestion to ask the human to approve the criteria
 3. WAIT for explicit approval before proceeding to implementation
 
 Task: ${prompt}
 
-Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.`
+Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.
+
+You can spawn as many child agents as needed to complete the task quickly. Maximize parallelism by breaking work into independent subtasks that can run concurrently.`
         } else {
           planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }

@@ -22,7 +22,6 @@ describe('SuperAgentView', () => {
     createdAt: new Date().toISOString(),
     lastActivity: new Date().toISOString(),
     isSuperMinion: true,
-    minionBudget: 5,
     children: [
       {
         id: 'child-1',
@@ -32,7 +31,8 @@ describe('SuperAgentView', () => {
         parentAgentId: 'super-1'
       }
     ],
-    pendingPlans: []
+    pendingPlans: [],
+    taskInvocations: []
   }
 
   beforeEach(() => {
@@ -58,10 +58,8 @@ describe('SuperAgentView', () => {
     })
 
     // Check if details are displayed
-    expect(screen.getByText('Budget: 1/5')).toBeInTheDocument()
+    expect(screen.getByText('Tasks: 0')).toBeInTheDocument()
     expect(screen.getByText('Master feature')).toBeInTheDocument()
-    expect(screen.getByText('Active Children (1)')).toBeInTheDocument()
-    expect(screen.getByText('child-1')).toBeInTheDocument()
   })
 
   it('displays error message on failure', async () => {
@@ -92,7 +90,7 @@ describe('SuperAgentView', () => {
 
     await waitFor(() => {
       expect(screen.getByText('👑 master-coordination')).toBeInTheDocument()
-      expect(screen.getByText('Budget: 1/5')).toBeInTheDocument()
+      expect(screen.getByText('Tasks: 0')).toBeInTheDocument()
       expect(screen.getByText('Mission:')).toBeInTheDocument()
       expect(screen.getByText('Master feature')).toBeInTheDocument()
     })
@@ -175,7 +173,7 @@ describe('SuperAgentView', () => {
     expect(makePRBtn.closest('.agent-actions')).toBeInTheDocument()
   })
 
-  it('renders budget badge inline with agent ID', async () => {
+  it('renders task badge inline with agent ID', async () => {
     render(
       <MemoryRouter initialEntries={['/workspace/super/super-1']}>
         <Routes>
@@ -185,9 +183,9 @@ describe('SuperAgentView', () => {
     )
 
     await waitFor(() => {
-      const budgetBadge = screen.getByText('Budget: 1/5')
-      expect(budgetBadge).toBeInTheDocument()
-      expect(budgetBadge.classList.contains('budget-badge')).toBe(true)
+      const taskBadge = screen.getByText('Tasks: 0')
+      expect(taskBadge).toBeInTheDocument()
+      expect(taskBadge.classList.contains('task-badge')).toBe(true)
     })
   })
 })
@@ -205,7 +203,6 @@ describe('SuperAgentView Task Sidebar Collapse', () => {
     createdAt: new Date().toISOString(),
     lastActivity: new Date().toISOString(),
     isSuperMinion: true,
-    minionBudget: 5,
     children: [],
     pendingPlans: [],
     taskInvocations: [

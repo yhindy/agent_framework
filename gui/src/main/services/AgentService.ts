@@ -588,7 +588,6 @@ export class AgentService {
     return {
       ...agentInfo,
       isSuperMinion: true,
-      minionBudget: (agentInfo as any).minionBudget || 5,
       children,
       pendingPlans,
       taskInvocations
@@ -631,12 +630,6 @@ export class AgentService {
 
     if (plan.status !== 'pending') {
       throw new Error('Plan is not in pending status')
-    }
-
-    // 3.5. Check budget
-    const superDetails = await this.getSuperAgentDetails(projectPath, superAgentId)
-    if (superDetails.children.length >= superDetails.minionBudget) {
-      throw new Error(`Budget exceeded: already have ${superDetails.children.length}/${superDetails.minionBudget} children`)
     }
 
     // 4. Create child agent
@@ -719,16 +712,14 @@ export class AgentService {
     // Update .agent-info with super minion fields
     this.updateAgentInfo(worktreePath, {
       isSuperMinion: true,
-      minionBudget: assignment.minionBudget || 5,
       children: [],
       pendingPlans: []
     } as any)
-    
+
     // Return the updated info
     return {
       ...result,
       isSuperMinion: true,
-      minionBudget: assignment.minionBudget || 5,
       children: [],
       pendingPlans: []
     } as any

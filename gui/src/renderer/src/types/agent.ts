@@ -32,12 +32,36 @@ export interface TaskInvocation {
 }
 
 export interface SuperAgentInfo {
+  id?: string
   agentId: string
   branch: string
+  project?: string
   feature: string
+  status?: string
   tool: string
   mode: string
+  createdAt?: string
+  lastActivity?: string
   terminalPid: number | null
+  isSuperMinion: true
+  children: AgentInfo[]
+  pendingPlans: ChildPlan[]
   taskInvocations?: TaskInvocation[]
   uiState?: UIState
+}
+
+export interface AgentInfo {
+  id?: string
+  agentId: string
+  branch: string
+  project?: string
+  feature: string
+  status?: string
+  tool: string
+  mode: string
+  createdAt?: string
+  lastActivity?: string
+  terminalPid?: number | null
+  parentAgentId?: string
+  isSuperMinion?: boolean
 }

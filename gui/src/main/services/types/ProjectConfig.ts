@@ -73,7 +73,6 @@ export type { TaskInvocation } from '../ClaudeSessionInfoService'
 
 export interface SuperAgentInfo extends AgentInfo {
   isSuperMinion: true
-  minionBudget: number
   children: AgentInfo[]
   pendingPlans: ChildPlan[]
   taskInvocations: import('../ClaudeSessionInfoService').TaskInvocation[]
