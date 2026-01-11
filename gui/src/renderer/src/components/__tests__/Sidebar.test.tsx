@@ -516,6 +516,263 @@ describe('Sidebar waiting indicator suppression', () => {
   })
 })
 
+describe('Sidebar cloud agent display', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('displays cloud icon for cloud agents', async () => {
+    const mockAgents = [
+      {
+        id: 'cloud-agent-1',
+        agentId: 'cloud-agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: true,
+        branch: 'feature/test-project/cloud-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cloud-task')).toBeInTheDocument()
+    })
+
+    // Cloud agent should have the cloud icon
+    const agentItem = screen.getByText('cloud-task').closest('.agent-item')
+    expect(agentItem).toContainHTML('☁️')
+    expect(agentItem).toHaveClass('cloud-agent')
+  })
+
+  it('displays cloud icon with title tooltip', async () => {
+    const mockAgents = [
+      {
+        id: 'cloud-agent-1',
+        agentId: 'cloud-agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: true,
+        branch: 'feature/test-project/cloud-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cloud-task')).toBeInTheDocument()
+    })
+
+    // Should have tooltip
+    const cloudIndicator = screen.getByTitle('Running in cloud')
+    expect(cloudIndicator).toBeInTheDocument()
+    expect(cloudIndicator).toHaveClass('cloud-agent-indicator')
+  })
+
+  it('does not display cloud icon for local agents', async () => {
+    const mockAgents = [
+      {
+        id: 'local-agent-1',
+        agentId: 'local-agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: false,
+        branch: 'feature/test-project/local-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('local-task')).toBeInTheDocument()
+    })
+
+    // Local agent should NOT have the cloud icon
+    const agentItem = screen.getByText('local-task').closest('.agent-item')
+    expect(agentItem).not.toContainHTML('☁️')
+    expect(agentItem).not.toHaveClass('cloud-agent')
+  })
+
+  it('does not display cloud icon when isCloudAgent is undefined', async () => {
+    const mockAgents = [
+      {
+        id: 'regular-agent-1',
+        agentId: 'regular-agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/regular-task'
+        // isCloudAgent not set
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('regular-task')).toBeInTheDocument()
+    })
+
+    // Regular agent without isCloudAgent should NOT have the cloud icon
+    const agentItem = screen.getByText('regular-task').closest('.agent-item')
+    expect(agentItem).not.toContainHTML('☁️')
+    expect(agentItem).not.toHaveClass('cloud-agent')
+  })
+
+  it('displays cloud icon alongside super minion crown for cloud super agents', async () => {
+    const mockAgents = [
+      {
+        id: 'cloud-super-1',
+        agentId: 'cloud-super-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: true,
+        isSuperMinion: true,
+        branch: 'feature/test-project/cloud-super-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cloud-super-task')).toBeInTheDocument()
+    })
+
+    // Should have both crown and cloud icons
+    const agentItem = screen.getByText('cloud-super-task').closest('.agent-item')
+    expect(agentItem).toContainHTML('👑')
+    expect(agentItem).toContainHTML('☁️')
+    expect(agentItem).toHaveClass('cloud-agent')
+    expect(agentItem).toHaveClass('super-minion')
+  })
+
+  it('displays multiple agents with mixed local and cloud status', async () => {
+    const mockAgents = [
+      {
+        id: 'cloud-agent-1',
+        agentId: 'cloud-agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: true,
+        branch: 'feature/test-project/cloud-task'
+      },
+      {
+        id: 'local-agent-1',
+        agentId: 'local-agent-1',
+        terminalPid: 456,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isCloudAgent: false,
+        branch: 'feature/test-project/local-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cloud-task')).toBeInTheDocument()
+      expect(screen.getByText('local-task')).toBeInTheDocument()
+    })
+
+    // Cloud agent should have cloud icon and class
+    const cloudAgentItem = screen.getByText('cloud-task').closest('.agent-item')
+    expect(cloudAgentItem).toContainHTML('☁️')
+    expect(cloudAgentItem).toHaveClass('cloud-agent')
+
+    // Local agent should NOT have cloud icon or class
+    const localAgentItem = screen.getByText('local-task').closest('.agent-item')
+    expect(localAgentItem).not.toContainHTML('☁️')
+    expect(localAgentItem).not.toHaveClass('cloud-agent')
+  })
+})
+
 describe('Sidebar branch name display', () => {
   const mockProjects = [
     { name: 'test-project', path: '/path/to/project' }

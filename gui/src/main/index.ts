@@ -10,6 +10,7 @@ import { TestEnvService } from './services/TestEnvService'
 import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
+import { TestBudgetService } from './services/TestBudgetService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -24,6 +25,7 @@ let services: {
   notification: NotificationService
   prPolling: PRPollingService
   claudeSessionInfo: ClaudeSessionInfoService
+  testBudget: TestBudgetService
 } | null = null
 
 function createWindow(): void {
@@ -110,7 +112,8 @@ function initializeServices(): void {
     testEnv: new TestEnvService(mainWindow),
     notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService),
-    claudeSessionInfo: claudeSessionInfoService
+    claudeSessionInfo: claudeSessionInfoService,
+    testBudget: new TestBudgetService(mainWindow)
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -806,6 +809,36 @@ function setupIPC(): void {
     }
     return null
   })
+
+  // Test Budget APIs
+  ipcMain.handle('testBudget:getConfig', async () => {
+    return services!.testBudget.getConfig()
+  })
+
+  ipcMain.handle('testBudget:setConfig', async (_event, updates: { maxConcurrentLocalTests?: number; enableCloudOverflow?: boolean }) => {
+    services!.testBudget.setConfig(updates)
+    return services!.testBudget.getConfig()
+  })
+
+  ipcMain.handle('testBudget:getStatus', async () => {
+    return services!.testBudget.getBudgetStatus()
+  })
+
+  ipcMain.handle('testBudget:requestTestRun', async (_event, agentId: string, projectPath: string, worktreePath: string, command: string) => {
+    return services!.testBudget.requestTestRun(agentId, projectPath, worktreePath, command)
+  })
+
+  ipcMain.handle('testBudget:completeLocalTest', async (_event, testRunId: string) => {
+    services!.testBudget.completeLocalTest(testRunId)
+  })
+
+  ipcMain.handle('testBudget:getActiveTests', async () => {
+    return services!.testBudget.getActiveTests()
+  })
+
+  ipcMain.handle('testBudget:getCloudResult', async (_event, testRunId: string) => {
+    return services!.testBudget.getCloudResult(testRunId)
+  })
 }
 
 app.whenReady().then(() => {
@@ -839,6 +872,7 @@ app.on('window-all-closed', () => {
   if (services) {
     services.terminal.cleanup()
     services.testEnv.cleanup()
+    services.testBudget.cleanup()
   }
   if (process.platform !== 'darwin') {
     app.quit()

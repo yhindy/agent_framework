@@ -169,6 +169,29 @@ const api = {
       callback(agentId, commandId, exitCode)
     ipcRenderer.on('testEnv:exited', subscription)
     return () => ipcRenderer.removeListener('testEnv:exited', subscription)
+  },
+
+  // Test Budget APIs
+  getTestBudgetConfig: () => ipcRenderer.invoke('testBudget:getConfig'),
+  setTestBudgetConfig: (updates: { maxConcurrentLocalTests?: number; enableCloudOverflow?: boolean }) =>
+    ipcRenderer.invoke('testBudget:setConfig', updates),
+  getTestBudgetStatus: () => ipcRenderer.invoke('testBudget:getStatus'),
+  requestTestRun: (agentId: string, projectPath: string, worktreePath: string, command: string) =>
+    ipcRenderer.invoke('testBudget:requestTestRun', agentId, projectPath, worktreePath, command),
+  completeLocalTest: (testRunId: string) => ipcRenderer.invoke('testBudget:completeLocalTest', testRunId),
+  getActiveTests: () => ipcRenderer.invoke('testBudget:getActiveTests'),
+  getCloudTestResult: (testRunId: string) => ipcRenderer.invoke('testBudget:getCloudResult', testRunId),
+
+  onTestBudgetStatusChanged: (callback: (status: any) => void) => {
+    const subscription = (_event: any, status: any) => callback(status)
+    ipcRenderer.on('testBudget:statusChanged', subscription)
+    return () => ipcRenderer.removeListener('testBudget:statusChanged', subscription)
+  },
+
+  onCloudTestComplete: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('testBudget:cloudTestComplete', subscription)
+    return () => ipcRenderer.removeListener('testBudget:cloudTestComplete', subscription)
   }
 }
 

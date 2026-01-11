@@ -27,6 +27,12 @@ interface AgentSession {
   parentAgentId?: string
   isBaseBranchAgent?: boolean
   branch?: string
+  /**
+   * True if this agent is running in cloud/background compute.
+   * Cloud agents are spawned when the local test budget is exhausted.
+   * They are displayed with a cloud icon indicator in the UI.
+   */
+  isCloudAgent?: boolean
 }
 
 interface AgentsByProject {
@@ -297,7 +303,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     return (
       <div key={agent.id} className="agent-item-container">
         <div
-          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''}`}
+          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''} ${agent.isCloudAgent ? 'cloud-agent' : ''}`}
           onClick={handleAgentItemClick}
           style={{ paddingLeft: `${depth * 12 + 12}px` }}
         >
@@ -316,8 +322,13 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                 👑
               </span>
             )}
+            {agent.isCloudAgent && (
+              <span className="cloud-agent-indicator" title="Running in cloud">
+                ☁️
+              </span>
+            )}
             {agent.isBaseBranchAgent && <span className="agent-icon">🏠</span>}
-            {!agent.isSuperMinion && !agent.isBaseBranchAgent && <span className="agent-icon"></span>}
+            {!agent.isSuperMinion && !agent.isBaseBranchAgent && !agent.isCloudAgent && <span className="agent-icon"></span>}
             {agent.isBaseBranchAgent ? (
               <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
             ) : agent.branch ? (

@@ -179,3 +179,56 @@ Before declaring completion, verify EACH acceptance criterion:
 - **Test everything**: TDD ensures quality
 - **Escalate sparingly**: Only for genuine blockers
 - **Move fast**: Execute in parallel when possible
+
+## ☁️ Cloud Background Agents
+
+The framework enforces a **local test budget** to prevent resource exhaustion. When the budget is exceeded, compute-heavy work is automatically offloaded to cloud background agents.
+
+### Budget Model
+
+| Resource | Default Limit |
+|----------|---------------|
+| Concurrent local tests | 1 |
+
+### How It Works
+
+1. When you spawn a Task subagent that runs tests, the orchestrator checks the local budget
+2. If budget available: subagent runs locally
+3. If budget exhausted: subagent runs on cloud infrastructure
+4. Cloud agents appear in the sidebar with a ☁️ indicator
+
+### Best Practices for Super Minions
+
+When spawning multiple implementer subagents:
+
+```
+Task(description="Implement auth with tests", prompt="...")
+Task(description="Implement API with tests", prompt="...")
+Task(description="Implement UI with tests", prompt="...")
+```
+
+The orchestrator will:
+- Run first test-heavy subagent locally
+- Offload subsequent test runs to cloud agents
+- Aggregate results back to you
+
+### Configuration
+
+Projects can tune the budget in `minions/config.json`:
+
+```json
+{
+  "testBudget": {
+    "maxLocalConcurrent": 1,
+    "enableCloudOverflow": true
+  }
+}
+```
+
+### UI Visibility
+
+- Local subagents: shown with standard indicator
+- Cloud subagents: shown with ☁️ icon
+- Both appear in the sidebar under your super minion
+
+See `minions/rules/cloud_agents.md` for detailed cloud agent guidelines.
