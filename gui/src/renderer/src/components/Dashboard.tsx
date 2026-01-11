@@ -25,21 +25,12 @@ interface Assignment {
   projectPath?: string  // Added to track which project the assignment belongs to
 }
 
-type TeamSize = 'small' | 'medium' | 'large'
-
-const teamSizeToMinionBudget: Record<TeamSize, number> = {
-  small: 3,
-  medium: 5,
-  large: 8
-}
-
 function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showTypeSelection, setShowTypeSelection] = useState(true)
-  const [teamSize, setTeamSize] = useState<TeamSize>('small')
   const [isCreating, setIsCreating] = useState(false)
   const [showTeleportForm, setShowTeleportForm] = useState(false)
   const [teleportInput, setTeleportInput] = useState('')
@@ -108,8 +99,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     status: 'pending',
     yolo: true,
     chrome: true,
-    isSuper: false,
-    minionBudget: 3
+    isSuper: false
   })
 
   useEffect(() => {
@@ -208,7 +198,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         result = await window.electronAPI.createSuperAssignment(projectPath, {
           branch: formData.shortName,
           feature,
-          minionBudget: teamSizeToMinionBudget[teamSize],
           tool: formData.tool,
           model: formData.model,
           prompt: formData.prompt,
@@ -253,10 +242,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         status: 'pending',
         yolo: false,
         chrome: true,
-        isSuper: false,
-        minionBudget: 3
+        isSuper: false
       })
-      setTeamSize('small')
       setShowTypeSelection(true)
 
       // Wait a moment for worktree creation then refresh
@@ -414,10 +401,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const selectAgentType = (isSuper: boolean) => {
     setFormData({ ...formData, isSuper })
     setShowTypeSelection(false)
-    // Reset team size when selecting orchestrator
-    if (isSuper) {
-      setTeamSize('small')
-    }
   }
 
   const handleTeleportClick = () => {
@@ -756,38 +739,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                       />
                     </div>
                   </div>
-
-                  {formData.isSuper && (
-                    <div className="form-group">
-                      <label>Team Size</label>
-                      <div className="team-size-selector">
-                        <button
-                          type="button"
-                          className={teamSize === 'small' ? 'selected' : ''}
-                          onClick={() => setTeamSize('small')}
-                        >
-                          Small (2-3)
-                        </button>
-                        <button
-                          type="button"
-                          className={teamSize === 'medium' ? 'selected' : ''}
-                          onClick={() => setTeamSize('medium')}
-                        >
-                          Medium (4-6)
-                        </button>
-                        <button
-                          type="button"
-                          className={teamSize === 'large' ? 'selected' : ''}
-                          onClick={() => setTeamSize('large')}
-                        >
-                          Large (7-10)
-                        </button>
-                      </div>
-                      <div className="form-hint">
-                        Maximum number of agents the orchestrator can coordinate.
-                      </div>
-                    </div>
-                  )}
 
                   {formData.tool !== 'cursor' && (
                     <div className="form-group">

@@ -48,7 +48,6 @@ describe('AgentService Plan Approval', () => {
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       isSuperMinion: true,
-      minionBudget: 5,
       children: [],
       pendingPlans: []
     }, null, 2))

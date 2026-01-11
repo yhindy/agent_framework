@@ -314,7 +314,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           <div className="agent-title">
             <h2>
               👑 {extractBranchName(agent.branch) || agent.agentId}
-              <span className="budget-badge">Tasks: {agent.taskInvocations?.length || 0}</span>
+              <span className="task-badge">Tasks: {agent.taskInvocations?.length || 0}</span>
             </h2>
           </div>
 

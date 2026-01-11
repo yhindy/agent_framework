@@ -607,7 +607,7 @@ describe('Super Minion System Prompt', () => {
   const TEST_AGENT_ID = 'agent-1'
   const TEST_PROMPT = 'Create feature X'
   const SUPER_MINION_RULES_PATH = '/path/to/super-minion-rules.md'
-  const SUPER_MINION_AGENT_INFO = { isSuperMinion: true, minionBudget: 5 }
+  const SUPER_MINION_AGENT_INFO = { isSuperMinion: true }
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
   const ACCEPTANCE_CRITERIA_KEYWORDS = [
@@ -621,7 +621,7 @@ describe('Super Minion System Prompt', () => {
   const getWrittenCommand = () => mockPty.write.mock.calls[0][0]
 
   // Helper to setup agent info
-  const setupAgentInfo = (agentInfo: { isSuperMinion: boolean; minionBudget?: number }) => {
+  const setupAgentInfo = (agentInfo: { isSuperMinion: boolean }) => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(agentInfo))
     mockAgentService.readAgentInfo.mockResolvedValue(agentInfo)
   }
