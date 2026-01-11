@@ -477,3 +477,143 @@ describe('TerminalService Model Handling', () => {
   })
 })
 
+describe('Super Minion System Prompt', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockAgentService: any
+
+  beforeEach(() => {
+    // Setup Mock Window & WebContents
+    const mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    // Setup Mock PTY
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    // Setup Mock AgentService
+    mockAgentService = {
+      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/super-minion-rules.md'),
+      readAgentInfo: vi.fn().mockResolvedValue({
+        isSuperMinion: true,
+        minionBudget: 5
+      }),
+      updateAgentInfo: vi.fn().mockResolvedValue(undefined)
+    }
+
+    // Mock fs.existsSync to return true
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+      isSuperMinion: true,
+      minionBudget: 5
+    }))
+
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should pass --system-prompt-file flag for super minion in planning mode', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create feature X',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--system-prompt-file')
+    expect(command).toContain('/path/to/super-minion-rules.md')
+  })
+
+  it('should include acceptance criteria instructions in planning prompt for super minion', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'planning',
+      'Create feature X',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('acceptance criteria')
+    expect(command).toContain('AskUserQuestion')
+    expect(command).toContain('BEFORE creating any implementation plan')
+    expect(command).toContain('WAIT for explicit approval')
+  })
+
+  it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
+    // Setup non-super-minion agent info
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+      isSuperMinion: false
+    }))
+    mockAgentService.readAgentInfo.mockResolvedValue({ isSuperMinion: false })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-2',
+      'claude',
+      'planning',
+      'Create feature X',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).not.toContain('--system-prompt-file')
+    expect(command).not.toContain('super-minion-rules.md')
+  })
+
+  it('should NOT include acceptance criteria instructions for regular planning mode', async () => {
+    // Setup non-super-minion agent info
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+      isSuperMinion: false
+    }))
+    mockAgentService.readAgentInfo.mockResolvedValue({ isSuperMinion: false })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-2',
+      'claude',
+      'planning',
+      'Create feature X',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).not.toContain('BEFORE creating any implementation plan')
+    expect(command).not.toContain('acceptance criteria')
+  })
+
+  it('should include instruction to reference criteria throughout execution', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'planning',
+      'Build feature Y',
+      'sonnet'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('Reference your acceptance criteria throughout execution')
+  })
+})
+
