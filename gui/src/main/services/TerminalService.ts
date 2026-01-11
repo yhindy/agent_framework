@@ -260,6 +260,11 @@ export class TerminalService {
       // JSONL-based state detection for Claude (more reliable than pattern matching)
       let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
 
+      // Format display name as "project: branch_suffix" for cleaner notifications
+      const projectName = projectPath.split('/').pop() || 'project'
+      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+      const displayName = `${projectName}: ${branchSuffix}`
+
       // Extract state check logic for reuse (immediate check + polling)
       const checkAndBroadcastState = () => {
         if (!sessionId) return
@@ -278,7 +283,7 @@ export class TerminalService {
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
-              body: `Agent ${agentId} is waiting for your input`,
+              body: `${displayName} is waiting for your input`,
               agentId
             })
 
@@ -327,6 +332,11 @@ export class TerminalService {
 
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
+      // Format display name as "project: branch_suffix" for cleaner notifications
+      const projectName = projectPath.split('/').pop() || 'project'
+      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+      const displayName = `${projectName}: ${branchSuffix}`
+
       idleDetector = new IdleDetector(
         {
           workingPatterns: tool === 'cursor-cli' ? CLAUDE_WORKING_PATTERNS : [],
@@ -342,7 +352,7 @@ export class TerminalService {
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
-              body: `Agent ${agentId} is waiting for your input`,
+              body: `${displayName} is waiting for your input`,
               agentId
             })
             this.updateAgentInfo(worktreePath, {
