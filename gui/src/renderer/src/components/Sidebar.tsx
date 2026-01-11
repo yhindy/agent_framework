@@ -530,13 +530,15 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     const renderTaskItem = (task: TaskInvocation, depth: number) => {
                       const statusIcon = task.status === 'running' ? '⏳' : task.status === 'completed' ? '✓' : '✗'
                       const statusClass = task.status === 'running' ? 'running' : task.status === 'completed' ? 'completed' : 'failed'
+                      const isCloud = task.isBackground === true
                       return (
                         <div
                           key={task.toolUseId}
-                          className={`task-item ${statusClass}`}
+                          className={`task-item ${statusClass}${isCloud ? ' cloud-task' : ''}`}
                           style={{ paddingLeft: `${depth * 12 + 12}px` }}
-                          title={task.description}
+                          title={isCloud ? `☁️ ${task.description} (running in cloud)` : task.description}
                         >
+                          {isCloud && <span className="cloud-agent-indicator" title="Running in cloud">☁️</span>}
                           <span className="task-icon">{statusIcon}</span>
                           <span className="task-description">{task.description || task.subagentType}</span>
                         </div>

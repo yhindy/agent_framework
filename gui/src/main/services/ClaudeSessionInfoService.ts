@@ -63,6 +63,8 @@ export interface TaskInvocation {
   startedAt: string
   completedAt?: string
   resultSummary?: string
+  /** True if task was spawned with run_in_background=true (runs on cloud compute) */
+  isBackground?: boolean
 }
 
 export interface ClaudeSessionInfo {
@@ -319,7 +321,8 @@ export class ClaudeSessionInfoService {
                     subagentType,
                     prompt: input.prompt || '',
                     status: 'running',
-                    startedAt: entry.timestamp || new Date().toISOString()
+                    startedAt: entry.timestamp || new Date().toISOString(),
+                    isBackground: input.run_in_background === true
                   })
                 }
               }

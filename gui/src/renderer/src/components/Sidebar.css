@@ -587,6 +587,17 @@
   }
 }
 
+/* Cloud task indicator */
+.task-item.cloud-task {
+  border-left: 2px solid #64b5f6;
+  padding-left: 10px;
+}
+
+.task-item .cloud-agent-indicator {
+  font-size: 11px;
+  margin-right: 2px;
+}
+
 /* Sidebar collapse button */
 .collapse-sidebar-btn {
   position: absolute;

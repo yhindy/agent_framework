@@ -669,7 +669,8 @@ not valid json
         subagentType: 'general-purpose',
         prompt: 'Create a login form...',
         status: 'running',
-        startedAt: '2026-01-07T10:00:05.000Z'
+        startedAt: '2026-01-07T10:00:05.000Z',
+        isBackground: false
       })
     })
 
