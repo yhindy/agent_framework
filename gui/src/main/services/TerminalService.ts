@@ -480,7 +480,16 @@ export class TerminalService {
 
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `You have a budget of ${minionBudget} child minions. Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
+          planPrompt = `You have a budget of ${minionBudget} child minions.
+
+BEFORE creating any implementation plan, you MUST:
+1. Propose numbered acceptance criteria for this task
+2. Use AskUserQuestion to ask the human to approve the criteria
+3. WAIT for explicit approval before proceeding to implementation
+
+Task: ${prompt}
+
+Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.`
         } else {
           planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }
