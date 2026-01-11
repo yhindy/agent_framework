@@ -79,6 +79,30 @@ export class TerminalService {
     return uuidv5(input, this.AGENT_SESSION_NAMESPACE)
   }
 
+  /**
+   * Compute the worktree path for an agent.
+   * Uses project name from config (not directory name) to ensure consistency
+   * when running from a worktree vs the main repo.
+   */
+  private getWorktreePath(projectPath: string, agentId: string): string {
+    // Base branch agents work in the main project directory
+    if (agentId.endsWith('-base')) {
+      return projectPath
+    }
+
+    // Regular agents use worktrees
+    // IMPORTANT: Must use project name from config to match AgentService
+    const projectName = this.agentService?.getProjectName(projectPath) || projectPath.split('/').pop() || 'project'
+
+    // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+    if (agentId.startsWith(`${projectName}-`)) {
+      return join(projectPath, '..', agentId)
+    } else {
+      // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
+      return join(projectPath, '..', `${projectName}-${agentId}`)
+    }
+  }
+
   private async readAgentInfo(worktreePath: string): Promise<AgentInfo | null> {
     if (!this.agentService) return null
     return this.agentService.readAgentInfo(worktreePath)
@@ -135,24 +159,8 @@ export class TerminalService {
       this.stopAgent(agentId)
     }
 
-    // Determine worktree path
-    let worktreePath: string
-
-    // Base branch agents work in the main project directory
-    if (agentId.endsWith('-base')) {
-      worktreePath = projectPath
-    } else {
-      // Regular agents use worktrees
-      const projectName = projectPath.split('/').pop() || 'project'
-
-      // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
-      if (agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(projectPath, '..', agentId)
-      } else {
-        // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
-        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
-      }
-    }
+    // Determine worktree path (shared logic with startPlainTerminal)
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
 
     // Generate deterministic session ID
     const sessionId = this.generateSessionId(agentId, worktreePath)
@@ -725,22 +733,8 @@ export class TerminalService {
       return
     }
 
-    // Determine worktree path
-    let worktreePath: string
-
-    // Base branch agents work in the main project directory
-    if (agentId.endsWith('-base')) {
-      worktreePath = projectPath
-    } else {
-      // Regular agents use worktrees
-      const projectName = projectPath.split('/').pop() || 'project'
-
-      if (agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(projectPath, '..', agentId)
-      } else {
-        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
-      }
-    }
+    // Determine worktree path (shared logic with startAgent)
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
 
     // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'

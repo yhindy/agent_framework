@@ -335,6 +335,15 @@ export class AgentService {
     return join(projectPath, 'minions', 'config.json')
   }
 
+  /**
+   * Get the project name from config, falling back to directory name.
+   * This must be used consistently for worktree path computation.
+   */
+  getProjectName(projectPath: string): string {
+    const config = this.getProjectConfig(projectPath)
+    return config.project?.name || projectPath.split('/').pop() || 'project'
+  }
+
   private getProjectConfig(projectPath: string): ProjectConfig {
     const configPath = this.getProjectConfigPath(projectPath)
     if (!existsSync(configPath)) {

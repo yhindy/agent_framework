@@ -521,7 +521,8 @@ describe('TerminalService Cloud Session ID Detection', () => {
     const mockAgentService = {
       readAgentInfo: vi.fn().mockResolvedValue(null),
       updateAgentInfo: vi.fn().mockResolvedValue(undefined),
-      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules')
+      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules'),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
     }
 
     const terminalService = new TerminalService(mockMainWindow)
@@ -566,7 +567,8 @@ describe('TerminalService Cloud Session ID Detection', () => {
     const mockAgentService = {
       readAgentInfo: vi.fn().mockResolvedValue(null),
       updateAgentInfo: vi.fn().mockResolvedValue(undefined),
-      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules')
+      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules'),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
     }
 
     const terminalService = new TerminalService(mockMainWindow)
