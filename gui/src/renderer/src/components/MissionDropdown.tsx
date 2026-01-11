@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import './MissionDropdown.css'
 
 interface MissionDropdownProps {
-  onNewMission: (isSuper: boolean) => void
+  onNewMission: (isSuper?: boolean) => void
   onTeleport: () => void
   onAddProject?: () => void
   showAddProject?: boolean
@@ -75,17 +75,10 @@ function MissionDropdown({
           )}
           <div
             className="mission-dropdown-item"
-            onClick={() => handleItemClick(() => onNewMission(false))}
+            onClick={() => handleItemClick(() => onNewMission())}
           >
             <span className="mission-dropdown-item-icon">🍌</span>
-            <span className="mission-dropdown-item-label">Regular Mission</span>
-          </div>
-          <div
-            className="mission-dropdown-item super-option"
-            onClick={() => handleItemClick(() => onNewMission(true))}
-          >
-            <span className="mission-dropdown-item-icon">👑</span>
-            <span className="mission-dropdown-item-label">Super Mission</span>
+            <span className="mission-dropdown-item-label">New Minion</span>
           </div>
           <div className="mission-dropdown-divider" />
           <div

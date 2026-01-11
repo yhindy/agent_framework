@@ -20,44 +20,187 @@ vi.mock('../../hooks/usePRPolling', () => ({
 global.window = Object.create(window)
 Object.defineProperty(window, 'electronAPI', {
   value: {
-    listAssignments: vi.fn().mockResolvedValue([]),
-    createAssignment: vi.fn().mockResolvedValue({ agentId: 'test-agent-123' }),
+    getAssignmentsForProject: vi.fn().mockResolvedValue({ assignments: [] }),
+    createAssignmentForProject: vi.fn().mockResolvedValue({ agentId: 'test-agent-123' }),
+    createSuperAssignment: vi.fn().mockResolvedValue({ agentId: 'super-agent-123' }),
     onAssignmentsUpdate: vi.fn().mockReturnValue(() => {}),
-    checkGitHubCLI: vi.fn().mockResolvedValue({ available: true, error: '' }),
+    checkDependencies: vi.fn().mockResolvedValue({ ghInstalled: true, ghAuthenticated: true }),
     getProjects: vi.fn().mockResolvedValue([])
   },
   writable: true
 })
 
-describe('Dashboard Model Selection', () => {
-  const mockProjects = [
-    { name: 'test-project', path: '/path/to/project' }
-  ]
+const mockProjects = [
+  { name: 'test-project', path: '/path/to/project' }
+]
 
+// Helper to find select elements by their associated label text
+const getSelectByLabelText = (labelText: string): HTMLSelectElement => {
+  const label = screen.getByText(labelText)
+  const formGroup = label.closest('.form-group')
+  return formGroup?.querySelector('select') as HTMLSelectElement
+}
+
+// Helper to open type selection modal
+const openTypeSelection = async () => {
+  const newMissionButton = screen.getByText('+ New Mission')
+  fireEvent.click(newMissionButton)
+
+  await waitFor(() => {
+    expect(screen.getByText('New Minion')).toBeInTheDocument()
+  })
+  fireEvent.click(screen.getByText('New Minion'))
+
+  // Should show type selection modal
+  await waitFor(() => {
+    expect(screen.getByText('New Mission')).toBeInTheDocument()
+    expect(screen.getByText('Choose how you want to work')).toBeInTheDocument()
+  })
+}
+
+// Helper to open Single Agent creation form from dropdown
+const openSingleAgentForm = async () => {
+  await openTypeSelection()
+
+  // Click Single Agent card - find by the title inside the card
+  const cards = screen.getAllByText('Single Agent')
+  const singleAgentCard = cards.find(el => el.className === 'type-title')?.closest('.type-card')
+  fireEvent.click(singleAgentCard!)
+
+  await waitFor(() => {
+    expect(screen.getByText('Create Single Agent')).toBeInTheDocument()
+  })
+}
+
+// Helper to open Orchestrator creation form from dropdown
+const openOrchestratorForm = async () => {
+  await openTypeSelection()
+
+  // Click Orchestrator card - find by the title inside the card
+  const cards = screen.getAllByText('Orchestrator')
+  const orchestratorCard = cards.find(el => el.className === 'type-title')?.closest('.type-card')
+  fireEvent.click(orchestratorCard!)
+
+  await waitFor(() => {
+    expect(screen.getByText('Create Orchestrator')).toBeInTheDocument()
+  })
+}
+
+describe('Dashboard Creation Modal - Single Agent Form', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('displays all available Claude models including OpusPlan', async () => {
+  it('clicking New Minion shows type selection, then Single Agent form', async () => {
     render(
       <MemoryRouter>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
       </MemoryRouter>
     )
 
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
+    await openSingleAgentForm()
 
-    // Wait for modal to appear
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
+    // Should show Single Agent form title
+    expect(screen.getByText('Create Single Agent')).toBeInTheDocument()
+    // Should show Task label (not Goal)
+    expect(screen.getByText('Task')).toBeInTheDocument()
+  })
 
-    // Find the model dropdown (it should be visible for claude tool which is default)
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
+  it('shows Workflow radio cards for Single Agent', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
 
-    // Check all options are present
+    await openSingleAgentForm()
+
+    // Should show workflow options
+    expect(screen.getByText('Plan First')).toBeInTheDocument()
+    expect(screen.getByText('Start Immediately')).toBeInTheDocument()
+    expect(screen.getByText('Agent proposes a plan for your review before making changes')).toBeInTheDocument()
+  })
+
+  it('defaults to Plan First workflow with opusplan model', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Plan First should be selected by default
+    const planFirstRadio = screen.getByDisplayValue('planning') as HTMLInputElement
+    expect(planFirstRadio.checked).toBe(true)
+
+    // Model should be opusplan
+    const modelSelect = getSelectByLabelText('Model')
+    expect(modelSelect.value).toBe('opusplan')
+  })
+
+  it('switches model to haiku when Start Immediately is selected', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Click Start Immediately
+    const startImmediatelyRadio = screen.getByDisplayValue('dev')
+    fireEvent.click(startImmediatelyRadio)
+
+    // Model should switch to haiku
+    const modelSelect = getSelectByLabelText('Model')
+    expect(modelSelect.value).toBe('haiku')
+  })
+
+  it('switches model to opusplan when Plan First is selected', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // First switch to Start Immediately
+    const startImmediatelyRadio = screen.getByDisplayValue('dev')
+    fireEvent.click(startImmediatelyRadio)
+
+    // Then switch back to Plan First
+    const planFirstRadio = screen.getByDisplayValue('planning')
+    fireEvent.click(planFirstRadio)
+
+    // Model should switch to opusplan
+    const modelSelect = getSelectByLabelText('Model')
+    expect(modelSelect.value).toBe('opusplan')
+  })
+
+  it('shows Start Agent CTA button for Single Agent', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    expect(screen.getByText('Start Agent')).toBeInTheDocument()
+  })
+
+  it('displays all available Claude models', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    const modelSelect = getSelectByLabelText('Model')
     const options = Array.from(modelSelect.options).map(opt => ({
       value: opt.value,
       text: opt.textContent
@@ -71,32 +214,9 @@ describe('Dashboard Model Selection', () => {
     ])
   })
 
-  it('sets model to opusplan when selected', async () => {
-    render(
-      <MemoryRouter>
-        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
-    )
-
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
-
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
-
-    // Find and change the model dropdown
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    fireEvent.change(modelSelect, { target: { value: 'opusplan' } })
-
-    // Verify the value changed
-    expect(modelSelect.value).toBe('opusplan')
-  })
-
-  it('includes opusplan model in assignment creation', async () => {
+  it('includes correct values when creating Single Agent assignment', async () => {
     const mockCreateAssignment = vi.fn().mockResolvedValue({ agentId: 'test-agent-123' })
-    window.electronAPI.createAssignment = mockCreateAssignment
+    window.electronAPI.createAssignmentForProject = mockCreateAssignment
 
     render(
       <MemoryRouter>
@@ -104,27 +224,19 @@ describe('Dashboard Model Selection', () => {
       </MemoryRouter>
     )
 
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
+    await openSingleAgentForm()
 
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
+    // Fill in required fields
+    const branchInput = screen.getByPlaceholderText('user-auth')
+    fireEvent.change(branchInput, { target: { value: 'test-feature' } })
 
-    // Fill in the form
-    const shortNameInput = screen.getByLabelText('Short Name')
-    fireEvent.change(shortNameInput, { target: { value: 'test-feature' } })
-
-    const promptTextarea = screen.getByLabelText('Prompt')
-    fireEvent.change(promptTextarea, { target: { value: 'test prompt' } })
-
-    // Select opusplan model
-    const modelSelect = screen.getByLabelText('Model')
-    fireEvent.change(modelSelect, { target: { value: 'opusplan' } })
+    // Find the textarea in the form
+    const textareas = screen.getAllByRole('textbox')
+    const promptTextarea = textareas.find(t => t.tagName === 'TEXTAREA')
+    fireEvent.change(promptTextarea!, { target: { value: 'Test task description' } })
 
     // Submit the form
-    const submitButton = screen.getByText('Create Mission')
+    const submitButton = screen.getByText('Start Agent')
     fireEvent.click(submitButton)
 
     // Wait for the API call
@@ -132,29 +244,197 @@ describe('Dashboard Model Selection', () => {
       expect(mockCreateAssignment).toHaveBeenCalled()
     })
 
-    // Verify the model was included in the call
-    const callArgs = mockCreateAssignment.mock.calls[0][0]
-    expect(callArgs.model).toBe('opusplan')
+    // Verify the call arguments
+    const callArgs = mockCreateAssignment.mock.calls[0]
+    expect(callArgs[0]).toBe('/path/to/project') // projectPath
+    expect(callArgs[1]).toMatchObject({
+      mode: 'planning',
+      model: 'opusplan',
+      tool: 'claude'
+    })
+  })
+})
+
+describe('Dashboard Creation Modal - Orchestrator Form', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
-  it('defaults to opusplan model when form is initialized', async () => {
+  it('clicking New Minion shows type selection, then Orchestrator form', async () => {
     render(
       <MemoryRouter>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
       </MemoryRouter>
     )
 
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
+    await openOrchestratorForm()
 
+    // Should show Orchestrator form title
+    expect(screen.getByText('Create Orchestrator')).toBeInTheDocument()
+    // Should show Goal label (not Task)
+    expect(screen.getByText('Goal')).toBeInTheDocument()
+  })
+
+  it('shows Team Size semantic buttons for Orchestrator', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    // Should show team size options
+    expect(screen.getByText('Small (2-3)')).toBeInTheDocument()
+    expect(screen.getByText('Medium (4-6)')).toBeInTheDocument()
+    expect(screen.getByText('Large (7-10)')).toBeInTheDocument()
+  })
+
+  it('defaults to Small team size', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    // Small should be selected by default
+    const smallButton = screen.getByText('Small (2-3)').closest('button')
+    expect(smallButton).toHaveClass('selected')
+  })
+
+  it('team size buttons toggle selection correctly', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    // Click Medium
+    const mediumButton = screen.getByText('Medium (4-6)')
+    fireEvent.click(mediumButton)
+
+    // Medium should be selected, Small should not
+    expect(mediumButton.closest('button')).toHaveClass('selected')
+    expect(screen.getByText('Small (2-3)').closest('button')).not.toHaveClass('selected')
+
+    // Click Large
+    const largeButton = screen.getByText('Large (7-10)')
+    fireEvent.click(largeButton)
+
+    // Large should be selected
+    expect(largeButton.closest('button')).toHaveClass('selected')
+    expect(mediumButton.closest('button')).not.toHaveClass('selected')
+  })
+
+  it('team size maps to correct minionBudget values', async () => {
+    const mockCreateSuperAssignment = vi.fn().mockResolvedValue({ agentId: 'super-agent-123' })
+    window.electronAPI.createSuperAssignment = mockCreateSuperAssignment
+
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    // Fill in required fields
+    const branchInput = screen.getByPlaceholderText('user-auth')
+    fireEvent.change(branchInput, { target: { value: 'test-orchestrator' } })
+
+    const textareas = screen.getAllByRole('textbox')
+    const promptTextarea = textareas.find(t => t.tagName === 'TEXTAREA')
+    fireEvent.change(promptTextarea!, { target: { value: 'Test goal description' } })
+
+    // Select Medium team size
+    fireEvent.click(screen.getByText('Medium (4-6)'))
+
+    // Submit the form
+    const submitButton = screen.getByText('Create Plan')
+    fireEvent.click(submitButton)
+
+    // Wait for the API call
+    await waitFor(() => {
+      expect(mockCreateSuperAssignment).toHaveBeenCalled()
+    })
+
+    // Verify minionBudget is 5 for Medium
+    const callArgs = mockCreateSuperAssignment.mock.calls[0]
+    expect(callArgs[1].minionBudget).toBe(5)
+  })
+
+  it('shows Create Plan CTA button for Orchestrator', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    expect(screen.getByText('Create Plan')).toBeInTheDocument()
+  })
+
+  it('does not show Workflow selector for Orchestrator', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    // Should NOT show workflow options
+    expect(screen.queryByText('Plan First')).not.toBeInTheDocument()
+    expect(screen.queryByText('Start Immediately')).not.toBeInTheDocument()
+  })
+
+  it('shows inline education text for Orchestrator', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openOrchestratorForm()
+
+    expect(screen.getByText(/The orchestrator will analyze your goal and create a plan/)).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard Creation Modal - Navigation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('Cancel button closes modal', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Click cancel
+    const cancelButton = screen.getByText('Back')
+    fireEvent.click(cancelButton)
+
+    // Modal should still be open but show type selection (Back goes to type selection)
+    // Actually with the new flow, Back should go to type selection
     await waitFor(() => {
       expect(screen.getByText('New Mission')).toBeInTheDocument()
     })
+  })
+})
 
-    // Check default value
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    expect(modelSelect.value).toBe('opusplan')
+describe('Dashboard Model Selection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
   it('preserves model selection when switching between fields', async () => {
@@ -164,83 +444,18 @@ describe('Dashboard Model Selection', () => {
       </MemoryRouter>
     )
 
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
+    await openSingleAgentForm()
 
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
-
-    // Select opusplan model
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    fireEvent.change(modelSelect, { target: { value: 'opusplan' } })
-    expect(modelSelect.value).toBe('opusplan')
+    // Select a different model
+    const modelSelect = getSelectByLabelText('Model')
+    fireEvent.change(modelSelect, { target: { value: 'opus' } })
+    expect(modelSelect.value).toBe('opus')
 
     // Fill in other fields
-    const shortNameInput = screen.getByLabelText('Short Name')
-    fireEvent.change(shortNameInput, { target: { value: 'test-feature' } })
-
-    const promptTextarea = screen.getByLabelText('Prompt')
-    fireEvent.change(promptTextarea, { target: { value: 'test prompt' } })
+    const branchInput = screen.getByPlaceholderText('user-auth')
+    fireEvent.change(branchInput, { target: { value: 'test-feature' } })
 
     // Verify model selection persisted
-    expect(modelSelect.value).toBe('opusplan')
-  })
-
-  it('switches to haiku when mode changes to dev', async () => {
-    render(
-      <MemoryRouter>
-        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
-    )
-
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
-
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
-
-    // Default should be opusplan with planning mode
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    expect(modelSelect.value).toBe('opusplan')
-
-    // Switch to dev mode
-    const modeSelect = screen.getByLabelText('Mode') as HTMLSelectElement
-    fireEvent.change(modeSelect, { target: { value: 'dev' } })
-
-    // Model should automatically switch to haiku
-    expect(modelSelect.value).toBe('haiku')
-  })
-
-  it('switches to opusplan when mode changes to planning', async () => {
-    render(
-      <MemoryRouter>
-        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
-    )
-
-    // Open the create mission form
-    const createButton = screen.getByText('Create New Mission')
-    fireEvent.click(createButton)
-
-    await waitFor(() => {
-      expect(screen.getByText('New Mission')).toBeInTheDocument()
-    })
-
-    // Switch to dev mode first
-    const modeSelect = screen.getByLabelText('Mode') as HTMLSelectElement
-    fireEvent.change(modeSelect, { target: { value: 'dev' } })
-
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    expect(modelSelect.value).toBe('haiku')
-
-    // Switch back to planning mode
-    fireEvent.change(modeSelect, { target: { value: 'planning' } })
-
-    // Model should automatically switch to opusplan
-    expect(modelSelect.value).toBe('opusplan')
+    expect(modelSelect.value).toBe('opus')
   })
 })

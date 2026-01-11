@@ -509,3 +509,157 @@
   overflow-y: auto;
 }
 
+/* Type Selection Styles */
+.type-selection-subtitle {
+  font-size: 14px;
+  color: #858585;
+  margin-bottom: 20px;
+  margin-top: -16px;
+}
+
+.type-selection {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.type-card {
+  flex: 1;
+  background: #2d2d2d;
+  border: 2px solid #3e3e42;
+  border-radius: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.type-card:hover {
+  border-color: #0e639c;
+  background: #323235;
+  transform: translateY(-2px);
+}
+
+.type-card.super:hover {
+  border-color: #9b59b6;
+  background: #352a3d;
+}
+
+.type-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.type-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.type-description {
+  font-size: 13px;
+  color: #858585;
+  line-height: 1.4;
+}
+
+/* Orchestrator Info Box */
+.orchestrator-info {
+  background: rgba(155, 89, 182, 0.1);
+  border: 1px solid rgba(155, 89, 182, 0.3);
+  border-left: 3px solid #9b59b6;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #d4d4d4;
+  line-height: 1.5;
+}
+
+/* Team Size Selector */
+.team-size-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.team-size-selector button {
+  flex: 1;
+  padding: 10px 12px;
+  background: #3e3e42;
+  border: 2px solid #3e3e42;
+  border-radius: 6px;
+  color: #d4d4d4;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.team-size-selector button:hover {
+  background: #4e4e52;
+  border-color: #5a5a5a;
+}
+
+.team-size-selector button.selected {
+  background: rgba(78, 201, 176, 0.15);
+  border-color: #4ec9b0;
+  color: #4ec9b0;
+}
+
+/* Workflow Selector */
+.workflow-selector {
+  display: flex;
+  gap: 12px;
+}
+
+.workflow-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #2d2d2d;
+  border: 2px solid #3e3e42;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.workflow-option:hover {
+  background: #323235;
+  border-color: #5a5a5a;
+}
+
+.workflow-option.selected {
+  background: rgba(14, 99, 156, 0.1);
+  border-color: #0e639c;
+}
+
+.workflow-option input[type="radio"] {
+  width: 16px !important;
+  height: 16px;
+  min-width: 16px;
+  accent-color: #0e639c;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.workflow-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.workflow-description {
+  font-size: 11px;
+  color: #858585;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
