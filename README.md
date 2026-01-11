@@ -55,7 +55,7 @@ your-project/
 │   │   ├── dashboard.sh     # Launch GUI dashboard
 │   │   └── ...
 │   ├── assignments/         # Minion mission files
-│   ├── rules/               # Orchestrator signals
+│   ├── rules/               # Agent behavior rules
 │   ├── templates/           # Spec templates
 │   ├── assignments.json     # Track active missions
 │   └── README.md            # Minion guide
@@ -124,7 +124,7 @@ Features:
 - **Auto-Install**: Initialize the framework in new projects via the GUI
 - **Dashboard**: View all missions and agents
 - **Terminal Integration**: Live terminals for minions
-- **Signals**: iMessage-style notifications for agent status
+- **Status Tracking**: Real-time agent status and notifications
 
 See [`gui/README.md`](gui/README.md) for details.
 

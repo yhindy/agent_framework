@@ -135,12 +135,8 @@ Behind the scenes, this:
 Once created, your agent appears in the sidebar. Click on it to see:
 
 - **Live Terminal**: Watch the agent work in real-time
-- **Status**: Active, idle, or needs review
-- **Signals**: Agents emit status updates like:
-  - `===SIGNAL:PLAN_READY===` - Plan needs your review
-  - `===SIGNAL:DEV_COMPLETED===` - Implementation done
-  - `===SIGNAL:BLOCKER===` - Agent is stuck
-  - `===SIGNAL:QUESTION===` - Has a question
+- **Status Badge**: Shows when the agent is waiting for your input
+- **Real-time Updates**: Terminal output updates as the agent works
 
 The terminal automatically starts with your chosen tool (Claude, Cursor, etc.)
 
@@ -244,7 +240,7 @@ Having trouble?
 Now that you're set up:
 
 1. 🎯 Try creating your first agent with a simple mission
-2. 🔍 Explore the GUI features (terminals, signals, project switching)
+2. 🔍 Explore the GUI features (terminals, status badges, project switching)
 3. 🚀 Run multiple agents in parallel on real work
 
 Happy agent orchestrating! 🎉
