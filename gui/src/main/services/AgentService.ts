@@ -163,6 +163,12 @@ export class AgentService {
         const agentInfo = this.readAgentInfo(worktree.path)
 
         if (agentInfo) {
+          // Skip agents with missing/empty critical fields (corrupted agent info)
+          if (!agentInfo.agentId || agentInfo.agentId.trim() === '') {
+            console.warn(`[AgentService] Skipping agent with corrupted info at ${worktree.path}: missing agentId`)
+            continue
+          }
+
           // Get or create session
           let session = this.sessions.get(agentInfo.agentId)
           if (!session) {
