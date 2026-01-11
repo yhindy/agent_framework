@@ -5,15 +5,41 @@
 
 A lightweight framework for running multiple AI coding minions in parallel on any codebase.
 
-## Quick Start
+---
 
+## 👋 New Here?
+
+**First time using Agent Framework?** Start here:
+
+1. **Setup** (one-time): `./setup.sh`
+2. **Launch GUI**: `./run.sh`
+3. **Read the guide**: [GETTING_STARTED.md](GETTING_STARTED.md) 📖
+
+The getting started guide walks you through everything step-by-step!
+
+---
+
+## Quick Reference
+
+For experienced users - quick commands to get started:
+
+### Using the GUI (Recommended)
 ```bash
-# 1. Install the framework into your project (CLI)
+./run.sh  # Launch the desktop app
+# Then: Select a project → Add agents → Assign missions
+```
+
+### Using the CLI
+```bash
+# Install framework into your project
 ./install.sh /path/to/your/project
 
-# OR use the GUI App (recommended)
-./minions/bin/dashboard.sh
-# Then select any project folder, and it will offer to install the framework.
+# Create an agent
+cd /path/to/your/project
+./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
+
+# Clean up when done
+./minions/bin/teardown.sh agent-1
 ```
 
 ## What's Included
