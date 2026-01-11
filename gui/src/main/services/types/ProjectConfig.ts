@@ -29,6 +29,12 @@ export interface AgentInfo {
   parentAgentId?: string  // Set if this is a child of a super minion
   isBaseBranchAgent?: boolean  // Set for the base branch agent
 
+  // Hierarchy fields for multi-level agent teams
+  hierarchyLevel?: number       // 0 = top (director), 1 = manager, 2 = lead, 3 = engineer, etc.
+  reportingTo?: string          // agentId of supervisor
+  directReports?: string[]      // agentIds of subordinates
+  canApprove?: string[]         // agentIds this agent can approve work from
+
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
   claudeSessionActive?: boolean   // Is session known to be active and resumable?
@@ -101,6 +107,10 @@ export interface Assignment {
   prompt?: string
   yolo?: boolean
   chrome?: boolean
+  // Hierarchy fields
+  hierarchyLevel?: number
+  reportingTo?: string
+  directReports?: string[]
 }
 
 export interface TestEnvironment {

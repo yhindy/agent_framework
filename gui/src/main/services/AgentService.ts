@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { app } from 'electron'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
+import { AGENT_DEFAULTS } from './config/agentDefaults'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -402,9 +403,12 @@ export class AgentService {
       project: projectName,
       feature: assignment.feature!,
       status: assignment.status as any || 'active',
-      tool: assignment.tool || 'claude',
-      model: assignment.model,
-      mode: assignment.mode as any || 'auto',
+      tool: assignment.tool || AGENT_DEFAULTS.tool,
+      model: assignment.model || AGENT_DEFAULTS.model,
+      mode: assignment.mode as any || AGENT_DEFAULTS.mode,
+      hierarchyLevel: assignment.hierarchyLevel ?? AGENT_DEFAULTS.hierarchyLevel,
+      reportingTo: assignment.reportingTo,
+      directReports: assignment.directReports,
       yolo: assignment.yolo,
       chrome: assignment.chrome !== false,
       prompt: assignment.prompt,
@@ -1210,8 +1214,9 @@ export class AgentService {
       tool: 'claude',
       mode: 'dev',
       prompt: `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the main branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`,
-      model: 'opus',
-      chrome: true,
+      model: AGENT_DEFAULTS.model,
+      chrome: AGENT_DEFAULTS.chrome,
+      hierarchyLevel: 0,  // Base branch agent is at director level
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       isBaseBranchAgent: true
