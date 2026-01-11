@@ -197,20 +197,58 @@ The framework enforces a **local test budget** to prevent resource exhaustion. W
 3. If budget exhausted: subagent runs on cloud infrastructure
 4. Cloud agents appear in the sidebar with a ☁️ indicator
 
-### Best Practices for Super Minions
+### Spawning Background Agents
 
-When spawning multiple implementer subagents:
+To explicitly run compute-heavy work in the cloud, use `run_in_background=true`:
 
 ```
-Task(description="Implement auth with tests", prompt="...")
-Task(description="Implement API with tests", prompt="...")
-Task(description="Implement UI with tests", prompt="...")
+Task(subagent_type="general-purpose",
+     description="Run full test suite",
+     prompt="Run npm test and report results",
+     run_in_background=true)  ← Runs on cloud compute!
 ```
 
-The orchestrator will:
-- Run first test-heavy subagent locally
-- Offload subsequent test runs to cloud agents
-- Aggregate results back to you
+**Key points:**
+- `run_in_background=true` spawns the agent on cloud infrastructure
+- The tool returns immediately with an `output_file` path
+- Check results later with `Read` tool or `Bash` with `tail`
+- Cloud agents appear in sidebar with ☁️ icon
+
+### When to Use Background Agents
+
+| Task Type | Use Background? | Why |
+|-----------|-----------------|-----|
+| Run full test suite | ✅ Yes | CPU-intensive, frees local resources |
+| Run single test file | ❌ No | Quick, feedback needed immediately |
+| Build/compile | ✅ Yes | Memory-intensive |
+| Linting | ❌ No | Usually fast |
+| Code exploration | ❌ No | Interactive, needs quick response |
+
+### Example: Parallel Implementation with Cloud Testing
+
+```
+# Implementer runs locally (interactive coding)
+Task(subagent_type="general-purpose",
+     description="Implement auth feature",
+     prompt="Implement the login flow...")
+
+# Tests run in cloud (compute-heavy)
+Task(subagent_type="general-purpose",
+     description="Run auth tests",
+     prompt="Run: npm test -- src/auth/",
+     run_in_background=true)
+```
+
+### Checking Background Agent Results
+
+```
+# The Task tool returns an output_file when run_in_background=true
+# Check on it later:
+Read(file_path="/path/to/output_file")
+
+# Or watch progress:
+Bash(command="tail -f /path/to/output_file")
+```
 
 ### Configuration
 

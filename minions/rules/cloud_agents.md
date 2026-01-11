@@ -27,15 +27,20 @@ The orchestrator automatically handles these scenarios:
 
 ### Manual Cloud Agent Usage
 
-When you need to run compute-heavy work while continuing interactive development:
+When you need to run compute-heavy work while continuing interactive development, use `run_in_background=true`:
 
-```bash
-# Using Claude Code's Task tool with background execution
-Task(subagent_type="general-purpose", description="Run full test suite", prompt="""
-Run the complete test suite and report results.
-Do NOT run interactively - execute in background.
-""")
 ```
+Task(subagent_type="general-purpose",
+     description="Run full test suite",
+     prompt="Run npm test and report all results",
+     run_in_background=true)  ← KEY: This runs on cloud compute!
+```
+
+**The `run_in_background=true` parameter:**
+- Spawns the agent on cloud infrastructure (not local)
+- Returns immediately with an `output_file` path
+- Frees your local machine for interactive work
+- Agent appears in sidebar with ☁️ icon
 
 ## Identifying Cloud vs Local Agents
 
@@ -78,16 +83,18 @@ Avoid:
 
 The Task tool in Claude Code can spawn agents that run on cloud compute:
 
-```bash
+```
 # Spawn a cloud agent for test execution
-Task(subagent_type="general-purpose", description="Execute test suite", prompt="""
-Run: npm test -- --coverage
+Task(subagent_type="general-purpose",
+     description="Execute test suite",
+     prompt="Run: npm test -- --coverage. Report pass/fail counts and coverage.",
+     run_in_background=true)  ← Runs on cloud!
+```
 
-Report:
-- Number of tests passed/failed
-- Coverage summary
-- Any failing test details
-""")
+**Checking results later:**
+```
+# The task returns an output_file path
+Read(file_path="/path/to/output_file")
 ```
 
 ### 4. Check Budget Before Intensive Operations
