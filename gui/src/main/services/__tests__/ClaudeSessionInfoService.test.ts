@@ -12,14 +12,6 @@ vi.mock('fs', () => ({
   statSync: vi.fn(() => ({ mtimeMs: Date.now() }))
 }))
 
-// Helper to load real fixture file content (unused but kept for future reference)
-// const fixturesDir = join(__dirname, 'fixtures')
-// async function loadFixture(name: string): Promise<string> {
-//   // Use the actual fs to read fixtures (unmocked)
-//   const { readFileSync: realReadFileSync } = await vi.importActual('fs') as typeof import('fs')
-//   return realReadFileSync(join(fixturesDir, name), 'utf-8')
-// }
-
 describe('ClaudeSessionInfoService', () => {
   let service: ClaudeSessionInfoService
 
@@ -228,21 +220,6 @@ not valid json
 
       const result = service.parseSessionInfo('test', '/Users/test/project')
       // Completion message
-      expect(result!.state).toBe('waiting')
-    })
-
-    it('should NOT trigger waiting during streaming text responses', () => {
-      // This test is now obsolete - in reality, Claude Code CLI writes stop_reason=null for completed messages
-      // We can't reliably distinguish streaming from completed based on stop_reason alone
-      // This test should be updated if we add other streaming indicators in the future
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(`
-{"type":"user","message":{"role":"user","content":"Write a long explanation"},"timestamp":"2026-01-07T10:00:00.000Z"}
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"Here is the beginning of my response..."}],"stop_reason":null},"timestamp":"2026-01-07T10:00:01.000Z"}
-      `.trim())
-
-      const result = service.parseSessionInfo('test', '/Users/test/project')
-      // After fix: text-only with null stop_reason should be waiting (default for completed messages)
       expect(result!.state).toBe('waiting')
     })
 

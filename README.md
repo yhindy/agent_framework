@@ -12,8 +12,8 @@ A lightweight framework for running multiple AI coding minions in parallel on an
 ./install.sh /path/to/your/project
 
 # OR use the GUI App (recommended)
-./minions/bin/dashboard.sh
-# Then select any project folder, and it will offer to install the framework.
+npm install && npm run gui:dev
+# Then select any project folder, and the GUI will offer to install the framework.
 ```
 
 ## What's Included
@@ -33,9 +33,7 @@ your-project/
 │   ├── templates/           # Spec templates
 │   ├── assignments.json     # Track active missions
 │   └── README.md            # Minion guide
-├── gui/                     # GUI Orchestrator source (optional)
-└── .cursor/rules/
-    └── agent-rules.mdc      # Cursor IDE rules for minions
+└── gui/                     # GUI Orchestrator source (optional)
 ```
 
 ## Installation & Removal
@@ -89,7 +87,7 @@ A desktop app for managing minions with a visual interface:
 
 ```bash
 # Launch from the framework root
-./minions/bin/dashboard.sh
+npm run gui:dev
 ```
 
 Features:
