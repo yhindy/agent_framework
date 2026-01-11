@@ -16,7 +16,8 @@ if [ ! -d "node_modules" ]; then
   exit 1
 fi
 
-if [ ! -d "gui/node_modules" ]; then
+# Check if electron is installed (key dependency for GUI)
+if [ ! -d "node_modules/electron" ]; then
   echo "❌ ERROR: GUI dependencies not installed."
   echo ""
   echo "Something went wrong with setup. Try running:"
