@@ -29,6 +29,18 @@ export interface AgentInfo {
   parentAgentId?: string  // Set if this is a child of a super minion
   isBaseBranchAgent?: boolean  // Set for the base branch agent
 
+  /**
+   * Set to true for agents running in Claude's cloud compute (background agents).
+   *
+   * Cloud agents are spawned when the local test budget is exhausted.
+   * They run on remote infrastructure and are visually distinguished in the UI
+   * with a cloud icon indicator.
+   *
+   * @see minions/rules/cloud_agents.md for agent guidelines
+   * @see CLAUDE.md "Cloud Background Agents" section for architecture
+   */
+  isCloudAgent?: boolean
+
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
   claudeSessionActive?: boolean   // Is session known to be active and resumable?

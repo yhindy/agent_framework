@@ -319,12 +319,13 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, budget enforcement |
 | `gui/src/main/services/TerminalService.ts` | PTY management |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `minions/bin/setup.sh` | Worktree creation script |
 | `minions/rules/orchestrator_signals.md` | Signal protocol docs |
+| `minions/rules/cloud_agents.md` | Cloud agent guidelines |
 
 ## Troubleshooting
 
@@ -356,3 +357,93 @@ If build-gui fails with "Cannot find module 'electron/package.json'":
 - Feature branches: `feature/<name>` or `claude/<session-id>`
 - All tests must pass before merging
 - CI runs on all PRs to main
+
+## Cloud Background Agents
+
+The Agent Framework supports offloading compute-heavy work to cloud background agents when local resources are constrained.
+
+### Local Test Budget
+
+To prevent resource exhaustion when running multiple agents, the framework enforces a **local test budget**:
+
+- **Default**: 1 concurrent local test run
+- **Purpose**: Prevents CPU/memory exhaustion from parallel test executions
+- **Scope**: Applied per-project
+
+When an agent needs to run tests and the local budget is exhausted, the test run is automatically offloaded to a cloud background agent.
+
+### How It Works
+
+1. **Budget Check**: When an agent runs tests (via `npm test`, `pytest`, etc.), the orchestrator checks the local test budget
+2. **Local Execution**: If budget is available, tests run locally in the agent's terminal
+3. **Cloud Overflow**: If budget is exhausted, the orchestrator spawns a cloud background agent to run tests
+4. **Progress Tracking**: Cloud agents appear in the sidebar with special indicators
+
+### UI Indicators
+
+Cloud agents are visually distinguished in the interface:
+
+| Indicator | Meaning |
+|-----------|---------|
+| Local agent | Standard agent display |
+| Cloud agent | Displayed with cloud icon indicator |
+| `isCloudAgent: true` | Field in `AgentSession` interface |
+
+### Configuration
+
+The local test budget can be configured in the project's `minions/config.json`:
+
+```json
+{
+  "project": {
+    "name": "my-project",
+    "defaultBaseBranch": "main"
+  },
+  "testBudget": {
+    "maxLocalConcurrent": 1,
+    "enableCloudOverflow": true
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `maxLocalConcurrent` | 1 | Maximum concurrent local test runs |
+| `enableCloudOverflow` | true | Whether to use cloud agents when budget exhausted |
+
+### For Agents
+
+When running compute-heavy tasks, agents should be aware of the budget system:
+
+1. **Tests**: The orchestrator automatically handles budget management for test commands
+2. **Builds**: Large builds may also be offloaded to cloud agents
+3. **Linting**: Quick linting operations typically run locally
+
+The Task tool in Claude Code can spawn background agents that run on cloud compute, freeing local resources for interactive work.
+
+### Architecture
+
+```
+Local Agent (Claude)
+    │
+    ├── Runs interactive coding locally
+    │
+    └── When tests needed:
+            │
+            ├── Budget available → Run locally
+            │
+            └── Budget exhausted → Spawn cloud agent
+                    │
+                    └── Cloud agent runs tests
+                            │
+                            └── Results reported back to UI
+```
+
+### Related Files
+
+| File | Purpose |
+|------|---------|
+| `gui/src/main/services/AgentService.ts` | Budget enforcement logic |
+| `gui/src/main/services/__tests__/BudgetEnforcement.test.ts` | Budget tests |
+| `gui/src/renderer/src/components/Sidebar.tsx` | Cloud agent UI display |
+| `minions/rules/cloud_agents.md` | Agent guidelines for cloud usage |

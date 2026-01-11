@@ -1,0 +1,4 @@
+{
+  "maxConcurrentLocalTests": 2,
+  "enableCloudOverflow": false
+}

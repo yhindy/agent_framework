@@ -179,3 +179,94 @@ Before declaring completion, verify EACH acceptance criterion:
 - **Test everything**: TDD ensures quality
 - **Escalate sparingly**: Only for genuine blockers
 - **Move fast**: Execute in parallel when possible
+
+## ☁️ Cloud Background Agents
+
+The framework enforces a **local test budget** to prevent resource exhaustion. When the budget is exceeded, compute-heavy work is automatically offloaded to cloud background agents.
+
+### Budget Model
+
+| Resource | Default Limit |
+|----------|---------------|
+| Concurrent local tests | 1 |
+
+### How It Works
+
+1. When you spawn a Task subagent that runs tests, the orchestrator checks the local budget
+2. If budget available: subagent runs locally
+3. If budget exhausted: subagent runs on cloud infrastructure
+4. Cloud agents appear in the sidebar with a ☁️ indicator
+
+### Spawning Background Agents
+
+To explicitly run compute-heavy work in the cloud, use `run_in_background=true`:
+
+```
+Task(subagent_type="general-purpose",
+     description="Run full test suite",
+     prompt="Run npm test and report results",
+     run_in_background=true)  ← Runs on cloud compute!
+```
+
+**Key points:**
+- `run_in_background=true` spawns the agent on cloud infrastructure
+- The tool returns immediately with an `output_file` path
+- Check results later with `Read` tool or `Bash` with `tail`
+- Cloud agents appear in sidebar with ☁️ icon
+
+### When to Use Background Agents
+
+| Task Type | Use Background? | Why |
+|-----------|-----------------|-----|
+| Run full test suite | ✅ Yes | CPU-intensive, frees local resources |
+| Run single test file | ❌ No | Quick, feedback needed immediately |
+| Build/compile | ✅ Yes | Memory-intensive |
+| Linting | ❌ No | Usually fast |
+| Code exploration | ❌ No | Interactive, needs quick response |
+
+### Example: Parallel Implementation with Cloud Testing
+
+```
+# Implementer runs locally (interactive coding)
+Task(subagent_type="general-purpose",
+     description="Implement auth feature",
+     prompt="Implement the login flow...")
+
+# Tests run in cloud (compute-heavy)
+Task(subagent_type="general-purpose",
+     description="Run auth tests",
+     prompt="Run: npm test -- src/auth/",
+     run_in_background=true)
+```
+
+### Checking Background Agent Results
+
+```
+# The Task tool returns an output_file when run_in_background=true
+# Check on it later:
+Read(file_path="/path/to/output_file")
+
+# Or watch progress:
+Bash(command="tail -f /path/to/output_file")
+```
+
+### Configuration
+
+Projects can tune the budget in `minions/config.json`:
+
+```json
+{
+  "testBudget": {
+    "maxLocalConcurrent": 1,
+    "enableCloudOverflow": true
+  }
+}
+```
+
+### UI Visibility
+
+- Local subagents: shown with standard indicator
+- Cloud subagents: shown with ☁️ icon
+- Both appear in the sidebar under your super minion
+
+See `minions/rules/cloud_agents.md` for detailed cloud agent guidelines.

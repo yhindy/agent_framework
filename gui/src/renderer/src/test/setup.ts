@@ -47,6 +47,8 @@ Object.defineProperty(window, 'electronAPI', {
     onAgentResumedWork: vi.fn(() => vi.fn()),
     onPlainTerminalWaitingForInput: vi.fn(() => vi.fn()),
     onPlainTerminalResumedWork: vi.fn(() => vi.fn()),
+    onAgentStateChanged: vi.fn(() => vi.fn()),
+    getAgentState: vi.fn().mockResolvedValue('running'),
   }
 })
 
