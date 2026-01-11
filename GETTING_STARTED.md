@@ -52,7 +52,8 @@ If you see errors:
 
 - **"node: command not found"** → Install Node.js from [nodejs.org](https://nodejs.org)
 - **"Node.js 18+ required"** → Update Node.js to the latest LTS version
-- **npm errors** → Try `rm -rf node_modules && ./setup.sh` to start fresh
+- **npm install interrupted/failed** → Run `rm -rf node_modules package-lock.json && ./setup.sh` to start fresh
+- **"Cannot find module" errors** → Same as above - clean reinstall
 - **Rebuild errors on Linux** → You may need build tools: `sudo apt install build-essential`
 
 ---

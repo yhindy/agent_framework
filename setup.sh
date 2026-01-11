@@ -45,6 +45,12 @@ echo ""
 echo "All requirements met!"
 echo ""
 
+# Check if node_modules is corrupted (exists but missing key packages)
+if [ -d "node_modules" ] && [ ! -d "node_modules/electron" ]; then
+  echo "⚠️  Found corrupted node_modules directory. Cleaning up..."
+  rm -rf node_modules package-lock.json
+fi
+
 # Install dependencies
 echo "📦 Installing dependencies..."
 echo "   This may take a few minutes on first run..."
