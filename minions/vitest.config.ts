@@ -5,6 +5,18 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+
+    // Memory and performance controls
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        maxForks: 4,
+        minForks: 1,
+        singleFork: false
+      }
+    },
+    maxWorkers: 4,
+
     coverage: {
       enabled: false, // Enable with --coverage flag in CI
       provider: 'v8',
