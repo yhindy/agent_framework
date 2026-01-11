@@ -125,7 +125,8 @@ export class TerminalService {
     prompt?: string,
     model?: string,
     yolo?: boolean,
-    chrome?: boolean
+    chrome?: boolean,
+    teleportSessionId?: string
   ): Promise<void> {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
@@ -182,7 +183,37 @@ export class TerminalService {
       case 'claude':
         command = 'claude'
 
-        if (isResume) {
+        if (teleportSessionId) {
+          // Teleporting from cloud - use --teleport flag with cloud session ID
+          console.log(`[TerminalService] Teleporting cloud session ${teleportSessionId} for ${agentId}`)
+          args = ['--teleport', teleportSessionId]
+
+          // Add model if specified
+          if (model) args.push('--model', model)
+
+          // Add permission mode
+          if (mode === 'planning') {
+            args.push('--permission-mode', 'plan')
+
+            // Add system prompt file for super minions
+            const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
+            if (isSuperMinion && this.agentService) {
+              const rulesPath = this.agentService.getSuperMinionRulesPath()
+              args.push('--system-prompt-file', rulesPath)
+            }
+          } else if (mode === 'dev') {
+            args.push('--permission-mode', 'acceptEdits')
+          }
+
+          // Always skip permissions for teleport to bypass interactive prompts
+          // This handles: "Open Claude Code in X?" and "Trust this folder?" prompts
+          args.push('--dangerously-skip-permissions')
+
+          // Add chrome flag (default true)
+          if (chrome !== false) {
+            args.push('--chrome')
+          }
+        } else if (isResume) {
           // Resume existing session - preserve original flags
           args = ['--resume', sessionId]
 
@@ -387,7 +418,7 @@ export class TerminalService {
 
     // Persist session ID and flags immediately
     if (tool === 'claude') {
-      await this.updateAgentInfo(worktreePath, {
+      const agentInfoUpdate: Partial<AgentInfo> = {
         claudeSessionId: sessionId,
         claudeSessionActive: true,
         claudeLastSeen: new Date().toISOString(),
@@ -396,7 +427,14 @@ export class TerminalService {
         mode: mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle',
         model,
         prompt
-      })
+      }
+
+      // Store cloud session ID when teleporting (for future teleport-out)
+      if (teleportSessionId) {
+        agentInfoUpdate.cloudSessionId = teleportSessionId
+      }
+
+      await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
       // Set up JSONL watcher for super minions to emit updates on task invocation changes
       if ((agentInfo as any)?.isSuperMinion && this.claudeSessionInfoService) {
@@ -522,8 +560,10 @@ export class TerminalService {
     // Send raw data to renderer for terminal display
     this.mainWindow.webContents.send('terminal:output', agentId, data)
 
-    // Check for resume failures and fall back to fresh start
+    // Check for cloud session ID in output (for teleport support)
+    // Pattern: https://claude.ai/code/session_xxx or --teleport session_xxx
     const stripped = stripAnsi(data)
+    this.detectAndStoreCloudSessionId(session, stripped)
     if ((session as any)._attemptingResume && (
       stripped.includes('Session not found') ||
       stripped.includes('Could not resume') ||
@@ -565,6 +605,49 @@ export class TerminalService {
 
     // Delegate idle detection to IdleDetector (if present)
     session.idleDetector?.processOutput(data)
+  }
+
+  /**
+   * Detect cloud session ID from Claude CLI output and store it in agent info.
+   * This enables the "Teleport to Cloud" feature by capturing the session ID
+   * when Claude outputs messages like:
+   *   - https://claude.ai/code/session_01CVbxtiJWp387FoCSvAiS2B
+   *   - --teleport session_01CVbxtiJWp387FoCSvAiS2B
+   */
+  private detectAndStoreCloudSessionId(session: TerminalSession, strippedOutput: string): void {
+    // Only check for cloud session IDs for Claude tool
+    if (session.tool !== 'claude') return
+
+    // Pattern to match cloud session ID from various contexts:
+    // - URL: https://claude.ai/code/session_xxx
+    // - CLI flag: --teleport session_xxx
+    // - Plain mention: session_xxx
+    const cloudSessionPattern = /session_[a-zA-Z0-9]+/g
+    const matches = strippedOutput.match(cloudSessionPattern)
+
+    if (!matches || matches.length === 0) return
+
+    // Use the first match found
+    const cloudSessionId = matches[0]
+
+    // Read current agent info to check if we need to update
+    this.readAgentInfo(session.worktreePath).then((agentInfo) => {
+      // Only update if the cloud session ID is different from what's stored
+      if (agentInfo?.cloudSessionId !== cloudSessionId) {
+        console.log(`[TerminalService] Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+
+        this.updateAgentInfo(session.worktreePath, {
+          cloudSessionId
+        }).then(() => {
+          // Broadcast update so UI can refresh (enables Teleport to Cloud button)
+          this.mainWindow.webContents.send('agents:updated')
+        }).catch((err) => {
+          console.error('Failed to store cloud session ID:', err)
+        })
+      }
+    }).catch((err) => {
+      console.error('Failed to read agent info for cloud session detection:', err)
+    })
   }
 
   stopAgent(agentId: string): void {

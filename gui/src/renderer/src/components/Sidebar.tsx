@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import ProjectPicker from './ProjectPicker'
+import MissionDropdown from './MissionDropdown'
 import { extractBranchName } from '../utils/branchUtils'
 import './Sidebar.css'
 
@@ -46,6 +47,7 @@ interface TasksByAgent {
 
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
   const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
@@ -53,18 +55,13 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showDropdown, setShowDropdown] = useState(false)
   const [openSubmenuProject, setOpenSubmenuProject] = useState<string | null>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const submenuRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
   const currentPath = location.pathname
 
-  // Close dropdown when clicking outside
+  // Close project submenu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false)
-      }
       if (openSubmenuProject) {
         const submenuRef = submenuRefsMap.current.get(openSubmenuProject)
         if (submenuRef && !submenuRef.contains(event.target as Node)) {
@@ -73,14 +70,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       }
     }
 
-    if (showDropdown || openSubmenuProject) {
+    if (openSubmenuProject) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
     return undefined
-  }, [showDropdown, openSubmenuProject])
+  }, [openSubmenuProject])
 
   useEffect(() => {
     // Load agents and query current state from backend
@@ -255,6 +252,15 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     handleNavigate(`/workspace?create=true&projectPath=${encodeURIComponent(lastProject)}&isSuper=${isSuper}`)
   }
 
+  const handleTeleport = () => {
+    const lastProject = localStorage.getItem('lastSelectedProjectPath') || (activeProjects.length > 0 ? activeProjects[0].path : '')
+    navigate(`/workspace?teleport=true&projectPath=${encodeURIComponent(lastProject)}`)
+  }
+
+  const handleAddProjectClick = () => {
+    setShowAddModal(true)
+  }
+
   const handleProjectSelect = async (_project: any) => {
     // Project has been added to the store, notify parent to refresh
     console.log('[Sidebar] Project selected, notifying parent to refresh')
@@ -359,47 +365,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
           <span className="nav-icon">🏠</span>
           <span className="nav-label">Home</span>
         </div>
-        <div className="dropdown-container" ref={dropdownRef}>
-          <div
-            className="nav-item dropdown-trigger"
-            onClick={() => setShowDropdown(!showDropdown)}
-          >
-            <span className="nav-icon">+</span>
-          </div>
-          {showDropdown && (
-            <div className="dropdown-menu">
-              <div
-                className="dropdown-item"
-                onClick={() => {
-                  setShowAddModal(true)
-                  setShowDropdown(false)
-                }}
-              >
-                <span className="dropdown-icon">📁</span>
-                <span className="dropdown-label">Add Project</span>
-              </div>
-              <div
-                className="dropdown-item"
-                onClick={() => {
-                  handleAddMinion(false)
-                  setShowDropdown(false)
-                }}
-              >
-                <span className="dropdown-icon">🍌</span>
-                <span className="dropdown-label">New Mission</span>
-              </div>
-              <div
-                className="dropdown-item super-option"
-                onClick={() => {
-                  handleAddMinion(true)
-                  setShowDropdown(false)
-                }}
-              >
-                <span className="dropdown-icon">👑</span>
-                <span className="dropdown-label">New Super Mission</span>
-              </div>
-            </div>
-          )}
+        <div className="dropdown-container">
+          <MissionDropdown
+            variant="icon"
+            showAddProject={true}
+            onAddProject={handleAddProjectClick}
+            onNewMission={handleAddMinion}
+            onTeleport={handleTeleport}
+          />
         </div>
       </div>
 

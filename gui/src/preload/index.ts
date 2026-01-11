@@ -71,6 +71,7 @@ const api = {
   createAssignment: (assignment: any) => ipcRenderer.invoke('assignments:create', assignment),
   createAssignmentForProject: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createForProject', projectPath, assignment),
   createSuperAssignment: (projectPath: string, assignment: any) => ipcRenderer.invoke('assignments:createSuper', projectPath, assignment),
+  teleportFromCloud: (projectPath: string, sessionId: string) => ipcRenderer.invoke('assignments:teleport', projectPath, sessionId),
   updateAssignment: (assignmentId: string, updates: any) =>
     ipcRenderer.invoke('assignments:update', assignmentId, updates),
   createPullRequest: (assignmentId: string, autoCommit?: boolean) => ipcRenderer.invoke('assignments:createPR', assignmentId, autoCommit),

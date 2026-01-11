@@ -84,6 +84,24 @@
   font-size: 16px;
 }
 
+.mission-dropdown-divider {
+  height: 1px;
+  background: #3c3c3c;
+  margin: 4px 0;
+}
+
+.mission-dropdown-item.teleport-option {
+  color: #4ec9b0;
+}
+
+.mission-dropdown-item.teleport-option:hover {
+  background: #2a3d3a;
+}
+
+.teleport-icon {
+  font-size: 16px;
+}
+
 .dashboard-content {
   flex: 1;
   overflow: auto;
@@ -429,5 +447,65 @@
   font-weight: 500;
   white-space: nowrap;
   line-height: 1;
+}
+
+/* Project picker modal styles */
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #cccccc;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.close-btn:hover {
+  background: #3c3c3c;
+  color: #ffffff;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.project-picker-modal {
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-picker-modal .project-picker {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-picker-modal .project-picker-container {
+  flex: 1;
+  overflow-y: auto;
 }
 

@@ -10,6 +10,7 @@ import { TestEnvService } from './services/TestEnvService'
 import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
+import { TeleportService } from './services/TeleportService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -24,6 +25,7 @@ let services: {
   notification: NotificationService
   prPolling: PRPollingService
   claudeSessionInfo: ClaudeSessionInfoService
+  teleport: TeleportService
 } | null = null
 
 function createWindow(): void {
@@ -110,7 +112,8 @@ function initializeServices(): void {
     testEnv: new TestEnvService(mainWindow),
     notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService),
-    claudeSessionInfo: claudeSessionInfoService
+    claudeSessionInfo: claudeSessionInfoService,
+    teleport: new TeleportService()
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -543,7 +546,7 @@ function setupIPC(): void {
 
   ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
     const result = await services!.agent.createSuperAssignment(projectPath, assignment)
-    
+
     // Trigger updates
     setTimeout(() => {
       mainWindow?.webContents.send('agents:updated')
@@ -570,8 +573,90 @@ function setupIPC(): void {
         }
       }, 2000)
     }
-    
+
     return result
+  })
+
+  ipcMain.handle('assignments:teleport', async (_event, projectPath: string, cloudSessionIdOrUrl: string) => {
+    console.log('[IPC] Handling assignments:teleport for:', projectPath || '(auto-detect)', 'input:', cloudSessionIdOrUrl)
+
+    // 1. Parse and validate the input using TeleportService
+    // Supports raw session ID, full URL, or CLI command format
+    const parsedSessionId = services!.teleport.parseSessionId(cloudSessionIdOrUrl)
+
+    if (!parsedSessionId) {
+      throw new Error(
+        `Invalid session ID format. Expected 'session_...' but got '${cloudSessionIdOrUrl}'. ` +
+        'Supported formats: session ID (session_xxx), URL (https://claude.ai/code/session_xxx), ' +
+        'or CLI command (claude --teleport session_xxx)'
+      )
+    }
+
+    // 2. Determine project path - use provided path or fall back to first active project
+    let resolvedProjectPath = projectPath
+    if (!resolvedProjectPath) {
+      const activeProjects = services!.project.getActiveProjects()
+      console.log('[IPC] No project path provided, checking active projects:', activeProjects.length)
+
+      if (activeProjects.length === 0) {
+        throw new Error('No project selected. Please add a project first before teleporting.')
+      }
+
+      // Use the first active project as fallback
+      resolvedProjectPath = activeProjects[0].path
+      console.log('[IPC] Auto-detected project path:', resolvedProjectPath)
+    }
+
+    // Extract short session ID for branch naming (e.g., 'session_01CVbxti...' -> '01CVbxti')
+    const shortSessionId = parsedSessionId.replace('session_', '').substring(0, 8)
+    const branchName = `teleport-${shortSessionId}`
+
+    // 3. Create a new worktree/branch for this teleported session
+    const assignment = {
+      branch: branchName,
+      feature: `Teleported session ${shortSessionId}`,
+      tool: 'claude',
+      mode: 'dev' as const,
+      chrome: true
+    }
+
+    try {
+      const result = await services!.agent.createAssignment(resolvedProjectPath, assignment)
+      console.log('[IPC] Created teleport assignment:', result.agentId)
+
+      // Trigger updates after worktree is created
+      setTimeout(() => {
+        mainWindow?.webContents.send('agents:updated')
+        mainWindow?.webContents.send('assignments:updated')
+      }, 1000)
+
+      // 4. Start the agent with the teleportSessionId parameter
+      setTimeout(async () => {
+        try {
+          await services!.terminal.startAgent(
+            resolvedProjectPath,
+            result.agentId,
+            'claude',
+            'dev',
+            undefined,  // No prompt - teleporting existing session
+            undefined,  // No model override - use session's model
+            false,      // yolo
+            true,       // chrome
+            parsedSessionId  // Pass the validated cloud session ID for teleporting
+          )
+          mainWindow?.webContents.send('agents:updated')
+          console.log('[IPC] Started teleported agent:', result.agentId)
+        } catch (error) {
+          console.error('Failed to start teleported agent:', error)
+          throw error
+        }
+      }, 2000) // Wait 2 seconds for worktree to be fully set up
+
+      return { agentId: result.agentId }
+    } catch (error: any) {
+      console.error('[IPC] Failed to teleport session:', error)
+      throw new Error(`Failed to teleport session: ${error.message}`)
+    }
   })
 
   ipcMain.handle('assignments:update', async (_event, assignmentId: string, updates: any) => {

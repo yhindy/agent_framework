@@ -113,7 +113,33 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     if (sessionInfo?.sessionId) {
       try {
         await navigator.clipboard.writeText(sessionInfo.sessionId)
-        setCopyFeedback('Copied!')
+        setCopyFeedback('session')
+        setTimeout(() => setCopyFeedback(null), 2000)
+      } catch (err) {
+        console.error('Failed to copy:', err)
+      }
+    }
+  }
+
+  const handleCopyTeleportUrl = async () => {
+    if (sessionInfo?.sessionId) {
+      try {
+        const url = `https://claude.ai/code/${sessionInfo.sessionId}`
+        await navigator.clipboard.writeText(url)
+        setCopyFeedback('url')
+        setTimeout(() => setCopyFeedback(null), 2000)
+      } catch (err) {
+        console.error('Failed to copy:', err)
+      }
+    }
+  }
+
+  const handleCopyTeleportCommand = async () => {
+    if (sessionInfo?.sessionId) {
+      try {
+        const command = `claude --teleport ${sessionInfo.sessionId}`
+        await navigator.clipboard.writeText(command)
+        setCopyFeedback('command')
         setTimeout(() => setCopyFeedback(null), 2000)
       } catch (err) {
         console.error('Failed to copy:', err)
@@ -181,7 +207,7 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
                 onClick={handleCopySessionId}
                 title="Copy session ID"
               >
-                {copyFeedback || '📋'}
+                {copyFeedback === 'session' ? 'Copied!' : '📋'}
               </button>
             </span>
           </div>
@@ -236,6 +262,35 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
           <div className="info-row">
             <span className="info-label">Last Updated:</span>
             <span className="info-value">{timeAgo(sessionInfo.lastUpdated)}</span>
+          </div>
+
+          <div className="teleport-section">
+            <div className="teleport-header">
+              <span className="teleport-title">Continue on Cloud</span>
+              <span className="teleport-subtitle">Continue this session on mobile or web</span>
+            </div>
+            <div className="teleport-row">
+              <span className="teleport-icon" title="Open in browser">🔗</span>
+              <span className="teleport-value">{`https://claude.ai/code/${sessionInfo.sessionId}`}</span>
+              <button
+                className="copy-btn teleport-copy-btn"
+                onClick={handleCopyTeleportUrl}
+                title="Copy URL"
+              >
+                {copyFeedback === 'url' ? 'Copied!' : '📋'}
+              </button>
+            </div>
+            <div className="teleport-row">
+              <span className="teleport-icon" title="Run in terminal">📱</span>
+              <span className="teleport-value">{`claude --teleport ${sessionInfo.sessionId}`}</span>
+              <button
+                className="copy-btn teleport-copy-btn"
+                onClick={handleCopyTeleportCommand}
+                title="Copy command"
+              >
+                {copyFeedback === 'command' ? 'Copied!' : '📋'}
+              </button>
+            </div>
           </div>
         </div>
       )}

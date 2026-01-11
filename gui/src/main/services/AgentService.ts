@@ -423,12 +423,61 @@ export class AgentService {
 
       // Write agent info to .agent-info file in the worktree
       this.writeAgentInfo(worktreePath, agentInfo)
+
+      // Commit any setup files to prevent git dirty state
+      // This is important for teleport which fails on dirty worktrees
+      await this.commitSetupFiles(worktreePath)
     } catch (error: any) {
       console.error('Failed to run setup.sh:', error)
       throw error
     }
 
     return agentInfo
+  }
+
+  /**
+   * Commit any uncommitted setup files in the worktree.
+   * This is called after setup.sh runs to ensure the worktree is clean.
+   * Files like minions/rules/*, .cursor/rules/*, and .agent-info are committed.
+   */
+  private async commitSetupFiles(worktreePath: string): Promise<void> {
+    try {
+      // Check if there are any uncommitted changes
+      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
+      if (!statusOutput.trim()) {
+        console.log('[AgentService] No uncommitted setup files to commit')
+        return
+      }
+
+      console.log('[AgentService] Committing setup files in:', worktreePath)
+      console.log('[AgentService] Changed files:', statusOutput.trim())
+
+      // Add all changes (setup files, .agent-info, etc.)
+      await execAsync('git add -A', { cwd: worktreePath })
+
+      // Commit with a setup message
+      try {
+        await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
+        console.log('[AgentService] Setup files committed successfully')
+      } catch (commitError: any) {
+        // Handle git identity not configured
+        if (commitError.message.includes('identity unknown') || commitError.stderr?.includes('identity unknown')) {
+          console.log('[AgentService] Git identity unknown, setting default...')
+          await execFileAsync('git', ['config', 'user.email', 'minion@local'], { cwd: worktreePath })
+          await execFileAsync('git', ['config', 'user.name', 'Minion Setup'], { cwd: worktreePath })
+          await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
+          console.log('[AgentService] Setup files committed with default identity')
+        } else if (commitError.message.includes('nothing to commit')) {
+          console.log('[AgentService] Nothing to commit after staging')
+        } else {
+          // Log but don't throw - setup file commit is best-effort
+          console.warn('[AgentService] Failed to commit setup files:', commitError.message)
+        }
+      }
+    } catch (error: any) {
+      // Log but don't throw - setup file commit is best-effort
+      console.warn('[AgentService] Error during setup file commit:', error.message)
+    }
   }
 
   async updateAssignment(projectPath: string, assignmentId: string, updates: Partial<AgentInfo>): Promise<void> {
