@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { join, resolve } from 'path'
+import { existsSync, statSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
@@ -87,7 +87,7 @@ export class TerminalService {
   private getWorktreePath(projectPath: string, agentId: string): string {
     // Base branch agents work in the main project directory
     if (agentId.endsWith('-base')) {
-      return projectPath
+      return resolve(projectPath)
     }
 
     // Regular agents use worktrees
@@ -95,12 +95,23 @@ export class TerminalService {
     const projectName = this.agentService?.getProjectName(projectPath) || projectPath.split('/').pop() || 'project'
 
     // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+    // Use resolve() to get canonical absolute path (resolves .. components)
+    let worktreePath: string
     if (agentId.startsWith(`${projectName}-`)) {
-      return join(projectPath, '..', agentId)
+      worktreePath = resolve(join(projectPath, '..', agentId))
     } else {
       // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
-      return join(projectPath, '..', `${projectName}-${agentId}`)
+      worktreePath = resolve(join(projectPath, '..', `${projectName}-${agentId}`))
     }
+
+    console.log('[TerminalService] getWorktreePath:', {
+      projectPath,
+      agentId,
+      projectName,
+      worktreePath
+    })
+
+    return worktreePath
   }
 
   private async readAgentInfo(worktreePath: string): Promise<AgentInfo | null> {
@@ -287,13 +298,87 @@ export class TerminalService {
     spawnEnv.TERM = 'xterm-256color'
     spawnEnv.COLORTERM = 'truecolor'
 
-    const terminal = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 30,
+    // Validate working directory before spawn
+    const cwdExists = existsSync(worktreePath)
+    let cwdIsDirectory = false
+    let cwdStats: any = null
+    if (cwdExists) {
+      try {
+        cwdStats = statSync(worktreePath)
+        cwdIsDirectory = cwdStats.isDirectory()
+      } catch (statError) {
+        console.error('[TerminalService] Failed to stat worktree path:', statError)
+      }
+    }
+
+    // Validate shell
+    const shellExists = existsSync(shell)
+    let shellIsExecutable = false
+    if (shellExists) {
+      try {
+        const shellStats = statSync(shell)
+        shellIsExecutable = (shellStats.mode & 0o111) !== 0 // Check execute bit
+      } catch (statError) {
+        console.error('[TerminalService] Failed to stat shell:', statError)
+      }
+    }
+
+    // Debug logging for spawn issues
+    console.log('[TerminalService] Spawning PTY:', {
+      shell,
+      shellExists,
+      shellIsExecutable,
       cwd: worktreePath,
-      env: spawnEnv
+      cwdExists,
+      cwdIsDirectory,
+      agentId,
+      projectPath,
+      envVarCount: Object.keys(spawnEnv).length,
+      platform: process.platform
     })
+
+    // Pre-validation warnings (don't throw - let spawn handle actual errors)
+    if (!cwdExists || !cwdIsDirectory) {
+      console.warn('[TerminalService] WARNING: Working directory may not exist or is not a directory:', {
+        worktreePath,
+        cwdExists,
+        cwdIsDirectory
+      })
+    }
+
+    if (!shellExists || !shellIsExecutable) {
+      console.warn('[TerminalService] WARNING: Shell may not exist or is not executable:', {
+        shell,
+        shellExists,
+        shellIsExecutable
+      })
+    }
+
+    let terminal: pty.IPty
+    try {
+      terminal = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 30,
+        cwd: worktreePath,
+        env: spawnEnv
+      })
+    } catch (error: any) {
+      console.error('[TerminalService] PTY spawn failed:', {
+        errorMessage: error?.message,
+        errorCode: error?.code,
+        errorStack: error?.stack,
+        shell,
+        cwd: worktreePath,
+        cwdExists,
+        cwdIsDirectory,
+        shellExists,
+        shellIsExecutable,
+        platform: process.platform,
+        nodeVersion: process.version
+      })
+      throw error
+    }
 
     // State detection: JSONL for Claude, IdleDetector for other tools
     let idleDetector: IdleDetector | undefined
