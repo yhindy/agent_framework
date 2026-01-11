@@ -381,8 +381,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
           const agents = agentsByProject[project.path] || []
           const isCollapsed = collapsedProjects.has(project.path)
           
+          // Filter out agents with missing/empty critical fields (corrupted agent info)
+          const validAgents = agents.filter(a => a.id && a.id.trim() !== '')
+
           // Sort agents: base first, then waiting, then by id
-          const sortedAgents = [...agents].sort((a, b) => {
+          const sortedAgents = [...validAgents].sort((a, b) => {
             // Base branch agents always first
             if (a.isBaseBranchAgent && !b.isBaseBranchAgent) return -1
             if (!a.isBaseBranchAgent && b.isBaseBranchAgent) return 1

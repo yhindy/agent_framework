@@ -64,17 +64,17 @@ describe('TerminalService Input Detection', () => {
 
   it('starts idle timer when prompt pattern is detected', async () => {
     await terminalService.startAgent('path', 'agent-1', 'claude', 'dev')
-    
+
     // Simulate prompt output
     const promptData = 'Do you want to proceed? [y/N]'
-    
+
     // Get the data handler registered with pty
     const dataHandler = vi.mocked(mockPty.onData).mock.calls[0][0]
     dataHandler(promptData)
-    
+
     // Verify output was sent to renderer
     expect(mockWebContents.send).toHaveBeenCalledWith('terminal:output', 'agent-1', promptData)
-    
+
     // Verify timer is set (we can't easily check private property, but we can advance time and check effect)
     // We expect NO waiting event yet
     expect(mockWebContents.send).not.toHaveBeenCalledWith('agent:waitingForInput', expect.anything(), expect.anything())
@@ -594,6 +594,123 @@ describe('TerminalService Cloud Session ID Detection', () => {
     expect(writtenCommand).toContain('--dangerously-skip-permissions')
     expect(writtenCommand).toContain('--chrome')
   })
-
 })
 
+describe('Super Minion System Prompt', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockAgentService: any
+
+  // Common test data
+  const TEST_PROJECT_PATH = '/path/to/project'
+  const TEST_AGENT_ID = 'agent-1'
+  const TEST_PROMPT = 'Create feature X'
+  const SUPER_MINION_RULES_PATH = '/path/to/super-minion-rules.md'
+  const SUPER_MINION_AGENT_INFO = { isSuperMinion: true, minionBudget: 5 }
+  const REGULAR_AGENT_INFO = { isSuperMinion: false }
+
+  const ACCEPTANCE_CRITERIA_KEYWORDS = [
+    'acceptance criteria',
+    'AskUserQuestion',
+    'BEFORE creating any implementation plan',
+    'WAIT for explicit approval'
+  ]
+
+  // Helper to get the command written to PTY
+  const getWrittenCommand = () => mockPty.write.mock.calls[0][0]
+
+  // Helper to setup agent info
+  const setupAgentInfo = (agentInfo: { isSuperMinion: boolean; minionBudget?: number }) => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(agentInfo))
+    mockAgentService.readAgentInfo.mockResolvedValue(agentInfo)
+  }
+
+  // Helper to start agent with default parameters
+  const startAgent = (prompt = TEST_PROMPT, agentId = TEST_AGENT_ID) => {
+    return terminalService.startAgent(
+      TEST_PROJECT_PATH,
+      agentId,
+      'claude',
+      'planning',
+      prompt,
+      'sonnet'
+    )
+  }
+
+  beforeEach(() => {
+    const mockWebContents = { send: vi.fn() }
+    mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    mockAgentService = {
+      getSuperMinionRulesPath: vi.fn().mockReturnValue(SUPER_MINION_RULES_PATH),
+      readAgentInfo: vi.fn().mockResolvedValue(SUPER_MINION_AGENT_INFO),
+      updateAgentInfo: vi.fn().mockResolvedValue(undefined),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
+    }
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    setupAgentInfo(SUPER_MINION_AGENT_INFO)
+
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should pass --system-prompt-file flag for super minion in planning mode', async () => {
+    await startAgent()
+
+    const command = getWrittenCommand()
+    expect(command).toContain('--system-prompt-file')
+    expect(command).toContain(SUPER_MINION_RULES_PATH)
+  })
+
+  it('should include acceptance criteria instructions in planning prompt for super minion', async () => {
+    await startAgent()
+
+    const command = getWrittenCommand()
+    ACCEPTANCE_CRITERIA_KEYWORDS.forEach(keyword => {
+      expect(command).toContain(keyword)
+    })
+  })
+
+  it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
+    setupAgentInfo(REGULAR_AGENT_INFO)
+
+    await startAgent(TEST_PROMPT, 'agent-2')
+
+    const command = getWrittenCommand()
+    expect(command).not.toContain('--system-prompt-file')
+    expect(command).not.toContain('super-minion-rules.md')
+  })
+
+  it('should NOT include acceptance criteria instructions for regular planning mode', async () => {
+    setupAgentInfo(REGULAR_AGENT_INFO)
+
+    await startAgent(TEST_PROMPT, 'agent-2')
+
+    const command = getWrittenCommand()
+    expect(command).not.toContain('BEFORE creating any implementation plan')
+    expect(command).not.toContain('acceptance criteria')
+  })
+
+  it('should include instruction to reference criteria throughout execution', async () => {
+    await startAgent('Build feature Y')
+
+    const command = getWrittenCommand()
+    expect(command).toContain('Reference your acceptance criteria throughout execution')
+  })
+})

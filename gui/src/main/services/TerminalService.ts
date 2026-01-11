@@ -388,6 +388,11 @@ export class TerminalService {
       // JSONL-based state detection for Claude (more reliable than pattern matching)
       let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
 
+      // Format display name as "project: branch_suffix" for cleaner notifications
+      const projectName = projectPath.split('/').pop() || 'project'
+      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+      const displayName = `${projectName}: ${branchSuffix}`
+
       // Extract state check logic for reuse (immediate check + polling)
       const checkAndBroadcastState = () => {
         if (!effectiveSessionId) return
@@ -406,7 +411,7 @@ export class TerminalService {
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
-              body: `Agent ${agentId} is waiting for your input`,
+              body: `${displayName} is waiting for your input`,
               agentId
             })
 
@@ -455,6 +460,11 @@ export class TerminalService {
 
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
+      // Format display name as "project: branch_suffix" for cleaner notifications
+      const projectName = projectPath.split('/').pop() || 'project'
+      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+      const displayName = `${projectName}: ${branchSuffix}`
+
       idleDetector = new IdleDetector(
         {
           workingPatterns: tool === 'cursor-cli' ? CLAUDE_WORKING_PATTERNS : [],
@@ -470,7 +480,7 @@ export class TerminalService {
             // Send desktop notification
             this.notificationService?.notify({
               title: 'Input Required',
-              body: `Agent ${agentId} is waiting for your input`,
+              body: `${displayName} is waiting for your input`,
               agentId
             })
             this.updateAgentInfo(worktreePath, {
@@ -605,7 +615,16 @@ export class TerminalService {
 
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `You have a budget of ${minionBudget} child minions. Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
+          planPrompt = `You have a budget of ${minionBudget} child minions.
+
+BEFORE creating any implementation plan, you MUST:
+1. Propose numbered acceptance criteria for this task
+2. Use AskUserQuestion to ask the human to approve the criteria
+3. WAIT for explicit approval before proceeding to implementation
+
+Task: ${prompt}
+
+Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.`
         } else {
           planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }
