@@ -25,11 +25,21 @@ interface Assignment {
   projectPath?: string  // Added to track which project the assignment belongs to
 }
 
+type TeamSize = 'small' | 'medium' | 'large'
+
+const teamSizeToMinionBudget: Record<TeamSize, number> = {
+  small: 3,
+  medium: 5,
+  large: 8
+}
+
 function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showTypeSelection, setShowTypeSelection] = useState(true)
+  const [teamSize, setTeamSize] = useState<TeamSize>('small')
   const [isCreating, setIsCreating] = useState(false)
   const [showTeleportForm, setShowTeleportForm] = useState(false)
   const [teleportInput, setTeleportInput] = useState('')
@@ -198,7 +208,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         result = await window.electronAPI.createSuperAssignment(projectPath, {
           branch: formData.shortName,
           feature,
-          minionBudget: formData.minionBudget,
+          minionBudget: teamSizeToMinionBudget[teamSize],
           tool: formData.tool,
           model: formData.model,
           prompt: formData.prompt,
@@ -246,6 +256,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         isSuper: false,
         minionBudget: 3
       })
+      setTeamSize('small')
+      setShowTypeSelection(true)
 
       // Wait a moment for worktree creation then refresh
       setTimeout(() => {
@@ -380,15 +392,32 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     merged: assignments.filter((a) => a.status === 'merged')
   }
 
-  const handleNewAssignment = (isSuper = false) => {
+  const handleNewAssignment = (isSuper?: boolean) => {
     // Auto-select last selected project, or first project if only one exists
     const lastProject = localStorage.getItem('lastSelectedProjectPath')
     const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
       ? lastProject
       : (activeProjects.length === 1 ? activeProjects[0].path : '')
 
-    setFormData({ ...formData, projectPath: defaultProject, isSuper })
+    // If isSuper is explicitly set, skip type selection and go to form
+    // Otherwise show type selection (user clicked "New Minion")
+    if (isSuper !== undefined) {
+      setFormData({ ...formData, projectPath: defaultProject, isSuper })
+      setShowTypeSelection(false)
+    } else {
+      setFormData({ ...formData, projectPath: defaultProject, isSuper: false })
+      setShowTypeSelection(true)
+    }
     setShowCreateForm(true)
+  }
+
+  const selectAgentType = (isSuper: boolean) => {
+    setFormData({ ...formData, isSuper })
+    setShowTypeSelection(false)
+    // Reset team size when selecting orchestrator
+    if (isSuper) {
+      setTeamSize('small')
+    }
   }
 
   const handleTeleportClick = () => {
@@ -654,209 +683,268 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       </div>
 
       {showCreateForm && (
-        <div className="modal-overlay" onClick={() => setShowCreateForm(false)}>
+        <div className="modal-overlay" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>{formData.isSuper ? '👑 Create New Super Mission' : 'Create New Mission'}</h2>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                handleCreateAssignment()
-              }}
-            >
-              {activeProjects.length > 1 && (
-                <div className="form-group">
-                  <label>Project</label>
-                  <select
-                    value={formData.projectPath}
-                    onChange={(e) => {
-                      const newProjectPath = e.target.value
-                      // Filter available agents for this project
-                      setFormData({ ...formData, projectPath: newProjectPath, agentId: '' })
-                    }}
-                    required
-                  >
-                    <option value="">Select project...</option>
-                    {activeProjects.map((proj) => (
-                      <option key={proj.path} value={proj.path}>
-                        {proj.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="form-group">
-                <label>Branch Short Name</label>
-                <div className="branch-input-wrapper">
-                  <span className="branch-prefix">feature/</span>
-                  <input
-                    type="text"
-                    value={formData.shortName}
-                    onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-                    placeholder="user-auth"
-                    required
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              </div>
-
-              {formData.isSuper && (
-                <div className="form-group">
-                  <label>Minion Budget: {formData.minionBudget}</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={formData.minionBudget}
-                    onChange={(e) => setFormData({ ...formData, minionBudget: parseInt(e.target.value) })}
-                    className="budget-slider"
-                  />
-                  <div className="form-hint">
-                    Maximum number of child minions the super minion can orchestrate.
+            {showTypeSelection ? (
+              <>
+                <h2>New Mission</h2>
+                <p className="type-selection-subtitle">Choose how you want to work</p>
+                <div className="type-selection">
+                  <div className="type-card" onClick={() => selectAgentType(false)}>
+                    <div className="type-icon">🤖</div>
+                    <div className="type-title">Single Agent</div>
+                    <div className="type-description">One agent works on a focused task</div>
+                  </div>
+                  <div className="type-card super" onClick={() => selectAgentType(true)}>
+                    <div className="type-icon">👑</div>
+                    <div className="type-title">Orchestrator</div>
+                    <div className="type-description">Breaks down work and coordinates a team</div>
                   </div>
                 </div>
-              )}
-
-              {formData.tool !== 'cursor' && (
-                <div className="form-group">
-                  <label>{formData.mode === 'planning' ? 'Planning Prompt' : 'Task Description'}</label>
-                  <textarea
-                    value={formData.prompt}
-                    onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
-                    placeholder={formData.mode === 'planning'
-                      ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
-                      : "Implement a login form with email and password fields. Style it with Tailwind CSS."}
-                    rows={6}
-                    required={formData.tool !== 'cursor'}
-                    style={{
-                      width: '100%',
-                      resize: 'vertical',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                  <div className="form-hint">
-                    {formData.mode === 'planning'
-                      ? 'Minion will create a plan for you to review before implementing.'
-                      : 'Minion will implement directly without a planning phase.'}
-                  </div>
+                <div className="form-actions">
+                  <button type="button" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); }}>
+                    Cancel
+                  </button>
                 </div>
-              )}
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Tool</label>
-                  <select
-                    value={formData.tool}
-                    onChange={(e) => {
-                      const newTool = e.target.value
-                      // Set appropriate default model when switching tools
-                      const defaultModel = newTool === 'cursor-cli' ? 'auto' : 'opus'
-                      setFormData({ ...formData, tool: newTool, model: defaultModel })
-                    }}
-                  >
-                    <option value="claude">Claude</option>
-                    <option value="cursor">Cursor</option>
-                    <option value="cursor-cli">Cursor CLI</option>
-                  </select>
-                </div>
-
-                {formData.tool === 'claude' && (
-                  <div className="form-group">
-                    <label>Model</label>
-                    <select
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                    >
-                      <option value="haiku">Haiku</option>
-                      <option value="sonnet">Sonnet</option>
-                      <option value="opus">Opus</option>
-                      <option value="opusplan">Opus Plan</option>
-                    </select>
+              </>
+            ) : (
+              <>
+                <h2>{formData.isSuper ? 'Create Orchestrator' : 'Create Single Agent'}</h2>
+                {formData.isSuper && (
+                  <div className="orchestrator-info">
+                    The orchestrator will analyze your goal and create a plan. You'll approve the plan before any agents start working.
                   </div>
                 )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    handleCreateAssignment()
+                  }}
+                >
+                  {activeProjects.length > 1 && (
+                    <div className="form-group">
+                      <label>Project</label>
+                      <select
+                        value={formData.projectPath}
+                        onChange={(e) => {
+                          const newProjectPath = e.target.value
+                          setFormData({ ...formData, projectPath: newProjectPath, agentId: '' })
+                        }}
+                        required
+                      >
+                        <option value="">Select project...</option>
+                        {activeProjects.map((proj) => (
+                          <option key={proj.path} value={proj.path}>
+                            {proj.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-                {formData.tool === 'cursor-cli' && (
                   <div className="form-group">
-                    <label>Model</label>
-                    <select
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                    >
-                      <option value="composer-1">Composer 1</option>
-                      <option value="auto">Auto</option>
-                      <option value="sonnet-4.5">Sonnet 4.5</option>
-                      <option value="sonnet-4.5-thinking">Sonnet 4.5 Thinking</option>
-                      <option value="opus-4.5">Opus 4.5</option>
-                      <option value="opus-4.5-thinking">Opus 4.5 Thinking</option>
-                      <option value="opus-4.1">Opus 4.1</option>
-                      <option value="gemini-3-pro">Gemini 3 Pro</option>
-                      <option value="gemini-3-flash">Gemini 3 Flash</option>
-                      <option value="gpt-5.2">GPT 5.2</option>
-                      <option value="gpt-5.2-high">GPT 5.2 High</option>
-                      <option value="gpt-5.1">GPT 5.1</option>
-                      <option value="gpt-5.1-high">GPT 5.1 High</option>
-                      <option value="gpt-5.1-codex">GPT 5.1 Codex</option>
-                      <option value="gpt-5.1-codex-high">GPT 5.1 Codex High</option>
-                      <option value="gpt-5.1-codex-max">GPT 5.1 Codex Max</option>
-                      <option value="gpt-5.1-codex-max-high">GPT 5.1 Codex Max High</option>
-                      <option value="grok">Grok</option>
-                    </select>
-                  </div>
-                )}
-
-                {formData.tool !== 'cursor-cli' && (
-                  <div className="form-group">
-                    <label>Mode</label>
-                    <select
-                      value={formData.mode}
-                      onChange={(e) => {
-                        const newMode = e.target.value as 'planning' | 'dev'
-                        const newModel = newMode === 'dev' ? 'haiku' : 'opusplan'
-                        setFormData({ ...formData, mode: newMode, model: newModel })
-                      }}
-                    >
-                      <option value="planning">Planning</option>
-                      <option value="dev">Dev</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {formData.tool === 'claude' && (
-                <div className="form-group">
-                  <div style={{ display: 'flex', gap: '30px', marginBottom: '8px' }}>
-                    <label className="checkbox-label">
+                    <label>Branch Short Name</label>
+                    <div className="branch-input-wrapper">
+                      <span className="branch-prefix">feature/</span>
                       <input
-                        type="checkbox"
-                        checked={formData.yolo}
-                        onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
+                        type="text"
+                        value={formData.shortName}
+                        onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                        placeholder="user-auth"
+                        required
+                        style={{ flex: 1 }}
                       />
-                      <span className="checkbox-text">Yolo mode 🔥</span>
-                    </label>
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.chrome}
-                        onChange={(e) => setFormData({ ...formData, chrome: e.target.checked })}
-                      />
-                      <span className="checkbox-text">Chrome integration 🌐</span>
-                    </label>
+                    </div>
                   </div>
-                  <div className="form-hint">
-                    Yolo: Auto-approve edits and commands. Chrome: Enable browser automation.
-                  </div>
-                </div>
-              )}
 
-              <div className="form-actions">
-                <button type="button" onClick={() => setShowCreateForm(false)} disabled={isCreating}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={isCreating}>
-                  {isCreating ? 'Creating...' : 'Create Mission'}
-                </button>
-              </div>
-            </form>
+                  {formData.isSuper && (
+                    <div className="form-group">
+                      <label>Team Size</label>
+                      <div className="team-size-selector">
+                        <button
+                          type="button"
+                          className={teamSize === 'small' ? 'selected' : ''}
+                          onClick={() => setTeamSize('small')}
+                        >
+                          Small (2-3)
+                        </button>
+                        <button
+                          type="button"
+                          className={teamSize === 'medium' ? 'selected' : ''}
+                          onClick={() => setTeamSize('medium')}
+                        >
+                          Medium (4-6)
+                        </button>
+                        <button
+                          type="button"
+                          className={teamSize === 'large' ? 'selected' : ''}
+                          onClick={() => setTeamSize('large')}
+                        >
+                          Large (7-10)
+                        </button>
+                      </div>
+                      <div className="form-hint">
+                        Maximum number of agents the orchestrator can coordinate.
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.tool !== 'cursor' && (
+                    <div className="form-group">
+                      <label>{formData.isSuper ? 'Goal' : 'Task'}</label>
+                      <textarea
+                        value={formData.prompt}
+                        onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+                        placeholder={formData.isSuper
+                          ? "Describe the overall goal you want to accomplish. The orchestrator will break it down into subtasks."
+                          : (formData.mode === 'planning'
+                            ? "Create a user authentication system with login, signup, and password reset. Use JWT tokens for session management."
+                            : "Implement a login form with email and password fields. Style it with Tailwind CSS.")}
+                        rows={6}
+                        required={formData.tool !== 'cursor'}
+                        style={{
+                          width: '100%',
+                          resize: 'vertical',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Workflow selector for Single Agents only */}
+                  {!formData.isSuper && formData.tool !== 'cursor-cli' && (
+                    <div className="form-group">
+                      <label>Workflow</label>
+                      <div className="workflow-selector">
+                        <label className={`workflow-option ${formData.mode === 'planning' ? 'selected' : ''}`}>
+                          <input
+                            type="radio"
+                            name="workflow"
+                            value="planning"
+                            checked={formData.mode === 'planning'}
+                            onChange={() => setFormData({ ...formData, mode: 'planning', model: 'opusplan' })}
+                          />
+                          <div className="workflow-content">
+                            <div className="workflow-title">Plan First</div>
+                            <div className="workflow-description">Agent proposes a plan for your review before making changes</div>
+                          </div>
+                        </label>
+                        <label className={`workflow-option ${formData.mode === 'dev' ? 'selected' : ''}`}>
+                          <input
+                            type="radio"
+                            name="workflow"
+                            value="dev"
+                            checked={formData.mode === 'dev'}
+                            onChange={() => setFormData({ ...formData, mode: 'dev', model: 'haiku' })}
+                          />
+                          <div className="workflow-content">
+                            <div className="workflow-title">Start Immediately</div>
+                            <div className="workflow-description">Agent begins implementing right away</div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Tool</label>
+                      <select
+                        value={formData.tool}
+                        onChange={(e) => {
+                          const newTool = e.target.value
+                          const defaultModel = newTool === 'cursor-cli' ? 'auto' : 'opus'
+                          setFormData({ ...formData, tool: newTool, model: defaultModel })
+                        }}
+                      >
+                        <option value="claude">Claude</option>
+                        <option value="cursor">Cursor</option>
+                        <option value="cursor-cli">Cursor CLI</option>
+                      </select>
+                    </div>
+
+                    {formData.tool === 'claude' && (
+                      <div className="form-group">
+                        <label>Model</label>
+                        <select
+                          value={formData.model}
+                          onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                        >
+                          <option value="haiku">Haiku</option>
+                          <option value="sonnet">Sonnet</option>
+                          <option value="opus">Opus</option>
+                          <option value="opusplan">Opus Plan</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {formData.tool === 'cursor-cli' && (
+                      <div className="form-group">
+                        <label>Model</label>
+                        <select
+                          value={formData.model}
+                          onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                        >
+                          <option value="composer-1">Composer 1</option>
+                          <option value="auto">Auto</option>
+                          <option value="sonnet-4.5">Sonnet 4.5</option>
+                          <option value="sonnet-4.5-thinking">Sonnet 4.5 Thinking</option>
+                          <option value="opus-4.5">Opus 4.5</option>
+                          <option value="opus-4.5-thinking">Opus 4.5 Thinking</option>
+                          <option value="opus-4.1">Opus 4.1</option>
+                          <option value="gemini-3-pro">Gemini 3 Pro</option>
+                          <option value="gemini-3-flash">Gemini 3 Flash</option>
+                          <option value="gpt-5.2">GPT 5.2</option>
+                          <option value="gpt-5.2-high">GPT 5.2 High</option>
+                          <option value="gpt-5.1">GPT 5.1</option>
+                          <option value="gpt-5.1-high">GPT 5.1 High</option>
+                          <option value="gpt-5.1-codex">GPT 5.1 Codex</option>
+                          <option value="gpt-5.1-codex-high">GPT 5.1 Codex High</option>
+                          <option value="gpt-5.1-codex-max">GPT 5.1 Codex Max</option>
+                          <option value="gpt-5.1-codex-max-high">GPT 5.1 Codex Max High</option>
+                          <option value="grok">Grok</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {formData.tool === 'claude' && (
+                    <div className="form-group">
+                      <div style={{ display: 'flex', gap: '30px', marginBottom: '8px' }}>
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.yolo}
+                            onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
+                          />
+                          <span className="checkbox-text">Yolo mode 🔥</span>
+                        </label>
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.chrome}
+                            onChange={(e) => setFormData({ ...formData, chrome: e.target.checked })}
+                          />
+                          <span className="checkbox-text">Chrome integration 🌐</span>
+                        </label>
+                      </div>
+                      <div className="form-hint">
+                        Yolo: Auto-approve edits and commands. Chrome: Enable browser automation.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-actions">
+                    <button type="button" onClick={() => setShowTypeSelection(true)} disabled={isCreating}>
+                      Back
+                    </button>
+                    <button type="submit" disabled={isCreating}>
+                      {isCreating ? 'Creating...' : (formData.isSuper ? 'Create Plan' : 'Start Agent')}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -446,22 +446,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                       onClick={(e) => {
                         e.stopPropagation()
                         localStorage.setItem('lastSelectedProjectPath', project.path)
-                        handleAddMinion(false)
+                        handleAddMinion()
                         setOpenSubmenuProject(null)
                       }}
                     >
-                      Regular Mission
-                    </div>
-                    <div
-                      className="add-mission-submenu-item super-option"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        localStorage.setItem('lastSelectedProjectPath', project.path)
-                        handleAddMinion(true)
-                        setOpenSubmenuProject(null)
-                      }}
-                    >
-                      <span className="super-icon">👑</span> Super Mission
+                      🍌 New Minion
                     </div>
                   </div>
                 </div>
