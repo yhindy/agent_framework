@@ -1,0 +1,246 @@
+# 👋 Getting Started with Agent Framework
+
+Welcome! This guide will help you set up and start using the Agent Framework to run multiple AI coding agents in parallel.
+
+## What is This?
+
+The **Agent Framework** (aka Minion Framework) lets you:
+- Run multiple AI coding agents at the same time on different features
+- Keep agents isolated using git worktrees (no conflicts!)
+- Manage everything through a friendly desktop GUI
+- Give agents specific missions and monitor their progress
+
+Think of it like having a team of helpful AI assistants, each working on their own task.
+
+---
+
+## Prerequisites
+
+Before you start, make sure you have:
+
+- **Node.js 18+** - [Download from nodejs.org](https://nodejs.org)
+- **Git** - [Download from git-scm.com](https://git-scm.com) (or use your package manager)
+- **Python 3** - Usually pre-installed on Mac/Linux. Windows users: [python.org](https://python.org)
+
+To check if you have these:
+```bash
+node -v    # Should show v18.x.x or higher
+git --version
+python3 --version
+```
+
+---
+
+## Step 1: First-Time Setup 🛠️
+
+Run the setup script from the agent_framework directory:
+
+```bash
+./setup.sh
+```
+
+This will:
+1. ✅ Check that you have all the requirements
+2. 📦 Install all dependencies (npm packages)
+3. 🔧 Rebuild native modules for the GUI
+
+**First run takes 2-5 minutes.** Grab a coffee! ☕
+
+### Troubleshooting Setup
+
+If you see errors:
+
+- **"node: command not found"** → Install Node.js from [nodejs.org](https://nodejs.org)
+- **"Node.js 18+ required"** → Update Node.js to the latest LTS version
+- **npm install interrupted/failed** → Run `rm -rf node_modules package-lock.json && ./setup.sh` to start fresh
+- **"Cannot find module" errors** → Same as above - clean reinstall
+- **Rebuild errors on Linux** → You may need build tools: `sudo apt install build-essential`
+
+---
+
+## Step 2: Launch the GUI 🚀
+
+Once setup is complete, start the application:
+
+```bash
+./run.sh
+```
+
+This opens the **Agent Framework GUI** - your mission control for managing AI agents!
+
+The GUI will open in a new window. You should see:
+- A sidebar (empty at first - no projects yet)
+- A "Select Project Folder" button
+
+---
+
+## Step 3: Add Your First Project 📁
+
+1. **Click "Select Project Folder"** in the GUI
+2. **Navigate to a git repository** you want to work on
+3. The framework will detect if it's already installed in that project
+4. If not installed, click **"Install Framework"** when prompted
+
+**Important:** The project MUST be a git repository. The framework uses git worktrees to isolate agent work.
+
+### What Gets Installed?
+
+When you install the framework into a project, it adds:
+```
+your-project/
+├── minions/              # Agent management scripts
+│   ├── bin/             # CLI tools (setup, teardown, etc.)
+│   ├── assignments/     # Mission files go here
+│   ├── rules/           # Agent behavior guidelines
+│   └── templates/       # Mission templates
+└── .cursor/rules/       # Cursor IDE integration
+    └── agent-rules.mdc
+```
+
+---
+
+## Step 4: Create Your First Agent 🤖
+
+1. **In the GUI sidebar**, click the **"+"** button next to your project name
+2. **Choose mission type**:
+   - **Regular Mission** - For straightforward features
+   - **👑 Super Mission** - For complex features that need multiple sub-agents
+
+3. **Fill in the form**:
+   - **Branch name**: Like `user-auth` (auto-prefixed with `feature/`)
+   - **Task description**: Tell the agent what to build
+     ```
+     Add a dark mode toggle to the settings page.
+     Toggle should persist to localStorage and respect prefers-color-scheme.
+     ```
+   - **Tool**: Choose `claude`, `cursor`, `cursor-cli`, etc.
+   - **Mode**:
+     - **Planning** - Agent creates a plan for you to review first
+     - **Direct** - Agent implements immediately
+   - **Model**: `opus`, `sonnet`, or `haiku`
+
+4. **Click "Create Mission"**
+
+That's it! The agent is created with your task description embedded. No separate files to create.
+
+Behind the scenes, this:
+- Creates a git worktree at `../yourproject-agent-user-auth/`
+- Stores your task description with the agent
+- Opens a terminal ready for the AI tool
+
+---
+
+## Step 5: Monitor Your Agent 👀
+
+Once created, your agent appears in the sidebar. Click on it to see:
+
+- **Live Terminal**: Watch the agent work in real-time
+- **Status Badge**: Shows when the agent is waiting for your input
+- **Real-time Updates**: Terminal output updates as the agent works
+
+The terminal automatically starts with your chosen tool (Claude, Cursor, etc.)
+
+---
+
+## Step 6: Review and Merge 🎉
+
+When your agent finishes:
+
+1. **Review the code** in the agent's worktree
+2. **Run tests** to make sure everything works
+3. **Merge the branch** into your main branch:
+   ```bash
+   git checkout main
+   git merge feature/agent-1/add-dark-mode
+   ```
+4. **Remove the agent** in the GUI (or run `./minions/bin/teardown.sh agent-1`)
+
+The agent's worktree gets cleaned up, and you're ready to create another agent!
+
+---
+
+## Running Multiple Agents in Parallel 🚄
+
+The real power is running multiple agents at once:
+
+1. **Create agent-1** for Feature A (e.g., dark mode)
+2. **Create agent-2** for Feature B (e.g., add search)
+3. **Create agent-3** for Feature C (e.g., fix login bug)
+
+**Key Rule:** Make sure agents work on **different files** to avoid conflicts!
+
+The GUI lets you monitor all agents from one window.
+
+---
+
+## Tips for Success 💡
+
+### Keep Missions Small
+- Features completable in 1-2 hours work best
+- Break large features into smaller missions
+
+### Assign Non-Overlapping Files
+- Each agent should modify different files
+- Use the "Allowed Files" section in mission specs
+
+### Review Frequently
+- Check agent progress every 15-30 minutes
+- Course-correct early if the agent goes off track
+
+### Merge Often
+- Don't let branches diverge too far from main
+- Merge completed work promptly
+
+---
+
+## Next Steps 🎓
+
+You're all set! Here are some resources:
+
+- **For Users**: Check out the main [README.md](README.md) for more features
+- **For Developers**: Read [CLAUDE.md](CLAUDE.md) to understand the codebase
+- **For Advanced Usage**: Explore CLI commands in `minions/bin/`
+
+### Quick CLI Reference
+
+All commands run from your project root (where `minions/` is installed):
+
+```bash
+# List all active agents
+./minions/bin/list.sh
+
+# Create an agent manually (if not using GUI)
+./minions/bin/setup.sh agent-2 feature/agent-2/my-feature
+
+# Remove an agent
+./minions/bin/teardown.sh agent-2
+
+# Force remove (discards uncommitted changes)
+./minions/bin/teardown.sh agent-2 --force
+
+# Check that everything is set up correctly
+./minions/bin/preflight.sh
+```
+
+---
+
+## Getting Help 🆘
+
+Having trouble?
+
+1. **Check the GUI logs** - Look for error messages in the terminal output
+2. **Verify git status** - Run `git status` in the agent's worktree
+3. **Review CLAUDE.md** - Detailed architecture and troubleshooting info
+4. **Check GitHub issues** - See if others had similar problems
+
+---
+
+## What's Next?
+
+Now that you're set up:
+
+1. 🎯 Try creating your first agent with a simple mission
+2. 🔍 Explore the GUI features (terminals, status badges, project switching)
+3. 🚀 Run multiple agents in parallel on real work
+
+Happy agent orchestrating! 🎉

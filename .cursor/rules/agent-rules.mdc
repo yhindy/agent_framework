@@ -82,16 +82,44 @@ This document defines rules and processes for AI agents working on this codebase
 
 ## Testing Requirements
 
-- **Run tests before every commit**
+- **Run smart tests before every commit** - Only run tests affected by your changes
 - **Add tests for new functionality**
 - **Don't break existing tests**
 
+### Test Commands
+
 ```bash
-# Example test commands (adjust for your project)
+# Recommended: Run only tests affected by your changes (fast, memory-efficient)
+npm run test:changed
+
+# Alternative: Run tests related to specific files you modified
+cd gui && npm run test:related src/main/services/AgentService.ts
+
+# Full test suite (only when needed - slower, more memory)
 npm test
-pytest
-go test ./...
+
+# For GUI-specific work
+cd gui && npm run test:changed
+
+# For minions-specific work
+cd minions && npm run test:changed
 ```
+
+### When to Run Full Tests
+
+Run the full test suite (`npm test`) only when:
+- You modified test configuration files (`vitest.config.ts`, `package.json`)
+- You changed shared types or interfaces used across many files
+- You're preparing a final commit to main/master
+- Selective tests pass but you want extra confidence
+
+### Memory Management
+
+If tests are slow or your system is sluggish:
+- Use `npm run test:changed` instead of `npm test`
+- Close other memory-intensive applications
+- Tests are configured to limit concurrent workers (max 4)
+- Node heap is limited to 2GB to prevent excessive memory use
 
 ---
 

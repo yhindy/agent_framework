@@ -45,6 +45,8 @@ Object.defineProperty(window, 'electronAPI', {
     onAssignmentsUpdate: vi.fn(() => vi.fn()),
     onAgentWaitingForInput: vi.fn(() => vi.fn()),
     onAgentResumedWork: vi.fn(() => vi.fn()),
+    onAgentStateChanged: vi.fn(() => vi.fn()),
+    getAgentState: vi.fn(),
     onPlainTerminalWaitingForInput: vi.fn(() => vi.fn()),
     onPlainTerminalResumedWork: vi.fn(() => vi.fn()),
   }

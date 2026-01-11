@@ -189,9 +189,11 @@ describe('Sidebar Integration', () => {
     // Child should also be visible by default (since not collapsed)
     expect(screen.getByText('child-1')).toBeInTheDocument()
 
-    // Super minion should have the crown icon (or at least the container)
+    // Super minion should have the leading icons container with crown
     const superItem = screen.getByText('super-1').closest('.agent-item')
-    expect(superItem).toContainHTML('👑')
+    const leadingIcons = superItem?.querySelector('.agent-leading-icons')
+    expect(leadingIcons).toBeInTheDocument()
+    expect(leadingIcons).toContainHTML('👑')
   })
 
   it('collapses children when super minion toggle is clicked', async () => {
@@ -820,6 +822,215 @@ describe('Sidebar branch name display', () => {
     expect(styles.textOverflow).toBe('ellipsis')
     expect(styles.overflow).toBe('hidden')
     expect(styles.whiteSpace).toBe('nowrap')
+  })
+})
+
+describe('Sidebar icon alignment', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should render consistent leading icon structure for all agent types', async () => {
+    const mockAgents = [
+      {
+        id: 'super-1',
+        agentId: 'super-1',
+        isSuperMinion: true,
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/super-task'
+      },
+      {
+        id: 'normal-1',
+        agentId: 'normal-1',
+        terminalPid: 456,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/normal-task'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('super-1')).toBeInTheDocument()
+      expect(screen.getByText('normal-1')).toBeInTheDocument()
+    })
+
+    // Both should have .agent-leading-icons container
+    const superItem = screen.getByText('super-1').closest('.agent-item')
+    const normalItem = screen.getByText('normal-1').closest('.agent-item')
+
+    const superLeading = superItem?.querySelector('.agent-leading-icons')
+    const normalLeading = normalItem?.querySelector('.agent-leading-icons')
+
+    expect(superLeading).toBeInTheDocument()
+    expect(normalLeading).toBeInTheDocument()
+
+    // Both should have either chevron or chevron-placeholder
+    expect(superLeading?.querySelector('.collapse-chevron')).toBeInTheDocument()
+    expect(normalLeading?.querySelector('.chevron-placeholder')).toBeInTheDocument()
+
+    // Both should have .agent-type-icon
+    expect(superLeading?.querySelector('.agent-type-icon')).toBeInTheDocument()
+    expect(normalLeading?.querySelector('.agent-type-icon')).toBeInTheDocument()
+  })
+
+  it('should render chevron-placeholder for non-super-minions', async () => {
+    const mockAgents = [
+      {
+        id: 'normal-1',
+        agentId: 'normal-1',
+        terminalPid: 456,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('normal-1')).toBeInTheDocument()
+    })
+
+    const normalItem = screen.getByText('normal-1').closest('.agent-item')
+    const leadingIcons = normalItem?.querySelector('.agent-leading-icons')
+
+    expect(leadingIcons?.querySelector('.chevron-placeholder')).toBeInTheDocument()
+    expect(leadingIcons?.querySelector('.collapse-chevron')).not.toBeInTheDocument()
+  })
+
+  it('should render banana indicator for normal minions', async () => {
+    const mockAgents = [
+      {
+        id: 'normal-1',
+        agentId: 'normal-1',
+        terminalPid: 456,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('normal-1')).toBeInTheDocument()
+    })
+
+    const normalItem = screen.getByText('normal-1').closest('.agent-item')
+    const typeIcon = normalItem?.querySelector('.agent-type-icon')
+
+    expect(typeIcon).toBeInTheDocument()
+    expect(typeIcon?.textContent).toBe('🍌')
+  })
+
+  it('should render correct icon for each agent type', async () => {
+    const mockAgents = [
+      {
+        id: 'super-1',
+        agentId: 'super-1',
+        isSuperMinion: true,
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+      },
+      {
+        id: 'base-1',
+        agentId: 'base-1',
+        isBaseBranchAgent: true,
+        assignmentId: 'project-base-123',
+        terminalPid: 456,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+      },
+      {
+        id: 'normal-1',
+        agentId: 'normal-1',
+        terminalPid: 789,
+        hasUnread: false,
+        lastActivity: new Date().toISOString()
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('super-1')).toBeInTheDocument()
+      expect(screen.getByText(/\(Base\)/)).toBeInTheDocument()
+      expect(screen.getByText('normal-1')).toBeInTheDocument()
+    })
+
+    // Super minion → 👑
+    const superItem = screen.getByText('super-1').closest('.agent-item')
+    const superIcon = superItem?.querySelector('.agent-type-icon')
+    expect(superIcon?.textContent).toBe('👑')
+
+    // Base branch → 🏠
+    const baseItem = screen.getByText(/\(Base\)/).closest('.agent-item')
+    const baseIcon = baseItem?.querySelector('.agent-type-icon')
+    expect(baseIcon?.textContent).toBe('🏠')
+
+    // Normal minion → 🍌
+    const normalItem = screen.getByText('normal-1').closest('.agent-item')
+    const normalIcon = normalItem?.querySelector('.agent-type-icon')
+    expect(normalIcon?.textContent).toBe('🍌')
   })
 })
 
