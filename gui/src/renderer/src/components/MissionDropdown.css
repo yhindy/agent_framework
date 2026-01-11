@@ -1,0 +1,108 @@
+/* Mission Dropdown Component - Shared styles for mission/teleport dropdowns */
+
+.mission-dropdown-container {
+  position: relative;
+}
+
+/* Button variant (used in Dashboard header) */
+.mission-dropdown-btn {
+  background: #0e639c;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.mission-dropdown-btn:hover {
+  background: #1177bb;
+}
+
+/* Icon variant (used in Sidebar) */
+.mission-dropdown-icon-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #cccccc;
+}
+
+.mission-dropdown-icon-trigger:hover {
+  background: #2a2d2e;
+}
+
+.mission-dropdown-icon {
+  font-size: 16px;
+}
+
+/* Dropdown menu */
+.mission-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+/* Dropdown items */
+.mission-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.mission-dropdown-item:hover {
+  background: #2a2d2e;
+}
+
+.mission-dropdown-item-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.mission-dropdown-item-label {
+  font-weight: 500;
+}
+
+/* Super mission option styling */
+.mission-dropdown-item.super-option {
+  color: #d4a0d4;
+}
+
+.mission-dropdown-item.super-option:hover {
+  background: #3d2a3d;
+}
+
+/* Teleport option styling */
+.mission-dropdown-item.teleport-option {
+  color: #4ec9b0;
+}
+
+.mission-dropdown-item.teleport-option:hover {
+  background: #2a3d3a;
+}
+
+/* Divider between menu sections */
+.mission-dropdown-divider {
+  height: 1px;
+  background: #3c3c3c;
+  margin: 4px 0;
+}

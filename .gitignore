@@ -24,4 +24,20 @@ gui/dist/
 gui/out/
 gui/.vite/
 gui/*.log
+gui/coverage/
 *.tsbuildinfo
+
+# TypeScript build artifacts (in-source emissions from IDE/tsc)
+# electron-vite handles actual builds, these are accidental emissions
+gui/electron.vite.config.js
+gui/electron.vite.config.d.ts
+
+# Compiled JS/JSX in main process and renderer (keep hand-written .d.ts files)
+gui/src/main/**/*.js
+gui/src/main/**/*.d.ts
+gui/src/renderer/src/**/*.jsx
+gui/src/renderer/src/**/*.d.ts
+!gui/src/renderer/src/globals.d.ts
+gui/src/renderer/src/**/*.js
+gui/src/preload/*.js
+!gui/src/preload/index.d.ts

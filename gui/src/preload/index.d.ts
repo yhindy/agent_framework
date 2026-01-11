@@ -1,8 +1,66 @@
-import { ElectronAPI } from './index'
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI
-  }
-}
-
+declare const api: {
+    selectProject: (path: string) => Promise<any>;
+    installFramework: (path: string) => Promise<any>;
+    getRecentProjects: () => Promise<any>;
+    getCurrentProject: () => Promise<any>;
+    clearCurrentProject: () => Promise<any>;
+    addProject: (path: string) => Promise<any>;
+    removeProject: (path: string) => Promise<any>;
+    switchProject: (path: string) => Promise<any>;
+    getActiveProjects: () => Promise<any>;
+    listAgents: () => Promise<any>;
+    listAgentsForProject: (projectPath: string) => Promise<any>;
+    stopAgent: (agentId: string) => Promise<any>;
+    openInCursor: (agentId: string) => Promise<any>;
+    clearUnread: (agentId: string) => Promise<any>;
+    getSuperAgentDetails: (agentId: string) => Promise<any>;
+    approvePlan: (superAgentId: string, planId: string) => Promise<any>;
+    teardownAgent: (agentId: string, force: boolean) => Promise<any>;
+    unassignAgent: (agentId: string) => Promise<any>;
+    saveUIState: (agentId: string, uiState: any) => Promise<any>;
+    sendTerminalInput: (agentId: string, data: string) => void;
+    resizeTerminal: (agentId: string, cols: number, rows: number) => void;
+    onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => Electron.IpcRenderer;
+    startPlainTerminal: (agentId: string, terminalId: string) => Promise<any>;
+    stopPlainTerminal: (terminalId: string) => Promise<any>;
+    sendPlainTerminalInput: (terminalId: string, data: string) => void;
+    resizePlainTerminal: (terminalId: string, cols: number, rows: number) => void;
+    onPlainTerminalOutput: (callback: (terminalId: string, data: string) => void) => () => Electron.IpcRenderer;
+    onPlainTerminalWaitingForInput: (callback: (terminalId: string, promptText: string) => void) => () => Electron.IpcRenderer;
+    onPlainTerminalResumedWork: (callback: (terminalId: string) => void) => () => Electron.IpcRenderer;
+    getAssignments: () => Promise<any>;
+    getAssignmentsForProject: (projectPath: string) => Promise<any>;
+    createAssignment: (assignment: any) => Promise<any>;
+    createAssignmentForProject: (projectPath: string, assignment: any) => Promise<any>;
+    createSuperAssignment: (projectPath: string, assignment: any) => Promise<any>;
+    teleportFromCloud: (projectPath: string, sessionId: string) => Promise<any>;
+    updateAssignment: (assignmentId: string, updates: any) => Promise<any>;
+    createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<any>;
+    checkPullRequestStatus: (assignmentId: string) => Promise<any>;
+    startPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
+    stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
+    stopAllPRPolling: (subscriberId: string) => Promise<any>;
+    refreshPRNow: (assignmentId: string) => Promise<any>;
+    checkDependencies: () => Promise<any>;
+    onAgentListUpdate: (callback: () => void) => () => Electron.IpcRenderer;
+    onAssignmentsUpdate: (callback: () => void) => () => Electron.IpcRenderer;
+    getAgentState: (agentId: string) => Promise<any>;
+    onAgentStateChanged: (callback: (agentId: string, state: "working" | "waiting" | "unknown") => void) => () => Electron.IpcRenderer;
+    onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => Electron.IpcRenderer;
+    onAgentResumedWork: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
+    getClaudeSessionInfo: (agentId: string) => Promise<any>;
+    onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
+    getTestEnvConfig: (agentId?: string) => Promise<any>;
+    getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any>;
+    startTestEnv: (agentId: string, commandId?: string) => Promise<any>;
+    stopTestEnv: (agentId: string, commandId?: string) => Promise<any>;
+    getTestEnvStatus: (agentId: string) => Promise<any>;
+    sendTestEnvInput: (agentId: string, commandId: string, data: string) => void;
+    resizeTestEnv: (agentId: string, commandId: string, cols: number, rows: number) => void;
+    onTestEnvOutput: (callback: (agentId: string, commandId: string, data: string) => void) => () => Electron.IpcRenderer;
+    onTestEnvStarted: (callback: (agentId: string, commandId: string) => void) => () => Electron.IpcRenderer;
+    onTestEnvStopped: (callback: (agentId: string, commandId: string) => void) => () => Electron.IpcRenderer;
+    onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => () => Electron.IpcRenderer;
+};
+export type ElectronAPI = typeof api;
+export {};

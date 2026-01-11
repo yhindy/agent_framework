@@ -66,7 +66,8 @@ describe('Session Persistence', () => {
     agentService = {
       readAgentInfo: vi.fn().mockResolvedValue(null),
       updateAgentInfo: vi.fn(),
-      getAgentPath: vi.fn().mockReturnValue('/path/to/agent')
+      getAgentPath: vi.fn().mockReturnValue('/path/to/agent'),
+      getProjectName: vi.fn().mockImplementation((projectPath: string) => projectPath.split('/').pop() || 'project')
     } as any
 
     // Setup ClaudeSessionInfoService mock

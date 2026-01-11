@@ -113,7 +113,7 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     if (sessionInfo?.sessionId) {
       try {
         await navigator.clipboard.writeText(sessionInfo.sessionId)
-        setCopyFeedback('Copied!')
+        setCopyFeedback('session')
         setTimeout(() => setCopyFeedback(null), 2000)
       } catch (err) {
         console.error('Failed to copy:', err)
@@ -181,7 +181,7 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
                 onClick={handleCopySessionId}
                 title="Copy session ID"
               >
-                {copyFeedback || '📋'}
+                {copyFeedback === 'session' ? 'Copied!' : '📋'}
               </button>
             </span>
           </div>

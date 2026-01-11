@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { join, resolve } from 'path'
+import { existsSync, statSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
@@ -79,6 +79,41 @@ export class TerminalService {
     return uuidv5(input, this.AGENT_SESSION_NAMESPACE)
   }
 
+  /**
+   * Compute the worktree path for an agent.
+   * Uses project name from config (not directory name) to ensure consistency
+   * when running from a worktree vs the main repo.
+   */
+  private getWorktreePath(projectPath: string, agentId: string): string {
+    // Base branch agents work in the main project directory
+    if (agentId.endsWith('-base')) {
+      return resolve(projectPath)
+    }
+
+    // Regular agents use worktrees
+    // IMPORTANT: Must use project name from config to match AgentService
+    const projectName = this.agentService?.getProjectName(projectPath) || projectPath.split('/').pop() || 'project'
+
+    // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
+    // Use resolve() to get canonical absolute path (resolves .. components)
+    let worktreePath: string
+    if (agentId.startsWith(`${projectName}-`)) {
+      worktreePath = resolve(join(projectPath, '..', agentId))
+    } else {
+      // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
+      worktreePath = resolve(join(projectPath, '..', `${projectName}-${agentId}`))
+    }
+
+    console.log('[TerminalService] getWorktreePath:', {
+      projectPath,
+      agentId,
+      projectName,
+      worktreePath
+    })
+
+    return worktreePath
+  }
+
   private async readAgentInfo(worktreePath: string): Promise<AgentInfo | null> {
     if (!this.agentService) return null
     return this.agentService.readAgentInfo(worktreePath)
@@ -125,7 +160,8 @@ export class TerminalService {
     prompt?: string,
     model?: string,
     yolo?: boolean,
-    chrome?: boolean
+    chrome?: boolean,
+    teleportSessionId?: string
   ): Promise<void> {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
@@ -134,27 +170,15 @@ export class TerminalService {
       this.stopAgent(agentId)
     }
 
-    // Determine worktree path
-    let worktreePath: string
-
-    // Base branch agents work in the main project directory
-    if (agentId.endsWith('-base')) {
-      worktreePath = projectPath
-    } else {
-      // Regular agents use worktrees
-      const projectName = projectPath.split('/').pop() || 'project'
-
-      // New naming convention: ../<AGENT_ID> (where AGENT_ID is repo-N)
-      if (agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(projectPath, '..', agentId)
-      } else {
-        // Legacy: ../<PROJECT_NAME>-<AGENT_ID>
-        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
-      }
-    }
+    // Determine worktree path (shared logic with startPlainTerminal)
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
 
     // Generate deterministic session ID
     const sessionId = this.generateSessionId(agentId, worktreePath)
+
+    // For teleported sessions, use the cloud session ID for JSONL lookups
+    // Claude CLI uses the teleport session ID for the JSONL file, not our generated UUID
+    const effectiveSessionId = teleportSessionId || sessionId
 
     // Read agent info to check for existing session
     const agentInfo = await this.readAgentInfo(worktreePath)
@@ -182,7 +206,37 @@ export class TerminalService {
       case 'claude':
         command = 'claude'
 
-        if (isResume) {
+        if (teleportSessionId) {
+          // Teleporting from cloud - use --teleport flag with cloud session ID
+          console.log(`[TerminalService] Teleporting cloud session ${teleportSessionId} for ${agentId}`)
+          args = ['--teleport', teleportSessionId]
+
+          // Add model if specified
+          if (model) args.push('--model', model)
+
+          // Add permission mode
+          if (mode === 'planning') {
+            args.push('--permission-mode', 'plan')
+
+            // Add system prompt file for super minions
+            const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
+            if (isSuperMinion && this.agentService) {
+              const rulesPath = this.agentService.getSuperMinionRulesPath()
+              args.push('--system-prompt-file', rulesPath)
+            }
+          } else if (mode === 'dev') {
+            args.push('--permission-mode', 'acceptEdits')
+          }
+
+          // Always skip permissions for teleport to bypass interactive prompts
+          // This handles: "Open Claude Code in X?" and "Trust this folder?" prompts
+          args.push('--dangerously-skip-permissions')
+
+          // Add chrome flag (default true)
+          if (chrome !== false) {
+            args.push('--chrome')
+          }
+        } else if (isResume) {
           // Resume existing session - preserve original flags
           args = ['--resume', sessionId]
 
@@ -244,13 +298,87 @@ export class TerminalService {
     spawnEnv.TERM = 'xterm-256color'
     spawnEnv.COLORTERM = 'truecolor'
 
-    const terminal = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 30,
+    // Validate working directory before spawn
+    const cwdExists = existsSync(worktreePath)
+    let cwdIsDirectory = false
+    let cwdStats: any = null
+    if (cwdExists) {
+      try {
+        cwdStats = statSync(worktreePath)
+        cwdIsDirectory = cwdStats.isDirectory()
+      } catch (statError) {
+        console.error('[TerminalService] Failed to stat worktree path:', statError)
+      }
+    }
+
+    // Validate shell
+    const shellExists = existsSync(shell)
+    let shellIsExecutable = false
+    if (shellExists) {
+      try {
+        const shellStats = statSync(shell)
+        shellIsExecutable = (shellStats.mode & 0o111) !== 0 // Check execute bit
+      } catch (statError) {
+        console.error('[TerminalService] Failed to stat shell:', statError)
+      }
+    }
+
+    // Debug logging for spawn issues
+    console.log('[TerminalService] Spawning PTY:', {
+      shell,
+      shellExists,
+      shellIsExecutable,
       cwd: worktreePath,
-      env: spawnEnv
+      cwdExists,
+      cwdIsDirectory,
+      agentId,
+      projectPath,
+      envVarCount: Object.keys(spawnEnv).length,
+      platform: process.platform
     })
+
+    // Pre-validation warnings (don't throw - let spawn handle actual errors)
+    if (!cwdExists || !cwdIsDirectory) {
+      console.warn('[TerminalService] WARNING: Working directory may not exist or is not a directory:', {
+        worktreePath,
+        cwdExists,
+        cwdIsDirectory
+      })
+    }
+
+    if (!shellExists || !shellIsExecutable) {
+      console.warn('[TerminalService] WARNING: Shell may not exist or is not executable:', {
+        shell,
+        shellExists,
+        shellIsExecutable
+      })
+    }
+
+    let terminal: pty.IPty
+    try {
+      terminal = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 30,
+        cwd: worktreePath,
+        env: spawnEnv
+      })
+    } catch (error: any) {
+      console.error('[TerminalService] PTY spawn failed:', {
+        errorMessage: error?.message,
+        errorCode: error?.code,
+        errorStack: error?.stack,
+        shell,
+        cwd: worktreePath,
+        cwdExists,
+        cwdIsDirectory,
+        shellExists,
+        shellIsExecutable,
+        platform: process.platform,
+        nodeVersion: process.version
+      })
+      throw error
+    }
 
     // State detection: JSONL for Claude, IdleDetector for other tools
     let idleDetector: IdleDetector | undefined
@@ -267,9 +395,9 @@ export class TerminalService {
 
       // Extract state check logic for reuse (immediate check + polling)
       const checkAndBroadcastState = () => {
-        if (!sessionId) return
+        if (!effectiveSessionId) return
 
-        const currentState = this.claudeSessionInfoService!.getSessionState(sessionId, worktreePath)
+        const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
 
         // Detect state transitions
         if (currentState !== lastKnownState) {
@@ -325,7 +453,7 @@ export class TerminalService {
       checkAndBroadcastState()
 
       // Then poll every 1 second (faster than 2s, still efficient with caching)
-      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${sessionId})`)
+      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${effectiveSessionId})`)
       statePollingInterval = setInterval(() => {
         checkAndBroadcastState()
       }, 1000) // 1 second interval - mtime caching makes this efficient
@@ -397,8 +525,8 @@ export class TerminalService {
 
     // Persist session ID and flags immediately
     if (tool === 'claude') {
-      await this.updateAgentInfo(worktreePath, {
-        claudeSessionId: sessionId,
+      const agentInfoUpdate: Partial<AgentInfo> = {
+        claudeSessionId: effectiveSessionId,
         claudeSessionActive: true,
         claudeLastSeen: new Date().toISOString(),
         yolo: yolo || false,
@@ -406,11 +534,18 @@ export class TerminalService {
         mode: mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle',
         model,
         prompt
-      })
+      }
+
+      // Store cloud session ID when teleporting (for future teleport-out)
+      if (teleportSessionId) {
+        agentInfoUpdate.cloudSessionId = teleportSessionId
+      }
+
+      await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
       // Set up JSONL watcher for super minions to emit updates on task invocation changes
       if ((agentInfo as any)?.isSuperMinion && this.claudeSessionInfoService) {
-        this.claudeSessionInfoService.watchSession(sessionId, worktreePath, () => {
+        this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
           this.mainWindow.webContents.send('agents:updated')
         })
       }
@@ -435,8 +570,8 @@ export class TerminalService {
       }
 
       // Clean up JSONL watcher for super minions
-      if (tool === 'claude' && sessionId) {
-        this.claudeSessionInfoService?.unwatchSession(sessionId)
+      if (tool === 'claude' && effectiveSessionId) {
+        this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
       }
 
       // Mark session as inactive on exit
@@ -541,8 +676,10 @@ Remember: Include a section on automated testing in your plan. Reference your ac
     // Send raw data to renderer for terminal display
     this.mainWindow.webContents.send('terminal:output', agentId, data)
 
-    // Check for resume failures and fall back to fresh start
+    // Check for cloud session ID in output (for teleport support)
+    // Pattern: https://claude.ai/code/session_xxx or --teleport session_xxx
     const stripped = stripAnsi(data)
+    this.detectAndStoreCloudSessionId(session, stripped)
     if ((session as any)._attemptingResume && (
       stripped.includes('Session not found') ||
       stripped.includes('Could not resume') ||
@@ -584,6 +721,49 @@ Remember: Include a section on automated testing in your plan. Reference your ac
 
     // Delegate idle detection to IdleDetector (if present)
     session.idleDetector?.processOutput(data)
+  }
+
+  /**
+   * Detect cloud session ID from Claude CLI output and store it in agent info.
+   * This enables the "Teleport to Cloud" feature by capturing the session ID
+   * when Claude outputs messages like:
+   *   - https://claude.ai/code/session_01CVbxtiJWp387FoCSvAiS2B
+   *   - --teleport session_01CVbxtiJWp387FoCSvAiS2B
+   */
+  private detectAndStoreCloudSessionId(session: TerminalSession, strippedOutput: string): void {
+    // Only check for cloud session IDs for Claude tool
+    if (session.tool !== 'claude') return
+
+    // Pattern to match cloud session ID from various contexts:
+    // - URL: https://claude.ai/code/session_xxx
+    // - CLI flag: --teleport session_xxx
+    // - Plain mention: session_xxx
+    const cloudSessionPattern = /session_[a-zA-Z0-9]+/g
+    const matches = strippedOutput.match(cloudSessionPattern)
+
+    if (!matches || matches.length === 0) return
+
+    // Use the first match found
+    const cloudSessionId = matches[0]
+
+    // Read current agent info to check if we need to update
+    this.readAgentInfo(session.worktreePath).then((agentInfo) => {
+      // Only update if the cloud session ID is different from what's stored
+      if (agentInfo?.cloudSessionId !== cloudSessionId) {
+        console.log(`[TerminalService] Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+
+        this.updateAgentInfo(session.worktreePath, {
+          cloudSessionId
+        }).then(() => {
+          // Broadcast update so UI can refresh (enables Teleport to Cloud button)
+          this.mainWindow.webContents.send('agents:updated')
+        }).catch((err) => {
+          console.error('Failed to store cloud session ID:', err)
+        })
+      }
+    }).catch((err) => {
+      console.error('Failed to read agent info for cloud session detection:', err)
+    })
   }
 
   stopAgent(agentId: string): void {
@@ -657,22 +837,8 @@ Remember: Include a section on automated testing in your plan. Reference your ac
       return
     }
 
-    // Determine worktree path
-    let worktreePath: string
-
-    // Base branch agents work in the main project directory
-    if (agentId.endsWith('-base')) {
-      worktreePath = projectPath
-    } else {
-      // Regular agents use worktrees
-      const projectName = projectPath.split('/').pop() || 'project'
-
-      if (agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(projectPath, '..', agentId)
-      } else {
-        worktreePath = join(projectPath, '..', `${projectName}-${agentId}`)
-      }
-    }
+    // Determine worktree path (shared logic with startAgent)
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
 
     // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'

@@ -31,6 +31,7 @@ export interface AgentInfo {
 
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
+  cloudSessionId?: string         // Cloud session ID (session_xxx format) for teleport-out
   claudeSessionActive?: boolean   // Is session known to be active and resumable?
   claudeLastSeen?: string        // Last time we saw output from Claude
   isWaitingForInput?: boolean    // Persisted waiting state for notification restoration

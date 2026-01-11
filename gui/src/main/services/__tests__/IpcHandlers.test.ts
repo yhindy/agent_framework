@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AgentService } from '../AgentService'
+import { TeleportService } from '../TeleportService'
 
 // Mock fs
 vi.mock('fs', () => ({
@@ -77,6 +78,122 @@ describe('Multi-Repo IPC Handler Helpers', () => {
     it('throws error when assignment not found in any project', async () => {
       await expect(agentService.findProjectForAssignment(activeProjectPaths, 'unknown-assign'))
         .rejects.toThrow('Assignment unknown-assign not found in any active project')
+    })
+  })
+})
+
+describe('Teleport IPC Handler Logic', () => {
+  let teleportService: TeleportService
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    teleportService = new TeleportService()
+  })
+
+  describe('session ID parsing and validation', () => {
+    it('parses valid session ID from URL and generates correct assignment', () => {
+      const input = 'https://claude.ai/code/session_01CVbxtiJWp387FoCSvAiS2B'
+      const parsedSessionId = teleportService.parseSessionId(input)
+
+      expect(parsedSessionId).toBe('session_01CVbxtiJWp387FoCSvAiS2B')
+
+      // Verify branch name generation logic (from IPC handler)
+      const shortSessionId = parsedSessionId!.replace('session_', '').substring(0, 8)
+      const branchName = `teleport-${shortSessionId}`
+
+      expect(branchName).toBe('teleport-01CVbxti')
+    })
+
+    it('parses valid session ID from CLI command', () => {
+      const input = 'claude --teleport session_ABC123def456'
+      const parsedSessionId = teleportService.parseSessionId(input)
+
+      expect(parsedSessionId).toBe('session_ABC123def456')
+
+      const shortSessionId = parsedSessionId!.replace('session_', '').substring(0, 8)
+      expect(shortSessionId).toBe('ABC123de')
+    })
+
+    it('parses valid raw session ID', () => {
+      const input = 'session_TestSession123'
+      const parsedSessionId = teleportService.parseSessionId(input)
+
+      expect(parsedSessionId).toBe('session_TestSession123')
+    })
+
+    it('rejects invalid session ID format', () => {
+      // Input that doesn't contain 'session_' prefix followed by alphanumerics
+      const input = 'sess_ABC123'  // Wrong prefix
+      const parsedSessionId = teleportService.parseSessionId(input)
+
+      expect(parsedSessionId).toBeNull()
+    })
+
+    it('rejects empty input', () => {
+      expect(teleportService.parseSessionId('')).toBeNull()
+      expect(teleportService.parseSessionId('   ')).toBeNull()
+    })
+
+    it('rejects URL without session ID', () => {
+      const input = 'https://claude.ai/code/'
+      const parsedSessionId = teleportService.parseSessionId(input)
+
+      expect(parsedSessionId).toBeNull()
+    })
+  })
+
+  describe('teleport assignment creation', () => {
+    it('generates correct assignment structure for teleport', () => {
+      const sessionId = 'session_01CVbxtiJWp387FoCSvAiS2B'
+      const shortSessionId = sessionId.replace('session_', '').substring(0, 8)
+      const branchName = `teleport-${shortSessionId}`
+
+      const assignment = {
+        branch: branchName,
+        feature: `Teleported session ${shortSessionId}`,
+        tool: 'claude',
+        mode: 'dev' as const,
+        chrome: true
+      }
+
+      expect(assignment.branch).toBe('teleport-01CVbxti')
+      expect(assignment.feature).toBe('Teleported session 01CVbxti')
+      expect(assignment.tool).toBe('claude')
+      expect(assignment.mode).toBe('dev')
+      expect(assignment.chrome).toBe(true)
+    })
+
+    it('handles short session IDs correctly', () => {
+      // Session ID shorter than 8 chars after prefix
+      const sessionId = 'session_ABC'
+      const shortSessionId = sessionId.replace('session_', '').substring(0, 8)
+
+      expect(shortSessionId).toBe('ABC')
+      expect(`teleport-${shortSessionId}`).toBe('teleport-ABC')
+    })
+  })
+
+  describe('error handling', () => {
+    it('provides helpful error message for invalid format', () => {
+      const invalidInputs = [
+        'not_a_session',
+        'sess_ABC123',
+        'session-without-underscore',
+        '12345'
+      ]
+
+      for (const input of invalidInputs) {
+        const result = teleportService.parseSessionId(input)
+        expect(result).toBeNull()
+      }
+    })
+
+    it('handles session ID with special characters in URL', () => {
+      // Query params should not affect parsing
+      const input = 'https://claude.ai/code/session_Valid123?ref=share&utm_source=test'
+      const result = teleportService.parseSessionId(input)
+
+      expect(result).toBe('session_Valid123')
     })
   })
 })

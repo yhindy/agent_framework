@@ -48,6 +48,7 @@ declare global {
       createAssignment: (assignment: any) => Promise<any>
       createAssignmentForProject: (projectPath: string, assignment: any) => Promise<any>
       createSuperAssignment: (projectPath: string, assignment: any) => Promise<any>
+      teleportFromCloud: (projectPath: string, sessionId: string) => Promise<{ agentId: string }>
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
       createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
       checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>

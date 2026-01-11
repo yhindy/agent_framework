@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { usePRPolling } from '../hooks/usePRPolling'
+import MissionDropdown from './MissionDropdown'
+import ProjectPicker from './ProjectPicker'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -29,8 +31,11 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [showMissionDropdown, setShowMissionDropdown] = useState(false)
-  const missionDropdownRef = useRef<HTMLDivElement>(null)
+  const [showTeleportForm, setShowTeleportForm] = useState(false)
+  const [teleportInput, setTeleportInput] = useState('')
+  const [teleportProjectPath, setTeleportProjectPath] = useState('')
+  const [isTeleporting, setIsTeleporting] = useState(false)
+  const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const { showLoading, hideLoading } = useLoadingSnackbar()
 
   const loadingMessages = [
@@ -64,6 +69,16 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     'Returning stolen shrink rays...',
     'Escaping before Gru finds out...',
     'Restocking the vending machine...'
+  ]
+
+  const teleportMessages = [
+    'Beaming session from the cloud...',
+    'Establishing quantum link...',
+    'Downloading minion consciousness...',
+    'Materializing in worktree...',
+    'Syncing bananas from cloud storage...',
+    'Calibrating teleporter coordinates...',
+    'Reassembling molecular structure...'
   ]
   const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
   const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
@@ -106,23 +121,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     enabled: prOpenAssignments.length > 0
   })
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (missionDropdownRef.current && !missionDropdownRef.current.contains(event.target as Node)) {
-        setShowMissionDropdown(false)
-      }
-    }
-
-    if (showMissionDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }
-    return undefined
-  }, [showMissionDropdown])
-
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     if (params.get('create') === 'true') {
@@ -132,6 +130,15 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
         setFormData(prev => ({ ...prev, projectPath, isSuper }))
       }
       setShowCreateForm(true)
+      // Clear params so it doesn't reopen on refresh
+      navigate('/workspace', { replace: true })
+    } else if (params.get('teleport') === 'true') {
+      const projectPath = params.get('projectPath')
+      if (projectPath) {
+        setTeleportProjectPath(projectPath)
+      }
+      setTeleportInput('')
+      setShowTeleportForm(true)
       // Clear params so it doesn't reopen on refresh
       navigate('/workspace', { replace: true })
     }
@@ -379,9 +386,108 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
       ? lastProject
       : (activeProjects.length === 1 ? activeProjects[0].path : '')
-    
+
     setFormData({ ...formData, projectPath: defaultProject, isSuper })
     setShowCreateForm(true)
+  }
+
+  const handleTeleportClick = () => {
+    // Auto-select last selected project, or first project if only one exists
+    const lastProject = localStorage.getItem('lastSelectedProjectPath')
+    const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
+      ? lastProject
+      : (activeProjects.length === 1 ? activeProjects[0].path : '')
+
+    setTeleportProjectPath(defaultProject)
+    setTeleportInput('')
+    setShowTeleportForm(true)
+  }
+
+  const handleAddProjectClick = () => {
+    setShowAddProjectModal(true)
+  }
+
+  const handleProjectSelect = async (_project: any) => {
+    // Project has been added to the store, notify parent to refresh
+    console.log('[Dashboard] Project selected, notifying parent to refresh')
+    setShowAddProjectModal(false)
+    // Trigger parent refresh callback
+    onRefresh()
+  }
+
+  /**
+   * Parse session ID from various input formats:
+   * - URL format: https://claude.ai/code/session_xxx -> session_xxx
+   * - Command format: claude --teleport session_xxx -> session_xxx
+   * - Raw session ID: session_xxx -> session_xxx
+   */
+  const parseSessionId = (input: string): string | null => {
+    const trimmed = input.trim()
+
+    // URL format: https://claude.ai/code/session_xxx
+    const urlMatch = trimmed.match(/claude\.ai\/code\/(session_[a-zA-Z0-9_-]+)/)
+    if (urlMatch) {
+      return urlMatch[1]
+    }
+
+    // Command format: claude --teleport session_xxx
+    const commandMatch = trimmed.match(/--teleport\s+(session_[a-zA-Z0-9_-]+)/)
+    if (commandMatch) {
+      return commandMatch[1]
+    }
+
+    // Raw session ID: session_xxx
+    const rawMatch = trimmed.match(/^(session_[a-zA-Z0-9_-]+)$/)
+    if (rawMatch) {
+      return rawMatch[1]
+    }
+
+    return null
+  }
+
+  const handleTeleportImport = async () => {
+    const sessionId = parseSessionId(teleportInput)
+    if (!sessionId) {
+      alert('Invalid input. Please enter a valid teleport URL, command, or session ID.\n\nExamples:\n- https://claude.ai/code/session_xxx\n- claude --teleport session_xxx\n- session_xxx')
+      return
+    }
+
+    // Project is optional - if not selected, backend will try to auto-detect
+    const projectPath = activeProjects.length === 1
+      ? activeProjects[0].path
+      : teleportProjectPath
+
+    const snackbarId = showLoading({
+      title: 'Teleporting Session...',
+      messages: teleportMessages
+    })
+
+    try {
+      setIsTeleporting(true)
+      // Pass projectPath (can be empty string, backend will handle fallback)
+      const result = await window.electronAPI.teleportFromCloud(projectPath || '', sessionId)
+
+      setShowTeleportForm(false)
+      setIsTeleporting(false)
+      hideLoading(snackbarId)
+
+      // Navigate to the new agent view
+      navigate(`/workspace/agent/${result.agentId}`)
+
+      // Reset form
+      setTeleportInput('')
+      setTeleportProjectPath('')
+
+      // Refresh assignments
+      setTimeout(() => {
+        loadAssignments()
+        onRefresh()
+      }, 1500)
+    } catch (error: any) {
+      setIsTeleporting(false)
+      hideLoading(snackbarId)
+      alert('Error teleporting session: ' + error.message)
+    }
   }
 
   return (
@@ -389,36 +495,13 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       <div className="dashboard-header">
         <h1>Minion Missions 🍌</h1>
         <div className="header-actions">
-          <div className="mission-dropdown-container" ref={missionDropdownRef}>
-            <button
-              className="new-mission-btn"
-              onClick={() => setShowMissionDropdown(!showMissionDropdown)}
-            >
-              + New Mission
-            </button>
-            {showMissionDropdown && (
-              <div className="mission-dropdown-menu">
-                <div
-                  className="mission-dropdown-item"
-                  onClick={() => {
-                    handleNewAssignment(false)
-                    setShowMissionDropdown(false)
-                  }}
-                >
-                  Regular Mission
-                </div>
-                <div
-                  className="mission-dropdown-item super-option"
-                  onClick={() => {
-                    handleNewAssignment(true)
-                    setShowMissionDropdown(false)
-                  }}
-                >
-                  <span className="super-icon">👑</span> Super Mission
-                </div>
-              </div>
-            )}
-          </div>
+          <MissionDropdown
+            variant="button"
+            showAddProject={true}
+            onAddProject={handleAddProjectClick}
+            onNewMission={handleNewAssignment}
+            onTeleport={handleTeleportClick}
+          />
         </div>
       </div>
 
@@ -814,6 +897,81 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
               <button type="button" className="primary" onClick={handleConfirmCreatePR}>
                 Create PR
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTeleportForm && (
+        <div className="modal-overlay" onClick={() => setShowTeleportForm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Teleport from Cloud</h2>
+            <p>
+              Import an existing Claude Code session from the cloud into this workspace.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleTeleportImport()
+              }}
+            >
+              {activeProjects.length > 1 && (
+                <div className="form-group">
+                  <label>Project (Optional)</label>
+                  <select
+                    value={teleportProjectPath}
+                    onChange={(e) => setTeleportProjectPath(e.target.value)}
+                  >
+                    <option value="">Auto-detect from session...</option>
+                    {activeProjects.map((proj) => (
+                      <option key={proj.path} value={proj.path}>
+                        {proj.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-hint">
+                    Project will be auto-detected from session, or select one manually.
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Session</label>
+                <input
+                  type="text"
+                  value={teleportInput}
+                  onChange={(e) => setTeleportInput(e.target.value)}
+                  placeholder="Paste teleport URL, command, or session ID"
+                  required
+                  style={{ width: '100%' }}
+                />
+                <div className="form-hint">
+                  e.g., https://claude.ai/code/session_xxx or claude --teleport session_xxx
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={() => setShowTeleportForm(false)} disabled={isTeleporting}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={isTeleporting}>
+                  {isTeleporting ? 'Importing...' : 'Import Session'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddProjectModal && (
+        <div className="modal-overlay" onClick={() => setShowAddProjectModal(false)}>
+          <div className="modal-content project-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Open Project</h2>
+              <button className="close-btn" onClick={() => setShowAddProjectModal(false)}>x</button>
+            </div>
+            <div className="modal-body">
+              <ProjectPicker onProjectSelect={handleProjectSelect} />
             </div>
           </div>
         </div>
