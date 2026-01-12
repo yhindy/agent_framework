@@ -184,7 +184,7 @@ When spawning each Task subagent, you MUST:
 
 ## Phase 5: Verification
 
-After implementation completes, run verification **in parallel** (spawn all three agents in ONE message):
+After implementation completes, run verification **in parallel** (spawn all four agents in ONE message):
 
 ```
 Task(subagent_type="code-simplifier", description="Simplify implementation", prompt="""
@@ -232,10 +232,38 @@ Final verdict:
 - **PASS** - All criteria satisfied with evidence
 - **FAIL** - One or more criteria not satisfied (list which ones)
 """)
+
+Task(subagent_type="general-purpose", description="Update documentation", prompt="""
+Review the implementation and update documentation as needed.
+
+ACCEPTANCE CRITERIA:
+1. [criterion 1]
+2. [criterion 2]
+...
+
+ENGINEERING DESIGN: `.engineering-design.md`
+
+Tasks:
+1. **Review changes** - Examine what was implemented
+2. **Update README** - If new features were added, update README.md
+3. **Update inline docs** - Ensure code comments match implementation
+4. **Add JSDoc/TSDoc** - Document new public APIs
+5. **Update CHANGELOG** - Add entry for significant changes (if CHANGELOG exists)
+
+Guidelines:
+- Only update docs that are affected by this feature
+- Keep documentation concise and accurate
+- Follow existing documentation style in the codebase
+- Do NOT create new documentation files unless necessary
+
+Output:
+- **UPDATED** - List of documentation files updated
+- **NO_CHANGES** - Documentation already up-to-date (explain why)
+""")
 ```
 
 **After verification:**
-- If all three pass → declare completion (see Completion section)
+- If all four pass → declare completion (see Completion section)
 - If issues found → use judgment:
   - **Test failures**: Spawn a debugger agent to investigate and fix
   - **Missing criteria**: Spawn additional implementation agents

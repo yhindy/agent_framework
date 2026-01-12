@@ -593,7 +593,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
             const items = groupedAssignments[columnKey]
 
             return (
-              <div key={columnKey} className={`column column-${columnKey}`}>
+              <div key={columnKey} className={`column column-${columnKey}`} data-status={columnKey}>
                 <div className="column-header">
                   <span className="column-title">{config.title}</span>
                   <span className="column-count">{items.length}</span>
@@ -603,6 +603,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                     <div
                       key={assignment.id}
                       className="assignment-card clickable"
+                      data-status={assignment.status}
                       onClick={() => {
                         navigate(`/workspace/agent/${assignment.agentId}`)
                       }}

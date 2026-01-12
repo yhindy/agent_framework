@@ -128,8 +128,17 @@ describe('Super Minion Rules', () => {
       expect(rulesContent).toContain('Verify acceptance criteria')
     })
 
-    it('should spawn all three verification agents in parallel', () => {
-      expect(rulesContent).toContain('spawn all three agents in ONE message')
+    it('should include documentation writer agent', () => {
+      expect(rulesContent).toContain('Update documentation')
+    })
+
+    it('should define UPDATED/NO_CHANGES outputs for documentation', () => {
+      expect(rulesContent).toContain('**UPDATED**')
+      expect(rulesContent).toContain('**NO_CHANGES**')
+    })
+
+    it('should spawn all four verification agents in parallel', () => {
+      expect(rulesContent).toContain('spawn all four agents in ONE message')
     })
 
     it('should define PASS/FAIL outputs', () => {
