@@ -136,6 +136,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -174,6 +175,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -210,6 +212,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -242,6 +245,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: '' } // Empty result means no PR
       })
@@ -259,6 +263,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: 'null' } // gh returns "null" when no match
       })
@@ -276,6 +281,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: '' } // Branch not on remote
       })
 
@@ -300,6 +306,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { error: new Error('GitHub CLI authentication failed') }
       })
@@ -325,6 +332,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { error: new Error('Connection refused') }
       })
 
@@ -423,6 +431,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -462,6 +471,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: '' } // No PR found
       })
@@ -505,6 +515,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -538,6 +549,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { error: new Error('API rate limit exceeded') }
       })
@@ -578,6 +590,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: '' } // Branch not on remote
       })
 
@@ -627,6 +640,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${expectedWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -661,6 +675,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${expectedWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -686,6 +701,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -742,6 +758,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -774,6 +791,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'upstream\norigin\nfork\n' }, // Multiple remotes
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })
@@ -802,6 +820,7 @@ describe('AgentService - detectExistingPullRequest', () => {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         },
         'git remote': { stdout: 'upstream\nfork\n' }, // No origin
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
         'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
         'gh pr list': { stdout: JSON.stringify(prData) }
       })

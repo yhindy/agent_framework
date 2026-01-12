@@ -1166,11 +1166,25 @@ export class AgentService {
         return null
       }
 
-      // 6. Check if branch exists on remote
+      // 6. Get the actual current branch from git (more reliable than stored value)
+      let currentBranch: string
       try {
-        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${assignment.branch}`, { cwd: worktreePath })
+        const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
+        currentBranch = branchOutput.trim()
+        if (!currentBranch) {
+          console.log('[AgentService] detectExistingPullRequest: Could not determine current branch')
+          return null
+        }
+      } catch (error: any) {
+        console.warn('[AgentService] detectExistingPullRequest: Error getting current branch:', error.message)
+        return null
+      }
+
+      // 7. Check if branch exists on remote
+      try {
+        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
         if (!remoteRefs.trim()) {
-          console.log('[AgentService] detectExistingPullRequest: Branch not on remote')
+          console.log('[AgentService] detectExistingPullRequest: Branch not on remote:', currentBranch)
           // Branch not on remote, cache negative result
           this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
           return { found: false }
@@ -1180,15 +1194,15 @@ export class AgentService {
         return null
       }
 
-      // 7. Run gh pr list to find existing PR
+      // 8. Run gh pr list to find existing PR
       let prData: { url: string; state: string; createdAt: string } | null = null
       try {
         const { stdout } = await execAsync(
-          `gh pr list --head "${assignment.branch}" --json number,url,state,createdAt --jq ".[0]"`,
+          `gh pr list --head "${currentBranch}" --json number,url,state,createdAt --jq ".[0]"`,
           { cwd: projectPath }
         )
 
-        // 8. Parse result
+        // 9. Parse result
         if (stdout.trim() && stdout.trim() !== 'null') {
           prData = JSON.parse(stdout.trim())
         }
