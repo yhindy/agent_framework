@@ -18,6 +18,8 @@ declare const api: {
     teardownAgent: (agentId: string, force: boolean) => Promise<any>;
     unassignAgent: (agentId: string) => Promise<any>;
     saveUIState: (agentId: string, uiState: any) => Promise<any>;
+    retryResumeAgent: (agentId: string) => Promise<any>;
+    startFreshSession: (agentId: string) => Promise<any>;
     sendTerminalInput: (agentId: string, data: string) => void;
     resizeTerminal: (agentId: string, cols: number, rows: number) => void;
     onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => Electron.IpcRenderer;
@@ -61,6 +63,18 @@ declare const api: {
     onTestEnvStarted: (callback: (agentId: string, commandId: string) => void) => () => Electron.IpcRenderer;
     onTestEnvStopped: (callback: (agentId: string, commandId: string) => void) => () => Electron.IpcRenderer;
     onTestEnvExited: (callback: (agentId: string, commandId: string, exitCode: number) => void) => () => Electron.IpcRenderer;
+    validateTeleport: (agentId: string) => Promise<any>;
+    onTeleportValidationFailed: (callback: (data: {
+        agentId: string;
+        reason: string;
+        canRetry: boolean;
+    }) => void) => () => Electron.IpcRenderer;
+    onTeleportResumeFailed: (callback: (data: {
+        agentId: string;
+        reason: string;
+    }) => void) => () => Electron.IpcRenderer;
+    retryResumeAgent: (agentId: string) => Promise<any>;
+    startFreshSession: (agentId: string) => Promise<any>;
 };
 export type ElectronAPI = typeof api;
 export {};

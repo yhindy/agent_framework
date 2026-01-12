@@ -28,10 +28,13 @@ export interface AgentInfo {
   hasUnread?: boolean
   parentAgentId?: string  // Set if this is a child of a super minion
   isBaseBranchAgent?: boolean  // Set for the base branch agent
+  displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
 
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
   cloudSessionId?: string         // Cloud session ID (session_xxx format) for teleport-out
+  isTeleportedSession?: boolean   // Explicitly mark if this was a teleported session
+  lastValidatedAt?: string        // ISO timestamp of last successful validation
   claudeSessionActive?: boolean   // Is session known to be active and resumable?
   claudeLastSeen?: string        // Last time we saw output from Claude
   isWaitingForInput?: boolean    // Persisted waiting state for notification restoration
@@ -55,6 +58,11 @@ export interface AgentInfo {
 
   // UI state persistence for terminal/tab restoration
   uiState?: UIState
+
+  // Session resume error tracking
+  failureReason?: string          // Why session resume failed (if applicable)
+  resumeAttempts?: number         // Number of times we've tried to resume
+  lastResumeAttempt?: string      // ISO timestamp of last resume attempt
 }
 
 export interface ChildPlan {

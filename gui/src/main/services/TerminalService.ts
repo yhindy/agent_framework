@@ -390,14 +390,35 @@ export class TerminalService {
 
       // Format display name as "project: branch_suffix" for cleaner notifications
       const projectName = projectPath.split('/').pop() || 'project'
-      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
-      const displayName = `${projectName}: ${branchSuffix}`
+      let displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
-      // Extract state check logic for reuse (immediate check + polling)
-      const checkAndBroadcastState = () => {
+      // Late branch detection for teleported sessions
+      let branchDetectionComplete = !this.needsLateBranchDetection(agentInfo?.displayBranchName)
+
+      // Try to detect branch from JSONL and update display name
+      const tryDetectBranch = (): void => {
+        if (branchDetectionComplete) return
+
+        const detectedBranch = this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
+        if (!detectedBranch) return
+
+        console.log(`[TerminalService] Late branch detection for ${agentId}: ${detectedBranch}`)
+        branchDetectionComplete = true
+
+        displayName = `${projectName}: ${this.getBranchSuffix(detectedBranch)}`
+
+        this.updateAgentInfo(worktreePath, { displayBranchName: detectedBranch })
+          .then(() => this.mainWindow.webContents.send('agents:updated'))
+          .catch(err => console.error('Failed to update branch name:', err))
+      }
+
+      // Check session state and broadcast changes
+      const checkAndBroadcastState = (): void => {
         if (!effectiveSessionId) return
 
         const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
+
+        tryDetectBranch()
 
         // Detect state transitions
         if (currentState !== lastKnownState) {
@@ -951,5 +972,160 @@ You can spawn as many child agents as needed to complete the task quickly. Maxim
     if (session) {
       session.pty.resize(cols, rows)
     }
+  }
+
+  private readonly MAX_RESUME_ATTEMPTS = 3
+
+  /**
+   * Check if late branch detection is needed for a teleported session.
+   * Returns true if displayBranchName is missing or has the fallback teleport-xxx format.
+   */
+  private needsLateBranchDetection(displayBranchName: string | undefined): boolean {
+    return !displayBranchName || displayBranchName.startsWith('teleport-')
+  }
+
+  /**
+   * Extract the branch suffix (last path component) from a branch name.
+   */
+  private getBranchSuffix(branch: string): string {
+    return branch.split('/').pop() || branch
+  }
+
+  /**
+   * Format display name as "project: branch_suffix" for notifications.
+   */
+  private formatDisplayName(projectPath: string, agentInfo: AgentInfo | null, agentId: string): string {
+    const projectName = projectPath.split('/').pop() || 'project'
+    const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+    return `${projectName}: ${branchSuffix}`
+  }
+
+  /**
+   * Get agent info or throw if not found.
+   */
+  private async getAgentInfoOrThrow(worktreePath: string): Promise<AgentInfo> {
+    const agentInfo = await this.readAgentInfo(worktreePath)
+    if (!agentInfo) {
+      throw new Error('Agent info not found')
+    }
+    return agentInfo
+  }
+
+  /**
+   * Start an agent with standard parameters from agent info.
+   */
+  private async startAgentFromInfo(projectPath: string, agentId: string, agentInfo: AgentInfo): Promise<void> {
+    await this.startAgent(
+      projectPath,
+      agentId,
+      agentInfo.tool || 'claude',
+      agentInfo.mode || 'dev',
+      agentInfo.prompt,
+      agentInfo.model,
+      agentInfo.yolo || false,
+      agentInfo.chrome !== false
+    )
+  }
+
+  /**
+   * Retry resuming a failed teleport session with exponential backoff.
+   * Attempts up to 3 times with delays: 1s, 2s, 4s.
+   * Marks session as failed after max attempts.
+   */
+  async retryResumeSession(projectPath: string, agentId: string): Promise<void> {
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
+    const agentInfo = await this.getAgentInfoOrThrow(worktreePath)
+
+    const resumeAttempts = agentInfo.resumeAttempts || 0
+    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
+
+    // Check if max attempts reached
+    if (resumeAttempts >= this.MAX_RESUME_ATTEMPTS) {
+      const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
+      console.error(`[TerminalService] ${failureMessage}`)
+
+      if (this.agentService) {
+        await this.agentService.markAgentAsFailed(worktreePath, failureMessage)
+      }
+
+      this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)
+      this.mainWindow.webContents.send('agent:retryFailed', agentId, {
+        reason: failureMessage,
+        attempts: resumeAttempts
+      })
+
+      throw new Error(failureMessage)
+    }
+
+    // Calculate exponential backoff delay: 2^attempt * 1000ms
+    const currentAttempt = resumeAttempts + 1
+    const delayMs = Math.pow(2, resumeAttempts) * 1000
+
+    console.log(`[TerminalService] Retrying resume for ${agentId}, attempt ${currentAttempt}/${this.MAX_RESUME_ATTEMPTS}, delay: ${delayMs}ms`)
+
+    // Update agent info with new attempt count
+    await this.updateAgentInfo(worktreePath, {
+      resumeAttempts: currentAttempt,
+      lastResumeAttempt: new Date().toISOString()
+    })
+
+    // Notify UI and desktop
+    this.mainWindow.webContents.send('agent:retryingResume', agentId, {
+      attempt: currentAttempt,
+      maxAttempts: this.MAX_RESUME_ATTEMPTS,
+      delayMs
+    })
+    this.notificationService?.notifySessionResumeRetrying(displayName, currentAttempt, this.MAX_RESUME_ATTEMPTS)
+
+    // Wait for backoff delay
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+
+    try {
+      await this.startAgentFromInfo(projectPath, agentId, agentInfo)
+
+      // Success - clear failure state
+      await this.updateAgentInfo(worktreePath, {
+        failureReason: undefined,
+        resumeAttempts: 0,
+        claudeSessionActive: true
+      })
+
+      this.notificationService?.notifySessionResumeSuccess(agentId, displayName)
+      this.mainWindow.webContents.send('agent:retrySuccess', agentId)
+      this.mainWindow.webContents.send('agents:updated')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`[TerminalService] Retry ${currentAttempt} failed for ${agentId}:`, errorMessage)
+
+      await this.updateAgentInfo(worktreePath, { failureReason: errorMessage })
+      throw error
+    }
+  }
+
+  /**
+   * Start a fresh session in the same worktree, abandoning the old failed session.
+   * Creates a new session ID and clears all failure state.
+   */
+  async startFreshSession(projectPath: string, agentId: string): Promise<void> {
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
+    const agentInfo = await this.getAgentInfoOrThrow(worktreePath)
+
+    console.log(`[TerminalService] Starting fresh session for ${agentId}`)
+
+    // Clear all session-related state
+    await this.updateAgentInfo(worktreePath, {
+      claudeSessionId: undefined,
+      cloudSessionId: undefined,
+      claudeSessionActive: false,
+      failureReason: undefined,
+      resumeAttempts: 0,
+      lastResumeAttempt: undefined,
+      isTeleportedSession: false
+    })
+
+    await this.startAgentFromInfo(projectPath, agentId, agentInfo)
+
+    this.mainWindow.webContents.send('agent:freshSessionStarted', agentId)
+    this.mainWindow.webContents.send('agents:updated')
   }
 }

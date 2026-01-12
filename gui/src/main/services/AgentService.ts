@@ -1,8 +1,9 @@
 import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, statSync } from 'fs'
 import { app } from 'electron'
+import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 
@@ -22,9 +23,12 @@ interface AgentSession {
   parentAgentId?: string
   isBaseBranchAgent?: boolean
   branch?: string
+  displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
 
   // Session persistence fields
   claudeSessionId?: string
+  cloudSessionId?: string
+  isTeleportedSession?: boolean
   claudeSessionActive?: boolean
   isWaitingForInput?: boolean
   prompt?: string
@@ -46,6 +50,102 @@ export class AgentService {
 
   setClaudeSessionInfoService(service: ClaudeSessionInfoService): void {
     this.claudeSessionInfoService = service
+  }
+
+  /**
+   * Validate a teleported session to ensure it can be resumed.
+   * Checks if JSONL file exists, is not corrupted, and is resumable.
+   */
+  async validateTeleportSession(agentInfo: AgentInfo): Promise<{
+    isValid: boolean
+    reason?: string
+    canResume: boolean
+  }> {
+    // Check if this is a teleported session
+    if (!agentInfo.cloudSessionId && !agentInfo.isTeleportedSession) {
+      return {
+        isValid: false,
+        reason: 'Not a teleported session (missing cloudSessionId)',
+        canResume: false
+      }
+    }
+
+    // If cloudSessionId is missing but marked as teleported, it's invalid
+    if (!agentInfo.cloudSessionId) {
+      return {
+        isValid: false,
+        reason: 'Teleported session missing cloudSessionId',
+        canResume: false
+      }
+    }
+
+    // Check if JSONL file exists
+    const jsonlPath = join(homedir(), '.claude', 'projects', agentInfo.cloudSessionId, 'session.jsonl')
+
+    if (!existsSync(jsonlPath)) {
+      return {
+        isValid: false,
+        reason: 'JSONL file not found at expected path',
+        canResume: false
+      }
+    }
+
+    // Check if file is stale (older than 7 days)
+    try {
+      const stats = statSync(jsonlPath)
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
+      if (stats.mtimeMs < sevenDaysAgo) {
+        return {
+          isValid: false,
+          reason: 'JSONL file is stale (older than 7 days)',
+          canResume: false
+        }
+      }
+    } catch (error) {
+      return {
+        isValid: false,
+        reason: 'Failed to read JSONL file stats',
+        canResume: false
+      }
+    }
+
+    // Check if JSONL file is valid (can parse first line)
+    try {
+      const content = readFileSync(jsonlPath, 'utf-8')
+
+      if (!content.trim()) {
+        return {
+          isValid: false,
+          reason: 'JSONL file is empty',
+          canResume: false
+        }
+      }
+
+      // Try to parse first line
+      const firstLine = content.split('\n')[0]
+      JSON.parse(firstLine)
+    } catch (error) {
+      return {
+        isValid: false,
+        reason: 'JSONL file is corrupted (invalid JSON)',
+        canResume: false
+      }
+    }
+
+    // Check if session state is resumable
+    if (agentInfo.status === 'completed' || agentInfo.status === 'closed') {
+      return {
+        isValid: true,
+        reason: 'Session is completed or closed',
+        canResume: false
+      }
+    }
+
+    // All checks passed
+    return {
+      isValid: true,
+      canResume: true
+    }
   }
 
   async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {
@@ -90,12 +190,15 @@ export class AgentService {
       parentAgentId: agentInfo.parentAgentId,
       isBaseBranchAgent: isBase,
       claudeSessionId: agentInfo.claudeSessionId,
+      cloudSessionId: agentInfo.cloudSessionId,
+      isTeleportedSession: agentInfo.isTeleportedSession,
       claudeSessionActive: agentInfo.claudeSessionActive,
       isWaitingForInput: agentInfo.isWaitingForInput,
       prompt: agentInfo.prompt,
       model: agentInfo.model,
       uiState: agentInfo.uiState,
       branch: agentInfo.branch,
+      displayBranchName: agentInfo.displayBranchName,
       yolo: agentInfo.yolo,
       chrome: agentInfo.chrome
     }
@@ -114,12 +217,15 @@ export class AgentService {
       isSuperMinion: (agentInfo as any).isSuperMinion,
       parentAgentId: agentInfo.parentAgentId,
       claudeSessionId: agentInfo.claudeSessionId,
+      cloudSessionId: agentInfo.cloudSessionId,
+      isTeleportedSession: agentInfo.isTeleportedSession,
       claudeSessionActive: agentInfo.claudeSessionActive,
       isWaitingForInput: agentInfo.isWaitingForInput,
       prompt: agentInfo.prompt,
       model: agentInfo.model,
       uiState: agentInfo.uiState,
       branch: agentInfo.branch,
+      displayBranchName: agentInfo.displayBranchName,
       yolo: agentInfo.yolo,
       chrome: agentInfo.chrome
     })
@@ -304,6 +410,33 @@ export class AgentService {
 
     const updated = { ...current, ...updates, lastActivity: new Date().toISOString() }
     this.writeAgentInfo(worktreePath, updated)
+  }
+
+  /**
+   * Mark an agent session as failed with a specific reason.
+   * Sets failureReason and marks session as inactive.
+   */
+  async markAgentAsFailed(worktreePath: string, reason: string): Promise<void> {
+    this.updateAgentInfo(worktreePath, {
+      failureReason: reason,
+      claudeSessionActive: false
+    })
+  }
+
+  /**
+   * Update the display branch name for an agent (used for teleported sessions)
+   */
+  async updateAgentBranchName(projectPath: string, agentId: string, branchName: string): Promise<void> {
+    const agents = await this.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
+
+    if (!agent) {
+      throw new Error('Agent not found')
+    }
+
+    this.updateAgentInfo(agent.worktreePath, {
+      displayBranchName: branchName
+    })
   }
 
   async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
@@ -1326,5 +1459,5 @@ export class AgentService {
       shouldStartClaude: isNewAgent && agentInfo.prompt !== undefined
     }
   }
-}
 
+}

@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, watch, FSWatcher, statSync } from 'fs'
+import { readFileSync, existsSync, watch, FSWatcher, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
@@ -37,6 +37,9 @@ type ClaudeStopReason = typeof CLAUDE_STOP_REASONS[keyof typeof CLAUDE_STOP_REAS
  * not waiting for tool execution to complete.
  */
 const HUMAN_INPUT_TOOLS = ['ExitPlanMode', 'AskUserQuestion'] as const
+
+/** Git refs prefix that needs to be stripped from branch names */
+const REFS_HEADS_PREFIX = 'refs/heads/'
 
 export interface TokenUsage {
   inputTokens: number
@@ -148,22 +151,59 @@ export class ClaudeSessionInfoService {
     return null
   }
 
+  // Track which sessions we've already logged "not found" for to avoid spam
+  private loggedNotFound: Set<string> = new Set()
+
   /**
    * Find the session JSONL file for a given session ID.
+   * Only logs "not found" once per session to avoid log spam during polling.
+   *
+   * For teleported sessions: Falls back to finding any JSONL file in the directory
+   * since Claude CLI creates UUID filenames instead of using the session ID.
    */
   findSessionFile(sessionId: string, worktreePath: string): string | null {
     const projectPath = this.getClaudeProjectPath(worktreePath)
     if (!projectPath) {
-      console.warn(`[ClaudeSessionInfoService] Could not find Claude project directory for worktree: ${worktreePath}`)
+      // Only log once per session
+      if (!this.loggedNotFound.has(sessionId)) {
+        console.warn(`[ClaudeSessionInfoService] Claude project directory not found for: ${worktreePath}`)
+        this.loggedNotFound.add(sessionId)
+      }
       return null
     }
 
-    const sessionFile = join(projectPath, `${sessionId}.jsonl`)
-    if (existsSync(sessionFile)) {
-      return sessionFile
+    // Try exact filename first (works for non-teleport sessions)
+    const exactFile = join(projectPath, `${sessionId}.jsonl`)
+    if (existsSync(exactFile)) {
+      this.loggedNotFound.delete(sessionId)
+      return exactFile
     }
 
-    console.warn(`[ClaudeSessionInfoService] Session file not found: ${sessionFile}`)
+    // Fallback: scan directory for any JSONL file (for teleported sessions)
+    // Teleported sessions create UUID filenames, not session_xxx.jsonl
+    try {
+      const files = readdirSync(projectPath)
+      const jsonlFiles = files
+        .filter(f => f.endsWith('.jsonl') && statSync(join(projectPath, f)).size > 0)
+        .map(f => ({
+          path: join(projectPath, f),
+          mtime: statSync(join(projectPath, f)).mtimeMs
+        }))
+        .sort((a, b) => b.mtime - a.mtime) // Most recent first
+
+      if (jsonlFiles.length > 0) {
+        this.loggedNotFound.delete(sessionId)
+        return jsonlFiles[0].path
+      }
+    } catch {
+      // Directory read failed
+    }
+
+    // Only log once per session to avoid spam during polling
+    if (!this.loggedNotFound.has(sessionId)) {
+      console.warn(`[ClaudeSessionInfoService] Session file not found: ${exactFile}`)
+      this.loggedNotFound.add(sessionId)
+    }
     return null
   }
 
@@ -680,6 +720,54 @@ export class ClaudeSessionInfoService {
     for (const [sessionId] of this.watchers) {
       this.unwatchSession(sessionId)
     }
+  }
+
+  /**
+   * Strip refs/heads/ prefix from git branch name if present.
+   */
+  private stripRefsHeadsPrefix(gitBranch: string): string {
+    if (gitBranch.startsWith(REFS_HEADS_PREFIX)) {
+      return gitBranch.substring(REFS_HEADS_PREFIX.length)
+    }
+    return gitBranch
+  }
+
+  /**
+   * Extract gitBranch from a session's JSONL file.
+   * Used for late detection of branch names (e.g., after teleport syncs).
+   * Returns null if file doesn't exist, is empty, or has no gitBranch.
+   */
+  extractGitBranch(sessionId: string, worktreePath: string): string | null {
+    const sessionFile = this.findSessionFile(sessionId, worktreePath)
+    if (!sessionFile) {
+      return null
+    }
+
+    try {
+      const stat = statSync(sessionFile)
+      if (stat.size === 0) {
+        return null
+      }
+
+      const content = readFileSync(sessionFile, 'utf-8')
+
+      for (const line of content.trim().split('\n')) {
+        if (!line.trim()) continue
+
+        try {
+          const entry = JSON.parse(line)
+          if (entry.gitBranch && typeof entry.gitBranch === 'string') {
+            return this.stripRefsHeadsPrefix(entry.gitBranch)
+          }
+        } catch {
+          // Skip malformed JSON lines
+        }
+      }
+    } catch {
+      return null
+    }
+
+    return null
   }
 
   /**

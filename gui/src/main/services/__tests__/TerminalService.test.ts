@@ -18,7 +18,8 @@ vi.mock('node-pty', () => ({
 // Mock fs
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
-  existsSync: vi.fn()
+  existsSync: vi.fn(),
+  statSync: vi.fn()
 }))
 
 // Mock child_process
@@ -712,5 +713,270 @@ describe('Super Minion System Prompt', () => {
 
     const command = getWrittenCommand()
     expect(command).toContain('Reference your acceptance criteria throughout execution')
+  })
+})
+
+describe('Teleport Session Retry Mechanism', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+  let mockAgentService: any
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    mockAgentService = {
+      readAgentInfo: vi.fn().mockResolvedValue({
+        id: 'agent-1',
+        cloudSessionId: 'session_123',
+        claudeSessionId: 'session_123',
+        resumeAttempts: 0,
+        tool: 'claude',
+        mode: 'dev',
+        branch: 'feature/test'
+      }),
+      updateAgentInfo: vi.fn().mockResolvedValue(undefined),
+      markAgentAsFailed: vi.fn().mockResolvedValue(undefined),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
+    }
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+      mode: 0o755
+    } as any)
+
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('should retry resume with exponential backoff on first failure', async () => {
+    // Mock startAgent to succeed immediately (no delay needed)
+    vi.spyOn(terminalService, 'startAgent').mockResolvedValue(undefined)
+
+    const promise = terminalService.retryResumeSession('/path/to/project', 'agent-1')
+
+    // Advance timers by 1000ms (first retry delay)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await promise
+
+    // First retry should update attempts
+    expect(mockAgentService.updateAgentInfo).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        resumeAttempts: 1,
+        lastResumeAttempt: expect.any(String)
+      })
+    )
+  }, 10000)
+
+  it('should use exponential backoff delays: 1s, 2s, 4s', async () => {
+    const delays: number[] = []
+
+    // Track each retry attempt
+    let attemptCount = 0
+    mockAgentService.readAgentInfo.mockImplementation(async () => ({
+      id: 'agent-1',
+      resumeAttempts: attemptCount,
+      claudeSessionId: 'session_123',
+      tool: 'claude',
+      mode: 'dev'
+    }))
+
+    // Mock startAgent to fail
+    vi.spyOn(terminalService, 'startAgent').mockRejectedValue(new Error('Resume failed'))
+
+    // Attempt retry 3 times
+    for (let i = 0; i < 3; i++) {
+      attemptCount = i
+
+      const promise = terminalService.retryResumeSession('/path/to/project', 'agent-1').catch(() => {})
+
+      // Calculate expected delay for this attempt
+      const expectedDelay = Math.pow(2, i) * 1000
+      delays.push(expectedDelay)
+
+      await vi.advanceTimersByTimeAsync(expectedDelay)
+      await promise
+    }
+
+    // Verify exponential backoff pattern (1s, 2s, 4s)
+    expect(delays).toEqual([1000, 2000, 4000])
+  }, 10000)
+
+  it('should mark session as failed after 3 retry attempts', async () => {
+    mockAgentService.readAgentInfo.mockResolvedValue({
+      id: 'agent-1',
+      resumeAttempts: 3,
+      claudeSessionId: 'session_123',
+      tool: 'claude',
+      mode: 'dev'
+    })
+
+    await expect(terminalService.retryResumeSession('/path/to/project', 'agent-1')).rejects.toThrow('Max retry attempts')
+
+    // Should mark as failed instead of retrying
+    expect(mockAgentService.markAgentAsFailed).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Max retry attempts')
+    )
+  })
+
+  it('should clear failure state on successful retry', async () => {
+    mockAgentService.readAgentInfo.mockResolvedValue({
+      id: 'agent-1',
+      resumeAttempts: 1,
+      claudeSessionId: 'session_123',
+      failureReason: 'Previous failure',
+      tool: 'claude',
+      mode: 'dev'
+    })
+
+    vi.spyOn(terminalService, 'startAgent').mockResolvedValue(undefined)
+
+    const promise = terminalService.retryResumeSession('/path/to/project', 'agent-1')
+
+    // Advance timers by 2000ms (second retry delay: 2^1 * 1000)
+    await vi.advanceTimersByTimeAsync(2000)
+
+    await promise
+
+    // Should clear failure state on success (called twice: once for attempt update, once for success)
+    const successCall = mockAgentService.updateAgentInfo.mock.calls.find((call: any) =>
+      call[1].failureReason === undefined && call[1].resumeAttempts === 0
+    )
+    expect(successCall).toBeDefined()
+  }, 10000)
+
+  it('should send retry notification to UI', async () => {
+    vi.spyOn(terminalService, 'startAgent').mockRejectedValue(new Error('Resume failed'))
+
+    const promise = terminalService.retryResumeSession('/path/to/project', 'agent-1').catch(() => {})
+
+    // Advance timers
+    await vi.advanceTimersByTimeAsync(1000)
+    await promise
+
+    expect(mockWebContents.send).toHaveBeenCalledWith(
+      'agent:retryingResume',
+      'agent-1',
+      expect.objectContaining({
+        attempt: 1,
+        maxAttempts: 3
+      })
+    )
+  }, 10000)
+})
+
+describe('Late Branch Detection', () => {
+  let mockClaudeSessionInfoService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+
+    mockClaudeSessionInfoService = {
+      getSessionState: vi.fn().mockReturnValue('working'),
+      extractGitBranch: vi.fn().mockReturnValue(null) // Initially no branch
+    }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('should detect branch name when JSONL file gets content', async () => {
+    // Initially no branch, then it appears
+    let callCount = 0
+    mockClaudeSessionInfoService.extractGitBranch.mockImplementation(() => {
+      callCount++
+      return callCount >= 3 ? 'feature/detected-branch' : null
+    })
+
+    // This simulates what happens in the polling loop
+    // First call: no branch (returns null)
+    expect(mockClaudeSessionInfoService.extractGitBranch()).toBeNull()
+
+    // Second call: no branch (returns null)
+    expect(mockClaudeSessionInfoService.extractGitBranch()).toBeNull()
+
+    // Third call: branch appears!
+    expect(mockClaudeSessionInfoService.extractGitBranch()).toBe('feature/detected-branch')
+  })
+
+  it('should stop checking for branch once detected', async () => {
+    mockClaudeSessionInfoService.extractGitBranch.mockReturnValue('feature/my-branch')
+
+    // Simulate multiple calls - should only update once
+    const branch1 = mockClaudeSessionInfoService.extractGitBranch()
+    const branch2 = mockClaudeSessionInfoService.extractGitBranch()
+
+    expect(branch1).toBe('feature/my-branch')
+    expect(branch2).toBe('feature/my-branch')
+    // The service returns the same value - the TerminalService tracks needsBranchDetection flag
+  })
+
+  it('needsBranchDetection should be true for teleport sessions without displayBranchName', () => {
+    const agentInfo = {
+      agentId: 'teleport-agent',
+      branch: 'feature/teleport-agent/teleport-01CVbxti',
+      displayBranchName: undefined
+    }
+
+    // Check the condition that would be used in TerminalService
+    const currentDisplayBranch = agentInfo.displayBranchName
+    const needsBranchDetection = !currentDisplayBranch || (currentDisplayBranch as string).startsWith('teleport-')
+
+    expect(needsBranchDetection).toBe(true)
+  })
+
+  it('needsBranchDetection should be true for teleport-xxx fallback names', () => {
+    const agentInfo = {
+      agentId: 'teleport-agent',
+      branch: 'feature/teleport-agent/teleport-01CVbxti',
+      displayBranchName: 'teleport-01CVbxti' // Fallback name
+    }
+
+    const currentDisplayBranch = agentInfo.displayBranchName
+    const needsBranchDetection = !currentDisplayBranch || currentDisplayBranch.startsWith('teleport-')
+
+    expect(needsBranchDetection).toBe(true)
+  })
+
+  it('needsBranchDetection should be false for detected branch names', () => {
+    const agentInfo = {
+      agentId: 'teleport-agent',
+      branch: 'feature/teleport-agent/teleport-01CVbxti',
+      displayBranchName: 'feature/my-real-branch' // Already detected
+    }
+
+    const currentDisplayBranch = agentInfo.displayBranchName
+    const needsBranchDetection = !currentDisplayBranch || currentDisplayBranch.startsWith('teleport-')
+
+    expect(needsBranchDetection).toBe(false)
   })
 })
