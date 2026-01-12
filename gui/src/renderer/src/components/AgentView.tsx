@@ -7,6 +7,7 @@ import SessionInfoPanel from './SessionInfoPanel'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
@@ -57,7 +58,8 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [terminalCounter, setTerminalCounter] = useState(1)
   const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
-  const { showLoading, hideLoading } = useLoadingSnackbar()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
@@ -347,9 +349,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
   }
 
   const handleRemoveFailedAgent = () => {
-    // Show cleanup modal for teardown
-    setCleanupAction('teardown')
-    setShowCleanupModal(true)
+    // TODO: Implement cleanup modal for failed teleport sessions
+    // For now, just log a message
+    console.log('Remove failed agent - not yet implemented')
   }
 
   const handleAddTerminal = () => {

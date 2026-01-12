@@ -395,27 +395,36 @@ export class TerminalService {
       let lastKnownState: 'working' | 'waiting' | 'unknown' = 'unknown'
 
       // Format display name as "project: branch_suffix" for cleaner notifications
-      const projectName = projectPath.split('/').pop() || 'project'
       let displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
       // Late branch detection for teleported sessions
-      let branchDetectionComplete = !this.needsLateBranchDetection(agentInfo?.displayBranchName)
+      // Only check if displayBranchName is missing or has fallback format
+      let branchDetectionComplete = !!(agentInfo?.displayBranchName && !agentInfo.displayBranchName.startsWith('teleport-'))
 
-      // Try to detect branch from JSONL and update display name
+      // Try to detect branch from JSONL - runs asynchronously to avoid blocking
       const tryDetectBranch = (): void => {
         if (branchDetectionComplete) return
 
-        const detectedBranch = this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
-        if (!detectedBranch) return
+        // Run detection in next tick to avoid blocking the polling loop
+        setImmediate(() => {
+          try {
+            const detectedBranch = this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
+            if (!detectedBranch) return
 
-        console.log(`[TerminalService] Late branch detection for ${agentId}: ${detectedBranch}`)
-        branchDetectionComplete = true
+            console.log(`[TerminalService] Late branch detection for ${agentId}: ${detectedBranch}`)
+            branchDetectionComplete = true
 
-        displayName = `${projectName}: ${this.getBranchSuffix(detectedBranch)}`
+            const projectName = projectPath.split('/').pop() || 'project'
+            const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
+            displayName = `${projectName}: ${branchSuffix}`
 
-        this.updateAgentInfo(worktreePath, { displayBranchName: detectedBranch })
-          .then(() => this.mainWindow.webContents.send('agents:updated'))
-          .catch(err => console.error('Failed to update branch name:', err))
+            this.updateAgentInfo(worktreePath, { displayBranchName: detectedBranch })
+              .then(() => this.mainWindow.webContents.send('agents:updated'))
+              .catch(err => console.error('Failed to update branch name:', err))
+          } catch (err) {
+            // Silently ignore errors - branch detection is optional
+          }
+        })
       }
 
       // Check session state and broadcast changes
@@ -833,19 +842,22 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
 
     // Read current agent info to check if we need to update
     this.readAgentInfo(session.worktreePath).then((agentInfo) => {
-      // Only update if the cloud session ID is different from what's stored
-      if (agentInfo?.cloudSessionId !== cloudSessionId) {
-        console.log(`[TerminalService] Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
-
-        this.updateAgentInfo(session.worktreePath, {
-          cloudSessionId
-        }).then(() => {
-          // Broadcast update so UI can refresh (enables Teleport to Cloud button)
-          this.mainWindow.webContents.send('agents:updated')
-        }).catch((err) => {
-          console.error('Failed to store cloud session ID:', err)
-        })
+      // Don't overwrite if cloudSessionId is already set (e.g., from teleport)
+      // This prevents conversation history mentioning other session IDs from overwriting the correct one
+      if (agentInfo?.cloudSessionId) {
+        return // Already has a cloud session ID, don't overwrite
       }
+
+      console.log(`[TerminalService] Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+
+      this.updateAgentInfo(session.worktreePath, {
+        cloudSessionId
+      }).then(() => {
+        // Broadcast update so UI can refresh (enables Teleport to Cloud button)
+        this.mainWindow.webContents.send('agents:updated')
+      }).catch((err) => {
+        console.error('Failed to store cloud session ID:', err)
+      })
     }).catch((err) => {
       console.error('Failed to read agent info for cloud session detection:', err)
     })
@@ -1042,21 +1054,6 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
   }
 
   private readonly MAX_RESUME_ATTEMPTS = 3
-
-  /**
-   * Check if late branch detection is needed for a teleported session.
-   * Returns true if displayBranchName is missing or has the fallback teleport-xxx format.
-   */
-  private needsLateBranchDetection(displayBranchName: string | undefined): boolean {
-    return !displayBranchName || displayBranchName.startsWith('teleport-')
-  }
-
-  /**
-   * Extract the branch suffix (last path component) from a branch name.
-   */
-  private getBranchSuffix(branch: string): string {
-    return branch.split('/').pop() || branch
-  }
 
   /**
    * Format display name as "project: branch_suffix" for notifications.

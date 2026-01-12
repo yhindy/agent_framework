@@ -737,48 +737,10 @@ function setupIPC(): void {
           mainWindow?.webContents.send('agents:updated')
           console.log('[IPC] Started teleported agent:', result.agentId)
 
-          // 5. Try to detect and update branch name from cloud session metadata
-          // This runs in the background and doesn't block the teleport process
-          setTimeout(async () => {
-            try {
-              console.log('[IPC] Attempting to detect branch name from teleported session...')
-
-              // Calculate worktree path for the agent
-              const agents = await services!.agent.listAgents(resolvedProjectPath)
-              const agent = agents.find(a => a.id === result.agentId)
-
-              if (!agent) {
-                console.warn('[IPC] Agent not found for branch detection')
-                return
-              }
-
-              // Extract branch name from JSONL metadata
-              const detectedBranch = await services!.teleportMetadata.extractBranchFromTeleportedSession(
-                parsedSessionId,
-                agent.worktreePath
-              )
-
-              if (detectedBranch) {
-                console.log(`[IPC] Detected branch name: ${detectedBranch}`)
-
-                // Update agent info with detected branch name
-                await services!.agent.updateAgentBranchName(
-                  resolvedProjectPath,
-                  result.agentId,
-                  detectedBranch
-                )
-
-                // Notify renderer to refresh UI
-                mainWindow?.webContents.send('agents:updated')
-                console.log('[IPC] Branch name updated successfully')
-              } else {
-                console.log('[IPC] Could not detect branch name from session metadata, using fallback')
-              }
-            } catch (error) {
-              console.error('[IPC] Failed to detect/update branch name:', error)
-              // Non-fatal - agent still works with default branch name
-            }
-          }, 3000) // Wait 3 seconds for JSONL to start syncing
+          // 5. Branch detection is now handled by late detection in TerminalService polling
+          // The initial JSONL is usually empty for teleported sessions, so we rely on
+          // late detection after the first user interaction populates the file
+          console.log('[IPC] Branch detection will happen via late detection in polling loop')
 
         } catch (error) {
           console.error('Failed to start teleported agent:', error)
