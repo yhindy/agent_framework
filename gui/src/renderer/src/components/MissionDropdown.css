@@ -6,7 +6,7 @@
 
 /* Button variant (used in Dashboard header) */
 .mission-dropdown-btn {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
   padding: 8px 16px;
   border: none;
@@ -18,7 +18,7 @@
 }
 
 .mission-dropdown-btn:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 /* Icon variant (used in Sidebar) */

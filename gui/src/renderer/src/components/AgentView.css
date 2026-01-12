@@ -76,11 +76,11 @@
 }
 
 .agent-actions .compact-button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
 }
 
 .agent-actions .compact-button.primary:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .agent-actions .compact-button.danger {
@@ -211,7 +211,7 @@
 }
 
 .status-dot.pr_open {
-  background: #0e639c;
+  background: var(--accent-primary);
 }
 
 .status-dot.merged {
@@ -226,11 +226,11 @@
 }
 
 .agent-actions button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
 }
 
 .agent-actions button.primary:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .agent-actions button.danger {
@@ -381,7 +381,7 @@
 
 .unified-tab.active {
   background: #1e1e1e;
-  border-bottom: 2px solid #0e639c;
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 .unified-tab .tab-icon {
@@ -431,7 +431,7 @@
 }
 
 .unified-tab .tab-action.start {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -542,12 +542,12 @@
 }
 
 .form-actions button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: #ffffff;
 }
 
 .form-actions button.primary:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .merge-info {

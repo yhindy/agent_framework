@@ -347,7 +347,8 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
    */
   const getAgentDisplayName = (agent: AgentSession): React.ReactNode => {
     if (agent.isBaseBranchAgent) {
-      return <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
+      // Show actual branch name for base branch agents (from origin/master)
+      return <div className="agent-id">{agent.branch || 'Base'}</div>
     }
 
     const branchName = agent.displayBranchName || agent.branch
