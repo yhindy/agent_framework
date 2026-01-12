@@ -4,6 +4,8 @@ import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { usePRPolling } from '../hooks/usePRPolling'
 import MissionDropdown from './MissionDropdown'
 import ProjectPicker from './ProjectPicker'
+import AgentCleanupDropdown from './AgentCleanupDropdown'
+import AgentStateIndicator from './AgentStateIndicator'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -22,10 +24,63 @@ interface Assignment {
   mode: string
   prUrl?: string
   prStatus?: string
-  projectPath?: string  // Added to track which project the assignment belongs to
+  projectPath?: string
+  claudeState?: 'working' | 'waiting' | 'unknown'
+  isWaitingForInput?: boolean
 }
 
-function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
+const LOADING_MESSAGES = [
+  'Making sure Gru has visibility...',
+  'Distributing bananas...',
+  'Teaching minion language basics...',
+  'Installing safety goggles...',
+  'Calibrating evil-o-meter...',
+  'Cloning the Git worktree...',
+  'Requesting backup from Kevin, Stuart, and Bob...',
+  'Polishing the shrinking ray...',
+  'Preparing the fart gun...',
+  'Organizing a mandatory dance party...'
+]
+
+const PR_MESSAGES = [
+  'Stuffing code into a rocket...',
+  'Learning to speak Human for the PR description...',
+  'Bribing the CI/CD pipeline with bananas...',
+  'Checking for accidentally committed secret cookie recipes...',
+  'Pushing code to the moon...',
+  'Summoning the code review council (Kevin, Stuart, and Bob)...',
+  'Crossing fingers and toes...'
+]
+
+const TELEPORT_MESSAGES = [
+  'Beaming session from the cloud...',
+  'Establishing quantum link...',
+  'Downloading minion consciousness...',
+  'Materializing in worktree...',
+  'Syncing bananas from cloud storage...',
+  'Calibrating teleporter coordinates...',
+  'Reassembling molecular structure...'
+]
+
+// Column configuration for the 3-column Kanban board
+const COLUMN_CONFIG = {
+  in_progress: {
+    title: 'In Progress',
+    emptyText: 'No active agents'
+  },
+  review: {
+    title: 'Review',
+    emptyText: 'No agents waiting'
+  },
+  done: {
+    title: 'Done',
+    emptyText: 'No completed work'
+  }
+} as const
+
+type ColumnKey = keyof typeof COLUMN_CONFIG
+
+function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const [assignments, setAssignments] = useState<Assignment[]>([])
@@ -38,51 +93,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const [isTeleporting, setIsTeleporting] = useState(false)
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const { showLoading, hideLoading } = useLoadingSnackbar()
-
-  const loadingMessages = [
-    'Making sure Gru has visibility...',
-    'Distributing bananas...',
-    'Teaching minion language basics...',
-    'Installing safety goggles...',
-    'Calibrating evil-o-meter...',
-    'Cloning the Git worktree...',
-    'Requesting backup from Kevin, Stuart, and Bob...',
-    'Polishing the shrinking ray...',
-    'Preparing the fart gun...',
-    'Organizing a mandatory dance party...'
-  ]
-
-  const prMessages = [
-    'Stuffing code into a rocket...',
-    'Learning to speak Human for the PR description...',
-    'Bribing the CI/CD pipeline with bananas...',
-    'Checking for accidentally committed secret cookie recipes...',
-    'Pushing code to the moon...',
-    'Summoning the code review council (Kevin, Stuart, and Bob)...',
-    'Crossing fingers and toes...'
-  ]
-
-  const teardownMessages = [
-    'Returning minion to the break room...',
-    'Cleaning up banana peels from the workspace...',
-    'Shredding incriminating documents...',
-    'Wiping fingerprints from the keyboard...',
-    'Returning stolen shrink rays...',
-    'Escaping before Gru finds out...',
-    'Restocking the vending machine...'
-  ]
-
-  const teleportMessages = [
-    'Beaming session from the cloud...',
-    'Establishing quantum link...',
-    'Downloading minion consciousness...',
-    'Materializing in worktree...',
-    'Syncing bananas from cloud storage...',
-    'Calibrating teleporter coordinates...',
-    'Reassembling molecular structure...'
-  ]
   const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
   const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
+  const [agentStates, setAgentStates] = useState<Map<string, 'working' | 'waiting' | 'unknown'>>(new Map())
   const [showPRConfirm, setShowPRConfirm] = useState(false)
   const [selectedAssignmentForPR, setSelectedAssignmentForPR] = useState<Assignment | null>(null)
   const [autoCommit, setAutoCommit] = useState(true)
@@ -111,7 +124,19 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       loadAssignments()
     })
 
-    return () => unsubscribe()
+    // Listen for agent state changes
+    const unsubscribeState = window.electronAPI.onAgentStateChanged((agentId, state) => {
+      setAgentStates(prev => {
+        const next = new Map(prev)
+        next.set(agentId, state)
+        return next
+      })
+    })
+
+    return () => {
+      unsubscribe()
+      unsubscribeState()
+    }
   }, [activeProjects])
 
   // Auto-poll PR status for all pr_open assignments
@@ -179,7 +204,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
   const handleCreateAssignment = async () => {
     const snackbarId = showLoading({
       title: 'Deploying Minion...',
-      messages: loadingMessages
+      messages: LOADING_MESSAGES
     })
     try {
       setIsCreating(true)
@@ -269,7 +294,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
 
     const snackbarId = showLoading({
       title: 'Creating Pull Request...',
-      messages: prMessages
+      messages: PR_MESSAGES
     })
     try {
       setCreatingPRFor(prev => new Set(prev).add(selectedAssignmentForPR.id))
@@ -329,54 +354,42 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
     }
   }
 
-  const handleArchive = async (assignment: Assignment) => {
-    if (!confirm(`Archive ${assignment.agentId} and remove worktree?\n\nThis will permanently delete the worktree.`)) {
-      return
-    }
+  // Group assignments into 3 columns based on status AND claudeState
+  // Helper to get effective claude state (IPC state takes precedence over stored state)
+  const getEffectiveClaudeState = (a: Assignment): 'working' | 'waiting' | 'unknown' => {
+    // First check live IPC state (most up-to-date)
+    const liveState = agentStates.get(a.agentId)
+    if (liveState) return liveState
 
-    const snackbarId = showLoading({
-      title: 'Archiving Mission...',
-      messages: teardownMessages
-    })
-    try {
-      await window.electronAPI.teardownAgent(assignment.agentId, false)
-      hideLoading(snackbarId)
-      alert('Mission archived and worktree removed.')
-    } catch (error: any) {
-      hideLoading(snackbarId)
-      alert(`Failed to archive: ${error.message}`)
-    }
+    // Fall back to stored state from assignment data
+    if (a.claudeState) return a.claudeState
+    if (a.isWaitingForInput) return 'waiting'
+
+    return 'unknown'
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '#858585'
-      case 'in_progress':
-        return '#4ec9b0'
-      case 'review':
-        return '#dcdcaa'
-      case 'completed':
-        return '#4ec9b0'
-      case 'pr_open':
-        return '#c586c0'
-      case 'merged':
-        return '#569cd6'
-      case 'closed':
-        return '#858585'
-      case 'blocked':
-        return '#f48771'
-      default:
-        return '#858585'
-    }
-  }
-
-  const groupedAssignments = {
-    in_progress: assignments.filter((a) => a.status === 'in_progress'),
-    review: assignments.filter((a) => a.status === 'review'),
-    completed: assignments.filter((a) => a.status === 'completed'),
-    pr_open: assignments.filter((a) => a.status === 'pr_open'),
-    merged: assignments.filter((a) => a.status === 'merged')
+  // Group assignments into 3 columns:
+  // - In Progress: status is in_progress AND NOT waiting for input
+  // - Review: status is in_progress AND waiting for input (needs human attention)
+  // - Done: completed, pr_open, or merged
+  const groupedAssignments: Record<ColumnKey, Assignment[]> = {
+    in_progress: assignments.filter((a) => {
+      if (a.status !== 'in_progress') return false
+      const effectiveState = getEffectiveClaudeState(a)
+      return effectiveState !== 'waiting'
+    }),
+    review: assignments.filter((a) => {
+      // Agents that are in_progress but waiting for input go to Review
+      if (a.status === 'in_progress') {
+        const effectiveState = getEffectiveClaudeState(a)
+        return effectiveState === 'waiting'
+      }
+      // Legacy support: if status is explicitly 'review'
+      return a.status === 'review'
+    }),
+    done: assignments.filter((a) =>
+      a.status === 'completed' || a.status === 'pr_open' || a.status === 'merged'
+    )
   }
 
   const handleNewAssignment = (isSuper?: boolean) => {
@@ -471,7 +484,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
 
     const snackbarId = showLoading({
       title: 'Teleporting Session...',
-      messages: teleportMessages
+      messages: TELEPORT_MESSAGES
     })
 
     try {
@@ -518,33 +531,46 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
       </div>
 
       <div className="dashboard-content">
-        <div className="columns">
-          {Object.entries(groupedAssignments).map(([status, items]) => (
-            <div key={status} className="column">
-              <div className="column-header">
-                <span className="column-title">{status.replace('_', ' ')}</span>
-                <span className="column-count">{items.length}</span>
-              </div>
-              <div className="assignment-cards">
-                {items.map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    className={`assignment-card ${assignment.status === 'in_progress' ? 'clickable' : ''}`}
-                    onClick={() => {
-                      if (assignment.status === 'in_progress') {
+        <div className="columns columns-3">
+          {(Object.keys(COLUMN_CONFIG) as ColumnKey[]).map((columnKey) => {
+            const config = COLUMN_CONFIG[columnKey]
+            const items = groupedAssignments[columnKey]
+
+            return (
+              <div key={columnKey} className={`column column-${columnKey}`}>
+                <div className="column-header">
+                  <span className="column-title">{config.title}</span>
+                  <span className="column-count">{items.length}</span>
+                </div>
+                <div className="assignment-cards">
+                  {items.map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="assignment-card clickable"
+                      onClick={() => {
                         navigate(`/workspace/agent/${assignment.agentId}`)
-                      }
-                    }}
-                  >
-                    <div className="card-header">
-                      <span className="agent-badge">{assignment.agentId}</span>
-                      <span
-                        className="status-dot"
-                        style={{ background: getStatusColor(assignment.status) }}
-                      />
-                    </div>
-                    {assignment.status !== 'unassigned' && (
-                      <>
+                      }}
+                    >
+                        <div className="card-header">
+                          <span className="agent-badge">{assignment.agentId}</span>
+                          <div className="card-header-right">
+                            {/* Show state indicator for active agents */}
+                            {(columnKey === 'in_progress' || columnKey === 'review') && (
+                              <AgentStateIndicator
+                                claudeState={getEffectiveClaudeState(assignment)}
+                                isRunning={assignment.status === 'in_progress'}
+                                size="small"
+                              />
+                            )}
+                            {/* X button for cleanup - appears on hover */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <AgentCleanupDropdown
+                                agentId={assignment.agentId}
+                                onCleanupComplete={loadAssignments}
+                              />
+                            </div>
+                          </div>
+                        </div>
                         <div className="card-meta">
                           <div className="meta-item">
                             <span className="meta-label">Branch:</span>
@@ -560,108 +586,71 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                               <span className="meta-value">{assignment.model}</span>
                             </div>
                           )}
-                          <div className="meta-item">
-                            <span className="meta-label">Mode:</span>
-                            <span className="meta-value">{assignment.mode}</span>
-                          </div>
-                          {assignment.prUrl && (
-                            <div className="meta-item">
-                              <span className="meta-label">PR:</span>
+                        </div>
+
+                        {/* Action buttons for Done column cards */}
+                        {columnKey === 'done' && (
+                          <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+                            {assignment.status === 'completed' && (
+                              <>
+                                {!ghAvailable && (
+                                  <div className="gh-error-text">
+                                    {ghError}
+                                  </div>
+                                )}
+                                <button
+                                  className="action-button action-button--primary"
+                                  onClick={() => handleCreatePRClick(assignment)}
+                                  disabled={creatingPRFor.has(assignment.id) || !ghAvailable}
+                                >
+                                  {creatingPRFor.has(assignment.id)
+                                    ? 'Creating...'
+                                    : 'Create PR'}
+                                </button>
+                              </>
+                            )}
+                            {assignment.status === 'pr_open' && (
+                              <div className="action-button-group">
+                                {assignment.prUrl && (
+                                  <a
+                                    href={assignment.prUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="action-button action-button--secondary"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    View PR
+                                  </a>
+                                )}
+                                <button
+                                  className="action-button action-button--ghost"
+                                  onClick={() => handleCheckPRStatus(assignment)}
+                                  disabled={checkingPRFor.has(assignment.id)}
+                                  title="Refresh PR status"
+                                >
+                                  {checkingPRFor.has(assignment.id) ? '...' : 'Refresh'}
+                                </button>
+                              </div>
+                            )}
+                            {assignment.status === 'merged' && assignment.prUrl && (
                               <a
                                 href={assignment.prUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                className="action-button action-button--success"
                                 onClick={(e) => e.stopPropagation()}
-                                style={{ color: '#4ec9b0', textDecoration: 'underline' }}
                               >
-                                View on GitHub
+                                View Merged PR
                               </a>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    {assignment.status === 'completed' && (
-                      <div className="card-actions">
-                        {!ghAvailable && (
-                          <div style={{ fontSize: '12px', color: '#f48771', marginBottom: '8px' }}>
-                            ⚠️ {ghError}
+                            )}
                           </div>
                         )}
-                        <button
-                          className="merge-button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCreatePRClick(assignment)
-                          }}
-                          disabled={creatingPRFor.has(assignment.id) || !ghAvailable}
-                        >
-                          {creatingPRFor.has(assignment.id)
-                            ? 'Creating PR...'
-                            : 'Create Pull Request'}
-                        </button>
                       </div>
-                    )}
-                    {assignment.status === 'pr_open' && (
-                      <div className="card-actions">
-                        {assignment.prUrl && (
-                          <button
-                            className="merge-button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              window.open(assignment.prUrl, '_blank')
-                            }}
-                            style={{ marginBottom: '4px', background: '#569cd6' }}
-                          >
-                            Open PR on GitHub
-                          </button>
-                        )}
-                        <button
-                          className="merge-button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCheckPRStatus(assignment)
-                          }}
-                          disabled={checkingPRFor.has(assignment.id)}
-                          title="Manually refresh PR status (auto-polling runs in background)"
-                        >
-                          {checkingPRFor.has(assignment.id)
-                            ? 'Refreshing...'
-                            : '↻ Refresh PR'}
-                        </button>
-                      </div>
-                    )}
-                    {assignment.status === 'merged' && (
-                      <div className="card-actions">
-                        {assignment.prUrl && (
-                          <button
-                            className="merge-button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              window.open(assignment.prUrl, '_blank')
-                            }}
-                            style={{ marginBottom: '4px', background: '#4ec9b0' }}
-                          >
-                            View Merged PR
-                          </button>
-                        )}
-                        <button
-                          className="merge-button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleArchive(assignment)
-                          }}
-                          style={{ background: '#569cd6' }}
-                        >
-                          Archive & Cleanup
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

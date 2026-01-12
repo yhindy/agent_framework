@@ -1,0 +1,50 @@
+/* AgentStateIndicator - Visual indicator for agent working/waiting state */
+
+.state-indicator {
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Size variants */
+.state-indicator--small {
+  width: 8px;
+  height: 8px;
+}
+
+.state-indicator--medium {
+  width: 10px;
+  height: 10px;
+}
+
+/* State: Working - Animated pulsing green dot */
+.state-indicator--working {
+  background-color: #4ec9b0;
+  box-shadow: 0 0 6px rgba(78, 201, 176, 0.6);
+  animation: state-pulse 2s ease-in-out infinite;
+}
+
+/* State: Waiting - Static orange dot (needs attention) */
+.state-indicator--waiting {
+  background-color: #f48771;
+  box-shadow: 0 0 4px rgba(244, 135, 113, 0.5);
+}
+
+/* State: Idle/Unknown - Gray dot */
+.state-indicator--idle {
+  background-color: #858585;
+}
+
+/* GPU-accelerated pulse animation for smooth performance */
+@keyframes state-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 6px rgba(78, 201, 176, 0.6);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+    box-shadow: 0 0 10px rgba(78, 201, 176, 0.9);
+  }
+}
