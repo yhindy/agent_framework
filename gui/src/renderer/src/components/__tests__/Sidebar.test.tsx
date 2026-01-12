@@ -646,7 +646,7 @@ describe('Sidebar branch name display', () => {
     expect(agentItem.querySelector('.agent-branch')).not.toBeInTheDocument()
   })
 
-  it('does not display branch for base branch agents', async () => {
+  it('displays base branch name for base branch agents', async () => {
     const mockAgents = [
       {
         id: 'base-1',
@@ -676,14 +676,93 @@ describe('Sidebar branch name display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/\(Base\)/)).toBeInTheDocument()
+      expect(screen.getByText('main')).toBeInTheDocument()
     })
 
-    // Should not display branch name even though branch field exists
-    expect(screen.queryByText('main')).not.toBeInTheDocument()
+    // Should not display "(Base)" text anymore
+    expect(screen.queryByText(/\(Base\)/)).not.toBeInTheDocument()
 
-    const agentItem = screen.getByText(/\(Base\)/).closest('.agent-item')!
+    // Should not display the random number from assignment ID
+    expect(screen.queryByText('123')).not.toBeInTheDocument()
+
+    const agentItem = screen.getByText('main').closest('.agent-item')!
     expect(agentItem.querySelector('.agent-branch')).not.toBeInTheDocument()
+    expect(agentItem.querySelector('.agent-id')).toBeInTheDocument()
+  })
+
+  it('displays fallback "Base" when branch field is missing for base branch agents', async () => {
+    const mockAgents = [
+      {
+        id: 'base-1',
+        agentId: 'base-1',
+        assignmentId: 'project-base-123',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isBaseBranchAgent: true
+        // Note: no branch field
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Base')).toBeInTheDocument()
+    })
+
+    // Should not display the random number
+    expect(screen.queryByText('123')).not.toBeInTheDocument()
+  })
+
+  it('displays correct base branch name for different branch names', async () => {
+    const mockAgents = [
+      {
+        id: 'base-1',
+        agentId: 'base-1',
+        assignmentId: 'project-base-456',
+        terminalPid: 123,
+        hasUnread: false,
+        lastActivity: new Date().toISOString(),
+        isBaseBranchAgent: true,
+        branch: 'master'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('master')).toBeInTheDocument()
+    })
+
+    // Should not display "(Base)" or the random number
+    expect(screen.queryByText(/\(Base\)/)).not.toBeInTheDocument()
+    expect(screen.queryByText('456')).not.toBeInTheDocument()
   })
 
   it('handles nested branch names correctly', async () => {

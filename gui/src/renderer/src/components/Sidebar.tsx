@@ -345,7 +345,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
           </div>
           <div className="agent-name-container">
             {agent.isBaseBranchAgent ? (
-              <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
+              <div className="agent-id">{agent.branch || 'Base'}</div>
             ) : agent.branch ? (
               <div className="agent-branch" title={agent.branch}>
                 {extractBranchName(agent.branch)}
