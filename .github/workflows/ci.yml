@@ -25,8 +25,10 @@ jobs:
       run_all_tests: ${{ steps.detect.outputs.run_all_tests }}
       test_gui: ${{ steps.detect.outputs.test_gui }}
       test_minions: ${{ steps.detect.outputs.test_minions }}
+      test_e2e: ${{ steps.detect.outputs.test_e2e }}
       gui_test_pattern: ${{ steps.detect.outputs.gui_test_pattern }}
       minions_test_pattern: ${{ steps.detect.outputs.minions_test_pattern }}
+      e2e_test_pattern: ${{ steps.detect.outputs.e2e_test_pattern }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,8 +52,10 @@ jobs:
           echo "- **Run all tests**: \`${{ steps.detect.outputs.run_all_tests }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Test GUI**: \`${{ steps.detect.outputs.test_gui }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Test Minions**: \`${{ steps.detect.outputs.test_minions }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test E2E**: \`${{ steps.detect.outputs.test_e2e }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **GUI test pattern**: \`${{ steps.detect.outputs.gui_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Minions test pattern**: \`${{ steps.detect.outputs.minions_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **E2E test pattern**: \`${{ steps.detect.outputs.e2e_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Changed files**:" >> $GITHUB_STEP_SUMMARY
           git diff --name-only ${{ github.event.before || 'HEAD^' }} HEAD | head -20 >> $GITHUB_STEP_SUMMARY
@@ -206,7 +210,81 @@ jobs:
           path: gui/out/
           retention-days: 7
 
-  # Job 6: Validate memory-constrained test execution
+  # Job 6: E2E Tests (Electron app testing) - only runs when GUI code changes
+  test-e2e:
+    needs: [detect-changes, build-gui]
+    if: |
+      always() &&
+      needs.build-gui.result == 'success' &&
+      needs.detect-changes.outputs.test_e2e == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules
+        run: npm run rebuild -w gui
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gui-build
+          path: gui/out/
+
+      - name: Run E2E tests (selective)
+        if: needs.detect-changes.outputs.e2e_test_pattern != ''
+        run: |
+          cd gui
+          npx playwright test --config=playwright.config.ts ${{ needs.detect-changes.outputs.e2e_test_pattern }}
+        env:
+          CI: true
+
+      - name: Run E2E tests (all)
+        if: needs.detect-changes.outputs.e2e_test_pattern == ''
+        run: npm run test:e2e -w gui
+        env:
+          CI: true
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: |
+            gui/e2e-results/
+            gui/e2e-report/
+            gui/e2e-results.json
+          retention-days: 7
+
+      - name: Report E2E Results
+        if: always()
+        run: |
+          echo "### E2E Test Results 🎭" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ needs.detect-changes.outputs.e2e_test_pattern }}" ]; then
+            echo "**Selective tests**: \`${{ needs.detect-changes.outputs.e2e_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Running all E2E tests**" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f gui/e2e-results.json ]; then
+            echo "Results available in artifacts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No results file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Job 7: Validate memory-constrained test execution
   test-memory-limits:
     runs-on: ubuntu-latest
     timeout-minutes: 5

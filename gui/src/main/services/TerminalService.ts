@@ -12,6 +12,7 @@ import {
   CLAUDE_WORKING_PATTERNS,
   CLAUDE_IDLE_INDICATORS,
   CLAUDE_START_PATTERN,
+  CODEX_WORKING_PATTERNS,
   SHELL_WORKING_PATTERNS,
   SHELL_IDLE_INDICATORS
 } from './IdleDetector'
@@ -237,8 +238,9 @@ export class TerminalService {
             args.push('--chrome')
           }
         } else if (isResume) {
-          // Resume existing session - preserve original flags
-          args = ['--resume', sessionId]
+          // Resume existing session - use stored session ID (not freshly generated)
+          // This is critical for teleported sessions where claudeSessionId differs from generated UUID
+          args = ['--resume', agentInfo!.claudeSessionId!]
 
           // Preserve model
           if (model) args.push('--model', model)
@@ -271,6 +273,10 @@ export class TerminalService {
           args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo)
           args.push('--session-id', sessionId)
         }
+        break
+      case 'codex':
+        command = 'codex'
+        args = this.getCodexArgs(mode, prompt)
         break
       case 'cursor-cli':
         command = 'cursor'
@@ -439,7 +445,8 @@ export class TerminalService {
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,
               claudeState: 'waiting',
-              claudeLastSeen: new Date().toISOString()
+              claudeLastSeen: new Date().toISOString(),
+              waitingSince: new Date().toISOString()
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
@@ -459,7 +466,8 @@ export class TerminalService {
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,
               claudeState: 'working',
-              claudeLastSeen: new Date().toISOString()
+              claudeLastSeen: new Date().toISOString(),
+              waitingSince: undefined
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
@@ -480,20 +488,43 @@ export class TerminalService {
       }, 1000) // 1 second interval - mtime caching makes this efficient
 
     } else {
-      // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
+      // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
       // Format display name as "project: branch_suffix" for cleaner notifications
       const projectName = projectPath.split('/').pop() || 'project'
       const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
       const displayName = `${projectName}: ${branchSuffix}`
 
+      // Determine patterns based on tool
+      let workingPatterns: RegExp[]
+      let idleIndicators: RegExp[]
+      let requireStartSignal = false
+      let startPattern: RegExp | undefined
+
+      if (tool === 'cursor-cli') {
+        // Cursor CLI uses Claude patterns and requires start signal
+        workingPatterns = CLAUDE_WORKING_PATTERNS
+        idleIndicators = CLAUDE_IDLE_INDICATORS
+        requireStartSignal = true
+        startPattern = CLAUDE_START_PATTERN
+      } else if (tool === 'codex') {
+        // Codex uses codex-specific working patterns to detect activity
+        workingPatterns = CODEX_WORKING_PATTERNS
+        idleIndicators = []
+        requireStartSignal = false
+      } else {
+        // Other tools: no patterns
+        workingPatterns = []
+        idleIndicators = []
+      }
+
       idleDetector = new IdleDetector(
         {
-          workingPatterns: tool === 'cursor-cli' ? CLAUDE_WORKING_PATTERNS : [],
-          idleIndicators: tool === 'cursor-cli' ? CLAUDE_IDLE_INDICATORS : [],
+          workingPatterns,
+          idleIndicators,
           idleThreshold: 2000,
           inputGracePeriod: 1000,
-          requireStartSignal: true,
-          startPattern: CLAUDE_START_PATTERN
+          requireStartSignal,
+          startPattern
         },
         {
           onWaitingForInput: (_context: string) => {
@@ -633,16 +664,33 @@ export class TerminalService {
       if (prompt) {
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `BEFORE creating any implementation plan, you MUST:
-1. Propose numbered acceptance criteria for this task
-2. Use AskUserQuestion to ask the human to approve the criteria
-3. WAIT for explicit approval before proceeding to implementation
+          planPrompt = `You are a Super Minion. Follow the 5-PHASE WORKFLOW exactly:
+
+PHASE 1 - ACCEPTANCE CRITERIA (do this first):
+1. Explore the codebase to understand context
+2. Propose numbered acceptance criteria for this task
+3. Use AskUserQuestion to ask the human to approve the criteria
+4. WAIT for explicit "Yes, proceed" before moving to Phase 2
+
+PHASE 2 - ENGINEERING DESIGN (MANDATORY - do NOT skip):
+1. Spawn a Plan agent to create .engineering-design.md
+2. The design must map each criterion to implementation details
+
+PHASE 3 - DESIGN REVIEW (MANDATORY - do NOT skip):
+1. Spawn two review agents IN PARALLEL: senior engineer + criteria validator
+2. Only proceed to Phase 4 after both reviewers approve
+
+PHASE 4 - IMPLEMENTATION:
+1. Spawn implementation agents based on the approved design
+2. Use parallel agents for independent components
+
+PHASE 5 - VERIFICATION:
+1. Spawn THREE agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker
+2. Only declare completion when all three pass
 
 Task: ${prompt}
 
-Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.
-
-You can spawn as many child agents as needed to complete the task quickly. Maximize parallelism by breaking work into independent subtasks that can run concurrently.`
+CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or review phases. NEVER jump straight to implementation after acceptance criteria.`
         } else {
           planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }
@@ -673,6 +721,25 @@ You can spawn as many child agents as needed to complete the task quickly. Maxim
     if (model) {
       args.push('--model', model)
     }
+
+    // Add prompt if provided
+    if (prompt) {
+      if (mode === 'planning') {
+        const planPrompt = `Create a plan for: ${prompt}`
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+      } else {
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+      }
+    }
+
+    return args
+  }
+
+  private getCodexArgs(mode: string, prompt?: string): string[] {
+    const args: string[] = []
+
+    // Hardcode model to gpt-5.2-codex as per requirements
+    args.push('--model', 'gpt-5.2-codex')
 
     // Add prompt if provided
     if (prompt) {

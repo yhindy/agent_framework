@@ -48,6 +48,8 @@ export interface SuperAgentInfo {
   pendingPlans: ChildPlan[]
   taskInvocations?: TaskInvocation[]
   uiState?: UIState
+  prUrl?: string
+  prStatus?: string
 }
 
 export interface AgentInfo {

@@ -52,6 +52,12 @@ declare global {
       updateAssignment: (assignmentId: string, updates: any) => Promise<void>
       createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<{ url: string }>
       checkPullRequestStatus: (assignmentId: string) => Promise<{ status: string; mergedAt?: string }>
+      detectPullRequest: (assignmentId: string, force?: boolean) => Promise<{
+        found: boolean
+        prUrl?: string
+        prStatus?: string
+        createdAt?: string
+      } | null>
 
       // PR Polling APIs
       startPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>

@@ -39,6 +39,12 @@ declare const api: {
     updateAssignment: (assignmentId: string, updates: any) => Promise<any>;
     createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<any>;
     checkPullRequestStatus: (assignmentId: string) => Promise<any>;
+    detectPullRequest: (assignmentId: string, force?: boolean) => Promise<{
+        found: boolean;
+        prUrl?: string;
+        prStatus?: string;
+        createdAt?: string;
+    } | null>;
     startPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
     stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
     stopAllPRPolling: (subscriberId: string) => Promise<any>;

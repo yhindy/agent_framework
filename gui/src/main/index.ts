@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, crashReporter } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
@@ -827,6 +827,11 @@ function setupIPC(): void {
     return result
   })
 
+  ipcMain.handle('assignments:detectPR', async (_event, assignmentId: string, force?: boolean) => {
+    const projectPath = await findProjectForAssignment(assignmentId)
+    return services!.agent.detectExistingPullRequest(projectPath, assignmentId, { force })
+  })
+
   // PR Polling handlers
   ipcMain.handle('prPolling:start', async (_event, assignmentId: string, subscriberId: string) => {
     if (!services?.prPolling) return
@@ -1066,6 +1071,14 @@ function setupIPC(): void {
 }
 
 app.whenReady().then(() => {
+  // Disable crash reporter in test mode to prevent macOS crash dialogs
+  if (process.env.E2E_TEST === 'true' || process.env.NODE_ENV === 'test') {
+    crashReporter.start({
+      submitURL: '',
+      uploadToServer: false,
+    })
+  }
+
   app.setName('Minion Laboratory')
   electronApp.setAppUserModelId('com.minion-laboratory.app')
 

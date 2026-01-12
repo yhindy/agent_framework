@@ -63,6 +63,7 @@ This document provides essential context for AI assistants working with the Agen
 - Minions CLI: Shell scripts for worktree management and agent setup
 - Signal Protocol: Communication system between agents and the orchestrator
 - Git worktree isolation for parallel agent work without conflicts
+- Multi-tool support: Claude Desktop, Cursor CLI, and Codex CLI
 
 ## Tech Stack
 
@@ -70,18 +71,50 @@ This document provides essential context for AI assistants working with the Agen
 - **Framework**: Electron 28.x with electron-vite
 - **Frontend**: React 18 with Zustand state management
 - **Terminal**: node-pty + xterm.js
-- **Testing**: Vitest
+- **Testing**: Vitest (unit), Playwright (E2E)
 - **Language**: TypeScript (strict mode)
 
 ### CLI (Minions)
 - **Shell**: Bash scripts
 - **Dependencies**: git, python3, gh (GitHub CLI)
+- **Agent Tools**: Claude Desktop, Cursor CLI (cursor-cli), or Codex CLI (codex)
 
 ### Runtime Requirements
 - Node.js 20.x
 - npm (workspaces)
 - Git (for worktrees)
 - Python 3 (for JSON parsing in shell scripts)
+- At least one agent tool: Claude Desktop, Cursor CLI, or Codex CLI
+
+### Agent Tool Setup
+
+The framework supports three agent tools. At least one must be installed:
+
+#### Claude Desktop
+- Install from: https://claude.ai/download
+- No additional configuration required
+- Spawned via AppleScript on macOS
+
+#### Cursor CLI
+- Install: `npm install -g cursor-cli`
+- Command: `cursor-cli "<prompt>"`
+- Status detection: Pattern matching in terminal output
+- Model selection: Available in GUI
+
+#### Codex CLI
+- Install: `npm install -g openai-codex-cli` (or your Codex CLI package)
+- Command: `codex --model gpt-5.2-codex "<prompt>"`
+- Model: **gpt-5.2-codex (hardcoded, no selection available)**
+- API Key: Set `OPENAI_API_KEY` environment variable
+- Status detection: Pattern matching in terminal output
+- Note: `install.sh` warns if `codex` command is not found in PATH
+
+**Environment Variables for Codex:**
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+Add to `~/.zshrc` or `~/.bashrc` to persist across sessions.
 
 ## Dependency Management
 
@@ -126,7 +159,9 @@ agent_framework/
 │   │           └── types/      # TypeScript type definitions
 │   ├── resources/              # App resources (icons, bundled scripts)
 │   ├── vitest.config.ts        # Main process test config
-│   └── vitest.config.renderer.ts  # Renderer test config
+│   ├── vitest.config.renderer.ts  # Renderer test config
+│   ├── playwright.config.ts    # E2E test configuration
+│   └── e2e/                    # E2E tests (Playwright + Electron)
 ├── minions/                    # CLI framework (installed into target projects)
 │   ├── bin/                    # Shell scripts (setup.sh, teardown.sh, etc.)
 │   ├── rules/                  # Agent behavior rules
@@ -174,6 +209,72 @@ cd gui && npm run test:related src/main/services/AgentService.ts
 # Run with coverage (CI only, memory-intensive)
 cd gui && npm test -- --coverage
 ```
+
+### E2E Testing (Electron App)
+
+E2E tests use Playwright to launch and test the actual Electron application. These tests are designed to be run by AI agents to verify full application functionality.
+
+```bash
+# Run all E2E tests
+npm run test:e2e
+
+# Run with visible browser (debugging)
+npm run test:e2e:headed
+
+# Run specific tests by name
+cd gui && npm run test:e2e -- --grep "project selection"
+
+# Debug mode (step through tests)
+cd gui && npm run test:e2e:debug
+
+# View HTML report after running
+cd gui && npm run test:e2e:report
+```
+
+#### E2E Test Files
+
+| File | Purpose |
+|------|---------|
+| `gui/e2e/app-lifecycle.e2e.ts` | App launch, window creation, shutdown |
+| `gui/e2e/user-flows.e2e.ts` | Project selection, agent creation flows |
+| `gui/e2e/ipc-communication.e2e.ts` | IPC round-trips, API verification |
+| `gui/e2e/terminal.e2e.ts` | Terminal rendering and I/O |
+
+#### E2E Test Results
+
+After running E2E tests, results are available in:
+- `gui/e2e-results.json` - JSON results (agent-parseable)
+- `gui/e2e-report/` - HTML report
+- `gui/e2e-results/` - Screenshots and traces on failure
+
+#### Writing E2E Tests
+
+```typescript
+import { test, expect, createAppPage } from './fixtures'
+
+test('should complete user flow', async ({ electronApp, testProject }) => {
+  const appPage = createAppPage(electronApp)
+
+  // Select project via IPC (bypasses file dialog)
+  await appPage.callIPC('selectProjectWithPath', testProject)
+
+  // Create assignment
+  const assignment = await appPage.callIPC('createAssignment', {
+    prompt: 'Test prompt',
+    tool: 'claude',
+  })
+
+  expect(assignment.id).toBeTruthy()
+})
+```
+
+#### When to Run E2E Tests
+
+- After making UI changes
+- After modifying IPC handlers
+- After changes to main process services
+- Before major releases
+- When unit tests pass but behavior seems incorrect
 
 #### When to Run Full Tests
 
@@ -277,12 +378,24 @@ Renderer Process (React)
 ```
 
 ### Agent Lifecycle
-1. **Create Assignment** - User creates via GUI with prompt, tool, model
+1. **Create Assignment** - User creates via GUI with prompt, tool (claude/cursor-cli/codex), model
 2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
-3. **Start Agent** - TerminalService spawns PTY with Claude/Cursor
-4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes
+3. **Start Agent** - TerminalService spawns PTY with selected tool (Claude/Cursor/Codex)
+4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes (Claude only)
 5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
 6. **Teardown** - Clean up worktree when done
+
+### Tool Selection
+
+The GUI allows selecting from three agent tools when creating an assignment:
+
+| Tool | Model Selection | Status Detection | Command |
+|------|-----------------|------------------|---------|
+| **claude** | Yes (multiple models) | JSONL file parsing | AppleScript launch |
+| **cursor-cli** | Yes (multiple models) | Pattern matching | `cursor-cli "<prompt>"` |
+| **codex** | No (hardcoded to gpt-5.2-codex) | Pattern matching | `codex --model gpt-5.2-codex "<prompt>"` |
+
+**Note:** Codex always uses the `gpt-5.2-codex` model. This is hardcoded in the CLI command and cannot be changed from the GUI.
 
 ### Signal Protocol
 Agents communicate with the orchestrator via stdout signals:
@@ -301,7 +414,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
 
 1. **detect-changes**: Determines which packages changed
 2. **lint**: TypeScript type checking
-3. **test-gui**: Runs GUI tests (macOS runner for node-pty)
+3. **test-gui**: Runs GUI unit tests (macOS runner for node-pty)
 4. **test-minions**: Runs minions package tests
 5. **build-gui**: Smoke test the production build
    - **Purpose**: Smoke test the production build
@@ -309,10 +422,27 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
    - **Timeout**: 10 minutes
    - **Dependencies**: Requires lint, test-gui, test-minions to pass or be skipped
    - **Key steps**:
-     1. Install dependencies: `npm ci` (installs all workspace deps including electron at root)
+     1. Install dependencies: `npm ci`
      2. Build: `npm run build -w gui`
      3. Verify artifacts created (main, preload, renderer bundles)
      4. Upload artifacts (7-day retention)
+6. **test-e2e**: Runs E2E tests against the built Electron app (smart detection)
+   - **Purpose**: Verify full application functionality
+   - **Runner**: macos-latest (required for node-pty and Electron)
+   - **Timeout**: 30 minutes
+   - **Trigger**: Only runs when GUI source code changes (not docs or tests)
+   - **Selective Testing**: Maps changed files to relevant E2E tests:
+     - `main/index.ts` → `app-lifecycle.e2e.ts`, `ipc-communication.e2e.ts`
+     - `services/TerminalService.ts` → `terminal.e2e.ts`
+     - `services/AgentService.ts` → `user-flows.e2e.ts`
+     - `preload/*` → `ipc-communication.e2e.ts`
+     - `renderer/*` → `user-flows.e2e.ts`
+   - **Key steps**:
+     1. Check if E2E tests are needed based on changed files
+     2. Install dependencies and rebuild native modules
+     3. Download build artifacts from build-gui job
+     4. Run selective E2E tests (or all if infrastructure changed)
+     5. Upload test results and HTML report
 
 CI uses intelligent test selection - only runs tests related to changed files.
 
@@ -343,6 +473,9 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | `gui/src/main/services/TerminalService.ts` | PTY management |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `gui/playwright.config.ts` | E2E test configuration |
+| `gui/e2e/fixtures.ts` | E2E test fixtures and helpers |
+| `gui/e2e/electron-app.ts` | Electron app launch utilities |
 | `minions/bin/setup.sh` | Worktree creation script |
 | `minions/rules/orchestrator_signals.md` | Signal protocol docs |
 | `.github/scripts/analyze-changes.js` | CI test selection logic (reference for selective testing) |
@@ -370,6 +503,45 @@ If build-gui fails with "Cannot find module 'electron/package.json'":
 - Check that `electron` is installed at root: `ls node_modules/electron/package.json`
 - Run `npm ci` to ensure all dependencies are properly installed
 - See the "Dependency Management" section for the convention on where to place dependencies
+
+### Codex Tool Issues
+
+**Codex Command Not Found:**
+- Verify Codex CLI is installed: `which codex`
+- Install if missing: `npm install -g openai-codex-cli` (or appropriate package)
+- Check PATH includes npm global bin directory: `npm bin -g`
+- The `install.sh` script warns if `codex` is not found but does not block installation
+
+**API Key Not Working:**
+- Verify environment variable is set: `echo $OPENAI_API_KEY`
+- Ensure variable is exported in shell config (`~/.zshrc` or `~/.bashrc`)
+- Restart terminal or source config file: `source ~/.zshrc`
+- Test directly: `codex --model gpt-5.2-codex "test prompt"`
+
+**Model Selection Not Available:**
+- This is expected behavior - Codex always uses `gpt-5.2-codex`
+- Model selection is hardcoded in the TerminalService
+- Cannot be changed from GUI (by design)
+
+### E2E Test Issues
+
+**Tests hang or timeout:**
+- Ensure the app is built first: `npm run build -w gui`
+- Check if a previous Electron process is still running
+- Increase timeout in `playwright.config.ts` if needed
+
+**Cannot find electronAPI:**
+- The app may not have fully loaded
+- Check that `waitForAppReady()` is called in the test
+
+**Tests fail in CI but pass locally:**
+- CI uses macOS runner - check for platform-specific issues
+- Verify Playwright browsers are installed: `npx playwright install chromium`
+- Check E2E artifacts in GitHub Actions for screenshots and traces
+
+**Screenshot/trace not captured:**
+- Screenshots are only captured on failure
+- Check `gui/e2e-results/` directory after test run
 
 ## Git Workflow
 

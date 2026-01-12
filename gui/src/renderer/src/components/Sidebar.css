@@ -277,14 +277,6 @@
   transform: rotate(-90deg);
 }
 
-.super-minion-indicator {
-  font-size: 16px;
-  line-height: 1;
-  margin-right: 2px;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
 @keyframes pulse-waiting {
   0%, 100% {
     background: #3d3d1a;
@@ -299,6 +291,7 @@
   align-items: center;
   gap: 8px;
   flex: 1;
+  min-width: 0; /* Critical: allows flex children to shrink below content size */
 }
 
 .agent-leading-icons {
@@ -324,6 +317,12 @@
   font-weight: 500;
 }
 
+.agent-name-container {
+  flex: 1;
+  min-width: 0; /* Critical: allows text truncation to work */
+  overflow: hidden;
+}
+
 .agent-branch {
   font-size: 13px;
   font-family: 'Courier New', Courier, monospace;
@@ -332,8 +331,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0; /* Critical for text-overflow to work */
+}
+
+.agent-status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0; /* Critical: prevents indicators from being hidden */
+  margin-left: 8px;
 }
 
 .agent-item:hover .agent-branch {
@@ -710,6 +715,8 @@
 .sidebar.collapsed .project-name-sidebar,
 .sidebar.collapsed .agent-id,
 .sidebar.collapsed .agent-branch,
+.sidebar.collapsed .agent-name-container,
+.sidebar.collapsed .agent-status-indicators,
 .sidebar.collapsed .task-description,
 .sidebar.collapsed .dropdown-label,
 .sidebar.collapsed .projects-section,

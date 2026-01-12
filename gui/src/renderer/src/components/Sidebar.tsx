@@ -63,7 +63,18 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
-  const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(new Set())
+  const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('collapsedSuperMinions')
+    if (!saved) {
+      return new Set()
+    }
+    try {
+      return new Set(JSON.parse(saved))
+    } catch (e) {
+      return new Set()
+    }
+  })
+  const hasInitializedSuperMinionCollapse = useRef(localStorage.getItem('collapsedSuperMinions') !== null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [openSubmenuProject, setOpenSubmenuProject] = useState<string | null>(null)
   const [failedTeleportSessions, setFailedTeleportSessions] = useState<Map<string, TeleportFailure>>(new Map())
@@ -96,6 +107,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       const agentsByProj: AgentsByProject = {}
       const currentWaitingAgents = new Set<string>()
       const tasksByAg: TasksByAgent = {}
+      const superMinionIds: string[] = []
 
       for (const project of activeProjects) {
         try {
@@ -121,6 +133,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
             // Fetch task invocations for super minions
             if (agent.isSuperMinion) {
+              superMinionIds.push(agent.id)
               try {
                 const superDetails = await window.electronAPI.getSuperAgentDetails(agent.id)
                 if (superDetails?.taskInvocations) {
@@ -140,6 +153,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       setAgentsByProject(agentsByProj)
       setTasksByAgent(tasksByAg)
       setWaitingAgents(currentWaitingAgents)
+      if (!hasInitializedSuperMinionCollapse.current) {
+        setCollapsedSuperMinions(new Set(superMinionIds))
+        localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
+        hasInitializedSuperMinionCollapse.current = true
+      }
       console.log('[Sidebar] Loaded agents with current states:', {
         waiting: [...currentWaitingAgents]
       })
@@ -254,6 +272,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       } else {
         next.add(agentId)
       }
+      localStorage.setItem('collapsedSuperMinions', JSON.stringify([...next]))
       return next
     })
   }

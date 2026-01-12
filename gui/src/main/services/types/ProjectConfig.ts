@@ -51,6 +51,7 @@ export interface AgentInfo {
   }
   claudeCodeVersion?: string     // Version of Claude Code being used
   claudeState?: 'working' | 'waiting' | 'unknown'  // Current state from JSONL
+  waitingSince?: string          // ISO timestamp when agent started waiting (for auto-transition)
   modelHistory?: Array<{         // Track model changes during session
     model: string
     timestamp: string

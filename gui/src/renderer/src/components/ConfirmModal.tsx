@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import './ConfirmModal.css'
 
 interface ConfirmModalProps {
@@ -25,7 +26,7 @@ function ConfirmModal({
 }: ConfirmModalProps) {
   if (!isOpen) return null
 
-  return (
+  const modalContent = (
     <div className="modal-overlay" onClick={isLoading ? undefined : onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -45,6 +46,9 @@ function ConfirmModal({
       </div>
     </div>
   )
+
+  // Use portal to render at document body level for proper centering
+  return createPortal(modalContent, document.body)
 }
 
 export default ConfirmModal

@@ -612,10 +612,10 @@ describe('Super Minion System Prompt', () => {
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
   const ACCEPTANCE_CRITERIA_KEYWORDS = [
-    'acceptance criteria',
+    'ACCEPTANCE CRITERIA',
     'AskUserQuestion',
-    'BEFORE creating any implementation plan',
-    'WAIT for explicit approval'
+    'PHASE 1',
+    'WAIT for explicit'
   ]
 
   // Helper to get the command written to PTY
@@ -704,15 +704,154 @@ describe('Super Minion System Prompt', () => {
     await startAgent(TEST_PROMPT, 'agent-2')
 
     const command = getWrittenCommand()
-    expect(command).not.toContain('BEFORE creating any implementation plan')
-    expect(command).not.toContain('acceptance criteria')
+    expect(command).not.toContain('5-PHASE WORKFLOW')
+    expect(command).not.toContain('ACCEPTANCE CRITERIA')
   })
 
-  it('should include instruction to reference criteria throughout execution', async () => {
+  it('should include 5-phase workflow with mandatory design and review phases', async () => {
     await startAgent('Build feature Y')
 
     const command = getWrittenCommand()
-    expect(command).toContain('Reference your acceptance criteria throughout execution')
+    expect(command).toContain('PHASE 2 - ENGINEERING DESIGN')
+    expect(command).toContain('PHASE 3 - DESIGN REVIEW')
+    expect(command).toContain('MANDATORY')
+    expect(command).toContain('NEVER skip')
+  })
+})
+
+describe('TerminalService Codex CLI', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+
+  beforeEach(() => {
+    // Setup Mock Window & WebContents
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    // Setup Mock PTY
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('spawns codex CLI with correct command', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev',
+      'Fix the authentication bug'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('codex')
+  })
+
+  it('hardcodes model to gpt-5.2-codex for codex', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev',
+      'Implement the new feature'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('--model')
+    expect(command).toContain('gpt-5.2-codex')
+  })
+
+  it('passes prompt to codex CLI', async () => {
+    const prompt = 'Refactor the database module'
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev',
+      prompt
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain(prompt)
+  })
+
+  it('escapes quotes in prompt for codex', async () => {
+    const prompt = 'Fix "critical" bug in the API'
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev',
+      prompt
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    // Should escape the inner quotes
+    expect(command).toContain('\\"critical\\"')
+  })
+
+  it('handles planning mode with codex', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'planning',
+      'Create a plan for the new feature'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('codex')
+    expect(command).toContain('--model')
+    expect(command).toContain('gpt-5.2-codex')
+    expect(command).toContain('Create a plan for')
+  })
+
+  it('works without a prompt', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev'
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    expect(command).toContain('codex')
+    expect(command).toContain('--model')
+    expect(command).toContain('gpt-5.2-codex')
+  })
+
+  it('ignores model parameter when passed to codex (always uses gpt-5.2-codex)', async () => {
+    await terminalService.startAgent(
+      '/path/to/worktree',
+      'agent-1',
+      'codex',
+      'dev',
+      'Fix the bug',
+      'opus' // This should be ignored
+    )
+
+    const command = mockPty.write.mock.calls[0][0]
+    // Should still use gpt-5.2-codex, not opus
+    expect(command).toContain('gpt-5.2-codex')
+    expect(command).not.toContain('opus')
   })
 })
 

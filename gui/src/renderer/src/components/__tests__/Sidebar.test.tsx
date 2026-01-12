@@ -164,10 +164,11 @@ describe('Sidebar Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.removeItem('collapsedSuperMinions')
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
   })
 
-  it('renders super minion and its child', async () => {
+  it('collapses super minion children by default on first load', async () => {
     render(
       <MemoryRouter>
         <Sidebar
@@ -186,8 +187,8 @@ describe('Sidebar Integration', () => {
       expect(screen.getByText('super-1')).toBeInTheDocument()
     })
 
-    // Child should also be visible by default (since not collapsed)
-    expect(screen.getByText('child-1')).toBeInTheDocument()
+    // Child should be hidden by default on first load
+    expect(screen.queryByText('child-1')).not.toBeInTheDocument()
 
     // Super minion should have the leading icons container with crown
     const superItem = screen.getByText('super-1').closest('.agent-item')
@@ -196,7 +197,7 @@ describe('Sidebar Integration', () => {
     expect(leadingIcons).toContainHTML('👑')
   })
 
-  it('collapses children when super minion toggle is clicked', async () => {
+  it('toggles children when super minion chevron is clicked', async () => {
     render(
       <MemoryRouter>
         <Sidebar
@@ -214,10 +215,14 @@ describe('Sidebar Integration', () => {
       expect(screen.getByText('super-1')).toBeInTheDocument()
     })
 
-    const superItem = screen.getByText('super-1').closest('.agent-item')!
-    fireEvent.click(superItem)
+    const chevron = screen.getByTitle('Toggle child agents')
+    fireEvent.click(chevron)
 
-    // Child should be gone
+    expect(screen.getByText('child-1')).toBeInTheDocument()
+
+    fireEvent.click(chevron)
+
+    // Child should be gone again
     expect(screen.queryByText('child-1')).not.toBeInTheDocument()
   })
 })
@@ -332,9 +337,9 @@ describe('Sidebar plain terminal waiting', () => {
   })
 
   it('shows badge if either agent or plain terminal is waiting', async () => {
-    let agentWaitingCallback: ((agentId: string, promptText: string) => void) | null = null
-    vi.mocked(window.electronAPI.onAgentWaitingForInput).mockImplementation((callback) => {
-      agentWaitingCallback = callback
+    let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
+    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
+      agentStateCallback = callback
       return vi.fn()
     })
 
@@ -355,9 +360,9 @@ describe('Sidebar plain terminal waiting', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent waiting (not plain terminal)
-    expect(agentWaitingCallback).toBeTruthy()
-    agentWaitingCallback!('agent-1', 'Claude is waiting')
+    // Trigger agent waiting via state change (not plain terminal)
+    // At this point, agentStateCallback has been assigned during render
+    agentStateCallback!('agent-1', 'waiting')
 
     // Should show badge
     await waitFor(() => {
@@ -400,14 +405,14 @@ describe('Sidebar waiting indicator suppression', () => {
     }
   ]
 
-  let agentWaitingCallback: ((agentId: string, promptText: string) => void) | null = null
+  let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
 
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
-    vi.mocked(window.electronAPI.onAgentWaitingForInput).mockImplementation((callback) => {
-      agentWaitingCallback = callback
+    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
+      agentStateCallback = callback
       return vi.fn()
     })
   })
@@ -431,8 +436,8 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent-1 waiting
-    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
+    // Trigger agent-1 waiting via state change
+    agentStateCallback?.('agent-1', 'waiting')
 
     // Should show badge for agent-1 (we're viewing agent-2)
     await waitFor(() => {
@@ -460,8 +465,8 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent-1 waiting
-    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
+    // Trigger agent-1 waiting via state change
+    agentStateCallback?.('agent-1', 'waiting')
 
     // Should NOT show badge for agent-1 (we're viewing it)
     await waitFor(() => {
@@ -495,9 +500,9 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-2')).toBeInTheDocument()
     })
 
-    // Trigger both agents waiting
-    agentWaitingCallback && agentWaitingCallback('agent-1', 'Claude is waiting')
-    agentWaitingCallback && agentWaitingCallback('agent-2', 'Claude is waiting')
+    // Trigger both agents waiting via state change
+    agentStateCallback?.('agent-1', 'waiting')
+    agentStateCallback?.('agent-2', 'waiting')
 
     // Badge should show for agent-1 (not viewing it)
     // Badge should NOT show for agent-2 (viewing it)
@@ -554,8 +559,11 @@ describe('Sidebar branch name display', () => {
       </MemoryRouter>
     )
 
-    // Should display only the descriptive part as the agent identifier
-    expect(screen.getByText('add-dark-mode')).toBeInTheDocument()
+    // Wait for async agent loading
+    await waitFor(() => {
+      // Should display only the descriptive part as the agent identifier
+      expect(screen.getByText('add-dark-mode')).toBeInTheDocument()
+    })
 
     // Should NOT display the agent ID when branch is available
     expect(screen.queryByText('agent-1')).not.toBeInTheDocument()
@@ -591,12 +599,13 @@ describe('Sidebar branch name display', () => {
       </MemoryRouter>
     )
 
+    // When branch format doesn't match (less than 3 parts), display the full branch
     await waitFor(() => {
-      expect(screen.getByText('agent-1')).toBeInTheDocument()
+      expect(screen.getByText('main')).toBeInTheDocument()
     })
 
-    // Should display the full branch name as fallback
-    expect(screen.getByText('main')).toBeInTheDocument()
+    // Agent ID should NOT be displayed when branch is available
+    expect(screen.queryByText('agent-1')).not.toBeInTheDocument()
   })
 
   it('displays agent ID as fallback when branch field is missing', async () => {
@@ -704,12 +713,13 @@ describe('Sidebar branch name display', () => {
       </MemoryRouter>
     )
 
+    // Should display the nested path after feature/project-id
     await waitFor(() => {
-      expect(screen.getByText('agent-1')).toBeInTheDocument()
+      expect(screen.getByText('ui/button-improvements')).toBeInTheDocument()
     })
 
-    // Should display the nested path after project ID
-    expect(screen.getByText('ui/button-improvements')).toBeInTheDocument()
+    // Agent ID should NOT be displayed when branch is available
+    expect(screen.queryByText('agent-1')).not.toBeInTheDocument()
   })
 
   it('shows full branch path in title attribute on hover', async () => {
@@ -740,7 +750,7 @@ describe('Sidebar branch name display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('agent-1')).toBeInTheDocument()
+      expect(screen.getByText('add-dark-mode')).toBeInTheDocument()
     })
 
     const branchElement = screen.getByText('add-dark-mode')
@@ -775,15 +785,17 @@ describe('Sidebar branch name display', () => {
       </MemoryRouter>
     )
 
+    // Super minions with a branch should display the branch name, not the agent ID
     await waitFor(() => {
-      expect(screen.getByText('super-1')).toBeInTheDocument()
+      expect(screen.getByText('super-task')).toBeInTheDocument()
     })
 
-    // Super minions should show branch name
-    expect(screen.getByText('super-task')).toBeInTheDocument()
+    // Agent ID should NOT be displayed when branch is available
+    expect(screen.queryByText('super-1')).not.toBeInTheDocument()
   })
 
   it('truncates very long branch names with ellipsis', async () => {
+    const longBranchPart = 'this-is-a-very-long-branch-name-that-should-be-truncated-with-ellipsis'
     const mockAgents = [
       {
         id: 'agent-1',
@@ -791,7 +803,70 @@ describe('Sidebar branch name display', () => {
         terminalPid: 123,
         hasUnread: false,
         lastActivity: new Date().toISOString(),
-        branch: 'feature/test-project/this-is-a-very-long-branch-name-that-should-be-truncated-with-ellipsis'
+        branch: `feature/test-project/${longBranchPart}`
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    // Wait for the branch name to be displayed
+    await waitFor(() => {
+      expect(screen.getByText(longBranchPart)).toBeInTheDocument()
+    })
+
+    const branchElement = container.querySelector('.agent-branch')!
+    expect(branchElement).toBeInTheDocument()
+
+    // Verify the branch element has the correct CSS class which applies truncation styles
+    expect(branchElement).toHaveClass('agent-branch')
+
+    // Verify it's inside the name container that enables truncation
+    const nameContainer = container.querySelector('.agent-name-container')
+    expect(nameContainer).toBeInTheDocument()
+    expect(nameContainer?.contains(branchElement)).toBe(true)
+  })
+})
+
+describe('Sidebar long branch name with status indicators', () => {
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
+      agentStateCallback = callback
+      return vi.fn()
+    })
+  })
+
+  it('keeps status indicators visible with very long branch names', async () => {
+    const veryLongBranchPart = 'this-is-an-extremely-long-branch-name-that-would-definitely-overflow-the-sidebar-width-and-push-indicators-out-of-view'
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        tool: 'claude',
+        lastActivity: new Date().toISOString(),
+        branch: `feature/test-project/${veryLongBranchPart}`
       }
     ]
 
@@ -811,17 +886,176 @@ describe('Sidebar branch name display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('agent-1')).toBeInTheDocument()
+      const branchElement = container.querySelector('.agent-branch')
+      expect(branchElement).toBeInTheDocument()
     })
 
-    const branchElement = container.querySelector('.agent-branch')!
-    expect(branchElement).toBeInTheDocument()
+    // Trigger waiting state
+    agentStateCallback?.('agent-1', 'waiting')
 
-    // Check that text-overflow: ellipsis style is applied
-    const styles = window.getComputedStyle(branchElement)
-    expect(styles.textOverflow).toBe('ellipsis')
-    expect(styles.overflow).toBe('hidden')
-    expect(styles.whiteSpace).toBe('nowrap')
+    await waitFor(() => {
+      // The attention badge should be in its own container that cannot be pushed out
+      const statusContainer = container.querySelector('.agent-status-indicators')
+      expect(statusContainer).toBeInTheDocument()
+
+      const attentionBadge = statusContainer?.querySelector('.attention-badge')
+      expect(attentionBadge).toBeInTheDocument()
+    })
+
+    // Verify the layout structure: status-indicators is a sibling of agent-info, not inside it
+    const agentItem = container.querySelector('.agent-item')!
+    const agentInfo = agentItem.querySelector('.agent-info')!
+    const statusIndicators = agentItem.querySelector('.agent-status-indicators')!
+
+    // Both should be direct children of agent-item
+    expect(agentInfo.parentElement).toBe(agentItem)
+    expect(statusIndicators.parentElement).toBe(agentItem)
+
+    // status-indicators should NOT be inside agent-info (this ensures it won't be pushed out)
+    expect(agentInfo.contains(statusIndicators)).toBe(false)
+
+    // Verify the DOM structure has the name container for truncation
+    const nameContainer = agentInfo.querySelector('.agent-name-container')
+    expect(nameContainer).toBeInTheDocument()
+  })
+
+  it('keeps spinner visible with very long branch names', async () => {
+    const veryLongBranchName = 'feature/test-project/another-extremely-long-branch-name-for-testing-spinner-visibility'
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: false,
+        tool: 'claude',
+        lastActivity: new Date().toISOString(),
+        branch: veryLongBranchName
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const branchElement = container.querySelector('.agent-branch')
+      expect(branchElement).toBeInTheDocument()
+    })
+
+    // Spinner should be visible (agent has terminalPid and is not waiting)
+    const statusContainer = container.querySelector('.agent-status-indicators')
+    expect(statusContainer).toBeInTheDocument()
+
+    const spinner = statusContainer?.querySelector('.agent-spinner')
+    expect(spinner).toBeInTheDocument()
+  })
+
+  it('keeps unread badge visible with very long branch names', async () => {
+    const veryLongBranchName = 'feature/test-project/yet-another-extremely-long-branch-name-for-testing-unread-badge-visibility'
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: null, // No terminal, so no spinner
+        hasUnread: true,
+        lastActivity: new Date().toISOString(),
+        branch: veryLongBranchName
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const branchElement = container.querySelector('.agent-branch')
+      expect(branchElement).toBeInTheDocument()
+    })
+
+    // Unread badge should be visible in the status container
+    const statusContainer = container.querySelector('.agent-status-indicators')
+    expect(statusContainer).toBeInTheDocument()
+
+    const unreadBadge = statusContainer?.querySelector('.unread-badge')
+    expect(unreadBadge).toBeInTheDocument()
+  })
+
+  it('has correct DOM structure with agent-name-container', async () => {
+    const mockAgents = [
+      {
+        id: 'agent-1',
+        agentId: 'agent-1',
+        terminalPid: 123,
+        hasUnread: true,
+        tool: 'claude',
+        lastActivity: new Date().toISOString(),
+        branch: 'feature/test-project/some-branch'
+      }
+    ]
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
+
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const agentItem = container.querySelector('.agent-item')
+      expect(agentItem).toBeInTheDocument()
+    })
+
+    const agentItem = container.querySelector('.agent-item')!
+
+    // Verify new DOM structure
+    const agentInfo = agentItem.querySelector('.agent-info')
+    expect(agentInfo).toBeInTheDocument()
+
+    // agent-info should contain: leading-icons + name-container
+    const leadingIcons = agentInfo?.querySelector('.agent-leading-icons')
+    expect(leadingIcons).toBeInTheDocument()
+
+    const nameContainer = agentInfo?.querySelector('.agent-name-container')
+    expect(nameContainer).toBeInTheDocument()
+
+    // branch should be inside name-container
+    const branch = nameContainer?.querySelector('.agent-branch')
+    expect(branch).toBeInTheDocument()
+
+    // status-indicators should be a sibling of agent-info, not inside it
+    const statusIndicators = agentItem.querySelector('.agent-status-indicators')
+    expect(statusIndicators).toBeInTheDocument()
+    expect(agentInfo?.contains(statusIndicators)).toBe(false)
   })
 })
 
@@ -870,14 +1104,15 @@ describe('Sidebar icon alignment', () => {
       </MemoryRouter>
     )
 
+    // When agents have branches, the branch name is displayed instead of agent ID
     await waitFor(() => {
-      expect(screen.getByText('super-1')).toBeInTheDocument()
-      expect(screen.getByText('normal-1')).toBeInTheDocument()
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+      expect(screen.getByText('normal-task')).toBeInTheDocument()
     })
 
     // Both should have .agent-leading-icons container
-    const superItem = screen.getByText('super-1').closest('.agent-item')
-    const normalItem = screen.getByText('normal-1').closest('.agent-item')
+    const superItem = screen.getByText('super-task').closest('.agent-item')
+    const normalItem = screen.getByText('normal-task').closest('.agent-item')
 
     const superLeading = superItem?.querySelector('.agent-leading-icons')
     const normalLeading = normalItem?.querySelector('.agent-leading-icons')
@@ -969,6 +1204,7 @@ describe('Sidebar icon alignment', () => {
   })
 
   it('should render correct icon for each agent type', async () => {
+    // Using agents without branches so agent ID is displayed
     const mockAgents = [
       {
         id: 'super-1',
@@ -977,6 +1213,7 @@ describe('Sidebar icon alignment', () => {
         terminalPid: 123,
         hasUnread: false,
         lastActivity: new Date().toISOString()
+        // No branch - will display agent ID
       },
       {
         id: 'base-1',
@@ -986,6 +1223,7 @@ describe('Sidebar icon alignment', () => {
         terminalPid: 456,
         hasUnread: false,
         lastActivity: new Date().toISOString()
+        // Base branch agents always show "(Base)" label
       },
       {
         id: 'normal-1',
@@ -993,6 +1231,7 @@ describe('Sidebar icon alignment', () => {
         terminalPid: 789,
         hasUnread: false,
         lastActivity: new Date().toISOString()
+        // No branch - will display agent ID
       }
     ]
 
@@ -1033,4 +1272,3 @@ describe('Sidebar icon alignment', () => {
     expect(normalIcon?.textContent).toBe('🍌')
   })
 })
-

@@ -27,6 +27,15 @@ gui/*.log
 gui/coverage/
 *.tsbuildinfo
 
+# E2E Tests
+gui/e2e-results/
+gui/e2e-report/
+gui/e2e-results.json
+gui/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # TypeScript build artifacts (in-source emissions from IDE/tsc)
 # electron-vite handles actual builds, these are accidental emissions
 gui/electron.vite.config.js

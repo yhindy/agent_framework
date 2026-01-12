@@ -161,9 +161,10 @@ describe('Session Persistence', () => {
   })
 
   describe('Session Resume', () => {
-    it('uses --resume flag for existing active sessions', async () => {
+    it('uses --resume flag with stored session ID for existing active sessions', async () => {
+      const storedSessionId = 'stored-session-uuid-12345'
       const agentInfo = {
-        claudeSessionId: 'some-session-uuid',
+        claudeSessionId: storedSessionId,
         claudeSessionActive: true
       }
 
@@ -176,6 +177,8 @@ describe('Session Persistence', () => {
       const command = mockPty.write.mock.calls[0][0]
       expect(command).toContain('--resume')
       expect(command).not.toContain('--session-id')
+      // Verify the STORED session ID is used (not a freshly generated one)
+      expect(command).toContain(storedSessionId)
     })
 
     it('uses --session-id flag for new sessions', async () => {
