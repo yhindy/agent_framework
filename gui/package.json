@@ -15,7 +15,11 @@
     "test:changed": "vitest --changed",
     "test:related": "vitest related",
     "test:watch": "vitest --changed --watch",
-    "test:memory": "NODE_OPTIONS='--max-old-space-size=2048' vitest"
+    "test:memory": "NODE_OPTIONS='--max-old-space-size=2048' vitest",
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:headed": "playwright test --config=playwright.config.ts --headed",
+    "test:e2e:debug": "playwright test --config=playwright.config.ts --debug",
+    "test:e2e:report": "playwright show-report e2e-report"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",
