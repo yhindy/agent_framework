@@ -56,6 +56,9 @@ declare const api: {
     onAgentResumedWork: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
     getClaudeSessionInfo: (agentId: string) => Promise<any>;
     onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
+    getSettings: () => Promise<import('../shared/types/settings').AppSettings>;
+    updateSettings: (updates: Partial<import('../shared/types/settings').AppSettings>) => Promise<import('../shared/types/settings').AppSettings>;
+    openFeedback: () => Promise<void>;
     getTestEnvConfig: (agentId?: string) => Promise<any>;
     getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any>;
     startTestEnv: (agentId: string, commandId?: string) => Promise<any>;

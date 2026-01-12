@@ -134,6 +134,11 @@ const api = {
     return () => ipcRenderer.removeListener('claude:sessionInfoUpdated', subscription)
   },
 
+  // Settings APIs
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  updateSettings: (updates: any) => ipcRenderer.invoke('settings:update', updates),
+  openFeedback: () => ipcRenderer.invoke('settings:openFeedback'),
+
   // Test Environment APIs
   getTestEnvConfig: (agentId?: string) => ipcRenderer.invoke('testEnv:getConfig', agentId),
   getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => 

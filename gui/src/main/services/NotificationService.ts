@@ -1,4 +1,5 @@
 import { Notification, BrowserWindow } from 'electron'
+import { SettingsService } from './SettingsService'
 
 export interface NotificationOptions {
   title: string
@@ -6,16 +7,21 @@ export interface NotificationOptions {
   agentId?: string
 }
 
-const COOLDOWN_MS = 30000 // 30 seconds between notifications for the same agent
-
 export class NotificationService {
   private cooldowns: Map<string, number> = new Map()
   private windowFocused: boolean = true
   private mainWindow: BrowserWindow | null = null
+  private settingsService: SettingsService
 
-  constructor(mainWindow: BrowserWindow) {
+  constructor(mainWindow: BrowserWindow, settingsService: SettingsService) {
     this.mainWindow = mainWindow
+    this.settingsService = settingsService
     this.windowFocused = mainWindow.isFocused()
+  }
+
+  private getCooldownMs(): number {
+    const settings = this.settingsService.getSettings()
+    return settings.notifications.cooldownSeconds * 1000
   }
 
   setWindow(mainWindow: BrowserWindow): void {
@@ -33,6 +39,12 @@ export class NotificationService {
 
   notify(options: NotificationOptions): boolean {
     const { title, body, agentId } = options
+
+    // Check if notifications are enabled in settings
+    const settings = this.settingsService.getSettings()
+    if (!settings.notifications.enabled) {
+      return false
+    }
 
     // Only notify when window is unfocused
     if (this.windowFocused) {
@@ -89,7 +101,7 @@ export class NotificationService {
     }
 
     const timeSinceLastNotification = Date.now() - lastNotified
-    return timeSinceLastNotification >= COOLDOWN_MS
+    return timeSinceLastNotification >= this.getCooldownMs()
   }
 
   /**

@@ -7,6 +7,7 @@ import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+import { SettingsService } from './services/SettingsService'
 import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
@@ -22,6 +23,7 @@ let services: {
   terminal: TerminalService
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
+  settings: SettingsService
   notification: NotificationService
   prPolling: PRPollingService
   claudeSessionInfo: ClaudeSessionInfoService
@@ -93,7 +95,8 @@ function initializeServices(): void {
 
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
-  const notificationService = new NotificationService(mainWindow)
+  const settingsService = new SettingsService()
+  const notificationService = new NotificationService(mainWindow, settingsService)
   const claudeSessionInfoService = new ClaudeSessionInfoService()
   const terminalService = new TerminalService(mainWindow, notificationService)
 
@@ -110,6 +113,7 @@ function initializeServices(): void {
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
+    settings: settingsService,
     notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService),
     claudeSessionInfo: claudeSessionInfoService,
@@ -877,6 +881,21 @@ function setupIPC(): void {
 
   ipcMain.on('testEnv:resize', (_event, agentId: string, commandId: string, cols: number, rows: number) => {
     services!.testEnv.resize(agentId, commandId, cols, rows)
+  })
+
+  // Settings handlers
+  ipcMain.handle('settings:get', async () => {
+    return services!.settings.getSettings()
+  })
+
+  ipcMain.handle('settings:update', async (_event, updates: Partial<import('../shared/types/settings').AppSettings>) => {
+    return services!.settings.updateSettings(updates)
+  })
+
+  ipcMain.handle('settings:openFeedback', async () => {
+    const { shell } = require('electron')
+    const feedbackUrl = 'https://github.com/yhindy/agent_framework/issues/new'
+    await shell.openExternal(feedbackUrl)
   })
 
   // Claude Session Info APIs
