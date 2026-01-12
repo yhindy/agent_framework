@@ -238,8 +238,9 @@ export class TerminalService {
             args.push('--chrome')
           }
         } else if (isResume) {
-          // Resume existing session - preserve original flags
-          args = ['--resume', sessionId]
+          // Resume existing session - use stored session ID (not freshly generated)
+          // This is critical for teleported sessions where claudeSessionId differs from generated UUID
+          args = ['--resume', agentInfo!.claudeSessionId!]
 
           // Preserve model
           if (model) args.push('--model', model)
