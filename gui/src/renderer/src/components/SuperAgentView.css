@@ -82,11 +82,11 @@
 }
 
 .agent-actions .compact-button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
 }
 
 .agent-actions .compact-button.primary:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .agent-actions .compact-button.danger {
@@ -206,7 +206,7 @@
 
 .unified-tab.active {
   background: #1e1e1e;
-  border-bottom: 2px solid #0e639c;
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 .unified-tab .tab-icon {
@@ -256,7 +256,7 @@
 }
 
 .unified-tab .tab-action.start {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -423,7 +423,7 @@
 
 .agent-view-error button {
   padding: 8px 16px;
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -544,7 +544,7 @@
 }
 
 .form-actions button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
 }
 

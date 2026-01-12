@@ -13,9 +13,23 @@
 }
 
 .dashboard-header h1 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-black);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--text-primary);
+  position: relative;
+  display: inline-block;
+}
+
+.dashboard-header h1::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -8px;
+  width: 48px;
+  height: 4px;
+  background: var(--accent-primary);
+  border-radius: 2px;
 }
 
 .header-actions {
@@ -28,7 +42,7 @@
 }
 
 .new-mission-btn {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: white;
   padding: 8px 16px;
   border: none;
@@ -40,7 +54,7 @@
 }
 
 .new-mission-btn:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .mission-dropdown-menu {
@@ -125,6 +139,14 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.column[data-status="in_progress"] {
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 20px var(--accent-primary-dim);
 }
 
 .column-header {
@@ -163,6 +185,30 @@
   border-radius: 6px;
   padding: 12px;
   transition: all 0.2s;
+  border-left: 3px solid var(--text-muted);
+}
+
+/* Status-based left border colors */
+.assignment-card[data-status="pending"] {
+  border-left-color: var(--status-pending);
+}
+.assignment-card[data-status="in_progress"] {
+  border-left-color: var(--status-in-progress);
+}
+.assignment-card[data-status="review"] {
+  border-left-color: var(--status-review);
+}
+.assignment-card[data-status="completed"] {
+  border-left-color: var(--status-completed);
+}
+.assignment-card[data-status="pr_open"] {
+  border-left-color: var(--status-pr-open);
+}
+.assignment-card[data-status="merged"] {
+  border-left-color: var(--status-merged);
+}
+.assignment-card[data-status="blocked"] {
+  border-left-color: var(--status-blocked);
 }
 
 .assignment-card.clickable {
@@ -170,8 +216,8 @@
 }
 
 .assignment-card:hover {
-  border-color: #0e639c;
-  box-shadow: 0 2px 8px rgba(14, 99, 156, 0.2);
+  border-color: var(--accent-primary);
+  box-shadow: 0 2px 8px var(--accent-primary-dim);
   transform: translateY(-1px);
 }
 
@@ -201,6 +247,59 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+}
+
+/* Status indicator - pill shaped with text */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.status-indicator[data-status="pending"] {
+  background: rgba(96, 96, 104, 0.2);
+  color: var(--text-muted);
+}
+.status-indicator[data-status="in_progress"] {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
+.status-indicator[data-status="review"] {
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+}
+.status-indicator[data-status="completed"] {
+  background: var(--color-success-dim);
+  color: var(--color-success);
+}
+.status-indicator[data-status="pr_open"] {
+  background: var(--color-purple-dim);
+  color: var(--color-purple);
+}
+.status-indicator[data-status="merged"] {
+  background: var(--color-info-dim);
+  color: var(--color-info);
+}
+
+.status-indicator .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-indicator[data-status="in_progress"] .status-dot {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-text {
+  white-space: nowrap;
 }
 
 .card-title {
@@ -239,20 +338,39 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal-backdrop);
+  animation: fadeIn var(--transition-fast) ease-out;
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(8px)) {
+  .modal-overlay {
+    background: rgba(0, 0, 0, 0.85);
+  }
 }
 
 .modal-content {
-  background: #252526;
-  border: 1px solid #3e3e42;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   max-width: 500px;
   width: 90%;
+  box-shadow: var(--shadow-xl);
+  animation: springIn var(--transition-spring) ease-out;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .modal-content {
+    animation: fadeIn var(--transition-fast) ease-out;
+  }
 }
 
 .modal-content h2 {
@@ -267,9 +385,12 @@
 
 .form-group label {
   display: block;
-  font-size: 13px;
-  color: #d4d4d4;
-  margin-bottom: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
 }
 
 .form-group input,
@@ -289,7 +410,7 @@
 }
 
 .branch-input-wrapper:focus-within {
-  border-color: #0e639c;
+  border-color: var(--accent-primary);
 }
 
 .branch-prefix {
@@ -373,7 +494,7 @@
 .merge-button {
   width: 100%;
   padding: 8px 12px;
-  background: #0e639c;
+  background: var(--accent-primary);
   color: #ffffff;
   border: none;
   border-radius: 4px;
@@ -384,7 +505,7 @@
 }
 
 .merge-button:hover:not(:disabled) {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .merge-button:disabled {
@@ -421,12 +542,12 @@
 }
 
 .form-actions button.primary {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: #ffffff;
 }
 
 .form-actions button.primary:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 /* Checkbox styles */
@@ -547,7 +668,7 @@
 }
 
 .type-card:hover {
-  border-color: #0e639c;
+  border-color: var(--accent-primary);
   background: #323235;
   transform: translateY(-2px);
 }
@@ -643,15 +764,15 @@
 }
 
 .workflow-option.selected {
-  background: rgba(14, 99, 156, 0.1);
-  border-color: #0e639c;
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
 }
 
 .workflow-option input[type="radio"] {
   width: 16px !important;
   height: 16px;
   min-width: 16px;
-  accent-color: #0e639c;
+  accent-color: var(--accent-primary);
   cursor: pointer;
   flex-shrink: 0;
   margin: 0;
@@ -713,13 +834,13 @@
 }
 
 .action-button--primary {
-  background: #0e639c;
+  background: var(--accent-primary);
   color: #fff;
   width: 100%;
 }
 
 .action-button--primary:hover:not(:disabled) {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
 }
 
 .action-button--secondary {

@@ -47,7 +47,7 @@
   top: 0;
   left: 0;
   bottom: 0;
-  background: #0e639c;
+  background: var(--accent-primary);
   width: 30%;
   animation: snackbar-progress-indeterminate 1.5s infinite ease-in-out;
 }

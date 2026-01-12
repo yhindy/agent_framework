@@ -1,0 +1,146 @@
+:root {
+  /* SPACING SCALE */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* TYPOGRAPHY SCALE */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-base: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+  --font-size-3xl: 48px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.02em;
+  --letter-spacing-wider: 0.05em;
+  --letter-spacing-button: 0.03em;
+
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* COLORS - BACKGROUND */
+  --bg-void: #0a0a0b;
+  --bg-base: #121214;
+  --bg-surface: #1a1a1e;
+  --bg-elevated: #232328;
+  --bg-overlay: #2d2d33;
+  --bg-muted: #3e3e44;
+
+  /* COLORS - ACCENT (Teal Brand) */
+  --accent-primary: #00d9b5;
+  --accent-primary-hover: #00edc5;
+  --accent-primary-dim: rgba(0, 217, 181, 0.15);
+  --accent-primary-glow: rgba(0, 217, 181, 0.4);
+
+  /* COLORS - SEMANTIC */
+  --color-success: #00c853;
+  --color-success-dim: rgba(0, 200, 83, 0.15);
+  --color-warning: #ffab00;
+  --color-warning-dim: rgba(255, 171, 0, 0.15);
+  --color-error: #ff5252;
+  --color-error-dim: rgba(255, 82, 82, 0.15);
+  --color-info: #448aff;
+  --color-info-dim: rgba(68, 138, 255, 0.15);
+  --color-purple: #b388ff;
+  --color-purple-dim: rgba(179, 136, 255, 0.15);
+
+  /* COLORS - TEXT */
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a8;
+  --text-muted: #606068;
+  --text-disabled: #404044;
+  --text-inverse: #0a0a0b;
+
+  /* COLORS - BORDERS */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-accent: var(--accent-primary);
+
+  /* SHADOWS */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 24px var(--accent-primary-glow);
+  --shadow-glow-sm: 0 0 12px var(--accent-primary-glow);
+
+  /* BORDER RADIUS */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* TRANSITIONS */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
+  --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Z-INDEX SCALE */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+
+  /* STATUS COLORS */
+  --status-pending: var(--text-muted);
+  --status-in-progress: var(--accent-primary);
+  --status-review: var(--color-warning);
+  --status-completed: var(--color-success);
+  --status-pr-open: var(--color-purple);
+  --status-merged: var(--color-info);
+  --status-blocked: var(--color-error);
+}
+
+/* KEYFRAME ANIMATIONS */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes springIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  50% {
+    transform: scale(1.02) translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px var(--accent-primary-glow);
+  }
+  50% {
+    box-shadow: 0 0 16px var(--accent-primary-glow);
+  }
+}
