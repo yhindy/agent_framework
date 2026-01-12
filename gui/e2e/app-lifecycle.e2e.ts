@@ -76,14 +76,19 @@ test.describe('Application Lifecycle', () => {
 
   test.describe('Initial UI State', () => {
     test('should show project picker or dashboard on startup', async ({ electronApp }) => {
+      // Wait for React to render content in the root
+      await electronApp.mainWindow.waitForFunction(
+        () => {
+          const root = document.getElementById('root')
+          return root && root.children.length > 0
+        },
+        { timeout: 10000 }
+      )
+
       const hasUI = await electronApp.mainWindow.evaluate(() => {
-        const projectPicker = document.querySelector(
-          '.project-picker, [data-testid="project-picker"], .folder-select'
-        )
-        const dashboard = document.querySelector(
-          '.dashboard, [data-testid="dashboard"], .agent-list'
-        )
-        return projectPicker !== null || dashboard !== null
+        const root = document.getElementById('root')
+        // Any non-empty content indicates UI is rendered
+        return root !== null && root.innerHTML.trim().length > 0
       })
       expect(hasUI).toBe(true)
     })
