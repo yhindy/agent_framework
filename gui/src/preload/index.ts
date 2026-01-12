@@ -26,6 +26,8 @@ const api = {
   teardownAgent: (agentId: string, force: boolean) => ipcRenderer.invoke('agents:teardown', agentId, force),
   unassignAgent: (agentId: string) => ipcRenderer.invoke('agents:unassign', agentId),
   saveUIState: (agentId: string, uiState: any) => ipcRenderer.invoke('agents:saveUIState', agentId, uiState),
+  retryResumeAgent: (agentId: string) => ipcRenderer.invoke('agents:retry-resume', agentId),
+  startFreshSession: (agentId: string) => ipcRenderer.invoke('agents:start-fresh', agentId),
 
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>
@@ -177,6 +179,23 @@ const api = {
       callback(agentId, commandId, exitCode)
     ipcRenderer.on('testEnv:exited', subscription)
     return () => ipcRenderer.removeListener('testEnv:exited', subscription)
+  },
+
+  // Teleport Validation APIs
+  validateTeleport: (agentId: string) => ipcRenderer.invoke('agents:validateTeleport', agentId),
+
+  onTeleportValidationFailed: (callback: (data: { agentId: string; reason: string; canRetry: boolean }) => void) => {
+    const subscription = (_event: any, data: { agentId: string; reason: string; canRetry: boolean }) =>
+      callback(data)
+    ipcRenderer.on('agent:teleportValidationFailed', subscription)
+    return () => ipcRenderer.removeListener('agent:teleportValidationFailed', subscription)
+  },
+
+  onTeleportResumeFailed: (callback: (data: { agentId: string; reason: string }) => void) => {
+    const subscription = (_event: any, data: { agentId: string; reason: string }) =>
+      callback(data)
+    ipcRenderer.on('agent:resumeFailed', subscription)
+    return () => ipcRenderer.removeListener('agent:resumeFailed', subscription)
   }
 }
 

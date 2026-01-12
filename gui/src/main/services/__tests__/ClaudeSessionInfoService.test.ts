@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
-import { readFileSync, existsSync, watch } from 'fs'
+import { readFileSync, existsSync, watch, statSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
@@ -732,6 +732,73 @@ not valid json
       const result = service.parseSessionInfo('test', '/Users/test/project')
 
       expect(result!.taskInvocations[0].resultSummary).toHaveLength(500)
+    })
+  })
+
+  describe('extractGitBranch', () => {
+    it('extracts gitBranch from JSONL file', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: 100 } as any)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","gitBranch":"feature/my-branch","sessionId":"test-session","timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5"}}
+      `.trim())
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBe('feature/my-branch')
+    })
+
+    it('strips refs/heads/ prefix from gitBranch', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: 100 } as any)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","gitBranch":"refs/heads/feature/my-branch","sessionId":"test-session"}
+      `.trim())
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBe('feature/my-branch')
+    })
+
+    it('returns null when file is empty', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: 0 } as any)
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBeNull()
+    })
+
+    it('returns null when file does not exist', () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBeNull()
+    })
+
+    it('returns null when no gitBranch field exists', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: 100 } as any)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","sessionId":"test-session","timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5"}}
+      `.trim())
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBeNull()
+    })
+
+    it('handles malformed JSONL gracefully', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: 100 } as any)
+      vi.mocked(readFileSync).mockReturnValue('{invalid json')
+
+      const result = service.extractGitBranch('test-session', '/Users/test/project')
+
+      expect(result).toBeNull()
     })
   })
 })
