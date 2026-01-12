@@ -611,10 +611,10 @@ describe('Super Minion System Prompt', () => {
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
   const ACCEPTANCE_CRITERIA_KEYWORDS = [
-    'acceptance criteria',
+    'ACCEPTANCE CRITERIA',
     'AskUserQuestion',
-    'BEFORE creating any implementation plan',
-    'WAIT for explicit approval'
+    'PHASE 1',
+    'WAIT for explicit'
   ]
 
   // Helper to get the command written to PTY
@@ -703,15 +703,18 @@ describe('Super Minion System Prompt', () => {
     await startAgent(TEST_PROMPT, 'agent-2')
 
     const command = getWrittenCommand()
-    expect(command).not.toContain('BEFORE creating any implementation plan')
-    expect(command).not.toContain('acceptance criteria')
+    expect(command).not.toContain('5-PHASE WORKFLOW')
+    expect(command).not.toContain('ACCEPTANCE CRITERIA')
   })
 
-  it('should include instruction to reference criteria throughout execution', async () => {
+  it('should include 5-phase workflow with mandatory design and review phases', async () => {
     await startAgent('Build feature Y')
 
     const command = getWrittenCommand()
-    expect(command).toContain('Reference your acceptance criteria throughout execution')
+    expect(command).toContain('PHASE 2 - ENGINEERING DESIGN')
+    expect(command).toContain('PHASE 3 - DESIGN REVIEW')
+    expect(command).toContain('MANDATORY')
+    expect(command).toContain('NEVER skip')
   })
 })
 
