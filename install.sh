@@ -59,10 +59,14 @@ echo -e "${BLUE}📁 Creating directory structure...${NC}"
 mkdir -p "$TARGET/minions/assignments"
 mkdir -p "$TARGET/.cursor/rules"
 
-# Copy Cursor rules
+# Copy Cursor rules (if they exist)
 echo -e "${BLUE}📋 Copying configuration files...${NC}"
-cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
-echo "   ✓ .cursor/rules/agent-rules.mdc"
+if [ -f "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" ]; then
+    cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
+    echo "   ✓ .cursor/rules/agent-rules.mdc"
+else
+    echo "   ℹ️  .cursor/rules/agent-rules.mdc not found (optional)"
+fi
 
 # Detect project name
 PROJECT_NAME=$(basename "$TARGET")
