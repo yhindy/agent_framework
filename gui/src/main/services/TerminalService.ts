@@ -641,16 +641,33 @@ export class TerminalService {
       if (prompt) {
         let planPrompt: string
         if (isSuperMinion) {
-          planPrompt = `BEFORE creating any implementation plan, you MUST:
-1. Propose numbered acceptance criteria for this task
-2. Use AskUserQuestion to ask the human to approve the criteria
-3. WAIT for explicit approval before proceeding to implementation
+          planPrompt = `You are a Super Minion. Follow the 5-PHASE WORKFLOW exactly:
+
+PHASE 1 - ACCEPTANCE CRITERIA (do this first):
+1. Explore the codebase to understand context
+2. Propose numbered acceptance criteria for this task
+3. Use AskUserQuestion to ask the human to approve the criteria
+4. WAIT for explicit "Yes, proceed" before moving to Phase 2
+
+PHASE 2 - ENGINEERING DESIGN (MANDATORY - do NOT skip):
+1. Spawn a Plan agent to create .engineering-design.md
+2. The design must map each criterion to implementation details
+
+PHASE 3 - DESIGN REVIEW (MANDATORY - do NOT skip):
+1. Spawn two review agents IN PARALLEL: senior engineer + criteria validator
+2. Only proceed to Phase 4 after both reviewers approve
+
+PHASE 4 - IMPLEMENTATION:
+1. Spawn implementation agents based on the approved design
+2. Use parallel agents for independent components
+
+PHASE 5 - VERIFICATION:
+1. Spawn THREE agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker
+2. Only declare completion when all three pass
 
 Task: ${prompt}
 
-Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.
-
-You can spawn as many child agents as needed to complete the task quickly. Maximize parallelism by breaking work into independent subtasks that can run concurrently.`
+CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or review phases. NEVER jump straight to implementation after acceptance criteria.`
         } else {
           planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
         }

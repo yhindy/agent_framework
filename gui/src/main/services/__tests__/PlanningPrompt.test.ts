@@ -5,16 +5,33 @@ function buildPlanningPrompt(taskPrompt: string, agentInfo: { isSuperMinion?: bo
   const isSuperMinion = agentInfo?.isSuperMinion === true
 
   if (isSuperMinion) {
-    return `BEFORE creating any implementation plan, you MUST:
-1. Propose numbered acceptance criteria for this task
-2. Use AskUserQuestion to ask the human to approve the criteria
-3. WAIT for explicit approval before proceeding to implementation
+    return `You are a Super Minion. Follow the 5-PHASE WORKFLOW exactly:
+
+PHASE 1 - ACCEPTANCE CRITERIA (do this first):
+1. Explore the codebase to understand context
+2. Propose numbered acceptance criteria for this task
+3. Use AskUserQuestion to ask the human to approve the criteria
+4. WAIT for explicit "Yes, proceed" before moving to Phase 2
+
+PHASE 2 - ENGINEERING DESIGN (MANDATORY - do NOT skip):
+1. Spawn a Plan agent to create .engineering-design.md
+2. The design must map each criterion to implementation details
+
+PHASE 3 - DESIGN REVIEW (MANDATORY - do NOT skip):
+1. Spawn two review agents IN PARALLEL: senior engineer + criteria validator
+2. Only proceed to Phase 4 after both reviewers approve
+
+PHASE 4 - IMPLEMENTATION:
+1. Spawn implementation agents based on the approved design
+2. Use parallel agents for independent components
+
+PHASE 5 - VERIFICATION:
+1. Spawn THREE agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker
+2. Only declare completion when all three pass
 
 Task: ${taskPrompt}
 
-Remember: Include a section on automated testing in your plan. Reference your acceptance criteria throughout execution.
-
-You can spawn as many child agents as needed to complete the task quickly. Maximize parallelism by breaking work into independent subtasks that can run concurrently.`
+CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or review phases. NEVER jump straight to implementation after acceptance criteria.`
   } else {
     return `Create a plan for: ${taskPrompt}\n\nPlease add to your plan a section on automated testing.`
   }
@@ -24,29 +41,40 @@ You can spawn as many child agents as needed to complete the task quickly. Maxim
 const TEST_PROMPT = 'Implement user authentication'
 
 describe('Planning Prompt', () => {
-  it('should include parallelism encouragement for super minion', () => {
+  it('should include 5-phase workflow for super minion', () => {
     const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
 
-    expect(planPrompt).toContain('spawn as many child agents as needed')
-    expect(planPrompt).toContain('Maximize parallelism')
+    expect(planPrompt).toContain('5-PHASE WORKFLOW')
+    expect(planPrompt).toContain('PHASE 1')
+    expect(planPrompt).toContain('PHASE 2')
+    expect(planPrompt).toContain('PHASE 3')
+    expect(planPrompt).toContain('PHASE 4')
+    expect(planPrompt).toContain('PHASE 5')
     expect(planPrompt).toContain(TEST_PROMPT)
   })
 
-  it('should not include parallelism encouragement for regular planning mode', () => {
+  it('should include parallelism instructions for super minion', () => {
+    const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
+
+    expect(planPrompt).toContain('IN PARALLEL')
+    expect(planPrompt).toContain('parallel agents')
+  })
+
+  it('should not include 5-phase workflow for regular planning mode', () => {
     const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: false })
 
     expect(planPrompt).toBe(`Create a plan for: ${TEST_PROMPT}\n\nPlease add to your plan a section on automated testing.`)
+    expect(planPrompt).not.toContain('PHASE')
     expect(planPrompt).not.toContain('acceptance criteria')
-    expect(planPrompt).not.toContain('child agents')
   })
 })
 
 describe('Acceptance Criteria in Planning Prompt', () => {
   const ACCEPTANCE_CRITERIA_KEYWORDS = [
-    'acceptance criteria',
+    'ACCEPTANCE CRITERIA',
     'AskUserQuestion',
-    'WAIT for explicit approval',
-    'BEFORE creating any implementation plan'
+    'WAIT for explicit',
+    'PHASE 1'
   ]
 
   it('should include acceptance criteria instructions for super minion', () => {
@@ -60,13 +88,42 @@ describe('Acceptance Criteria in Planning Prompt', () => {
   it('should NOT include acceptance criteria instructions for regular planning mode', () => {
     const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: false })
 
-    expect(planPrompt).not.toContain('acceptance criteria')
+    expect(planPrompt).not.toContain('ACCEPTANCE CRITERIA')
     expect(planPrompt).not.toContain('AskUserQuestion')
   })
+})
 
-  it('should include instruction to reference criteria throughout execution', () => {
-    const planPrompt = buildPlanningPrompt('Build feature X', { isSuperMinion: true })
+describe('Engineering Design Phase in Planning Prompt', () => {
+  it('should include mandatory engineering design phase for super minion', () => {
+    const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
 
-    expect(planPrompt).toContain('Reference your acceptance criteria throughout execution')
+    expect(planPrompt).toContain('PHASE 2 - ENGINEERING DESIGN')
+    expect(planPrompt).toContain('MANDATORY')
+    expect(planPrompt).toContain('.engineering-design.md')
+    expect(planPrompt).toContain('Plan agent')
+  })
+
+  it('should include mandatory design review phase for super minion', () => {
+    const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
+
+    expect(planPrompt).toContain('PHASE 3 - DESIGN REVIEW')
+    expect(planPrompt).toContain('senior engineer')
+    expect(planPrompt).toContain('criteria validator')
+  })
+})
+
+describe('Critical Warning in Planning Prompt', () => {
+  it('should include critical warning about not skipping phases', () => {
+    const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
+
+    expect(planPrompt).toContain('CRITICAL')
+    expect(planPrompt).toContain('NEVER skip')
+    expect(planPrompt).toContain('1→2→3→4→5')
+  })
+
+  it('should warn against jumping straight to implementation', () => {
+    const planPrompt = buildPlanningPrompt(TEST_PROMPT, { isSuperMinion: true })
+
+    expect(planPrompt).toContain('NEVER jump straight to implementation')
   })
 })
