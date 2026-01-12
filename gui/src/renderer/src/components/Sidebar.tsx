@@ -319,30 +319,31 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       toggleSuperMinionCollapse(agent.id, e)
     }
 
+    const agentTypeIcon = agent.isSuperMinion ? '👑' : agent.isBaseBranchAgent ? '🏠' : '🍌'
+
     return (
-      <div key={agent.id} className="agent-item-container">
-        <div
-          className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''}`}
-          onClick={handleAgentItemClick}
-          style={{ paddingLeft: `${depth * 12 + 12}px` }}
-        >
-          <div className="agent-info">
-            <div className="agent-leading-icons">
-              {agent.isSuperMinion ? (
-                <span
-                  className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
-                  onClick={handleCollapseClick}
-                  title="Toggle child agents"
-                >
-                  ▼
-                </span>
-              ) : (
-                <span className="chevron-placeholder" aria-hidden="true"></span>
-              )}
-              <span className="agent-type-icon">
-                {agent.isSuperMinion ? '👑' : agent.isBaseBranchAgent ? '🏠' : '🍌'}
+      <div
+        key={agent.id}
+        className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''}`}
+        onClick={handleAgentItemClick}
+        style={{ paddingLeft: `${depth * 12 + 12}px` }}
+      >
+        <div className="agent-info">
+          <div className="agent-leading-icons">
+            {agent.isSuperMinion ? (
+              <span
+                className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
+                onClick={handleCollapseClick}
+                title="Toggle child agents"
+              >
+                ▼
               </span>
-            </div>
+            ) : (
+              <span className="chevron-placeholder" aria-hidden="true"></span>
+            )}
+            <span className="agent-type-icon">{agentTypeIcon}</span>
+          </div>
+          <div className="agent-name-container">
             {agent.isBaseBranchAgent ? (
               <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
             ) : agent.branch ? (
@@ -352,15 +353,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             ) : (
               <div className="agent-id">{agent.id}</div>
             )}
-            {isWaiting && !isActive && (
-              <div className="attention-badge" title="Waiting for input">!</div>
-            )}
-            {showSpinner && (
-              <div className="agent-spinner">
-                <div className="spinner"></div>
-              </div>
-            )}
           </div>
+        </div>
+        <div className="agent-status-indicators">
+          {isWaiting && !isActive && (
+            <div className="attention-badge" title="Waiting for input">!</div>
+          )}
+          {showSpinner && (
+            <div className="agent-spinner">
+              <div className="spinner"></div>
+            </div>
+          )}
           {agent.hasUnread && !isWaiting && <div className="unread-badge">●</div>}
         </div>
       </div>
