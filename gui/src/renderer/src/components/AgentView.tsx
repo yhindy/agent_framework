@@ -183,6 +183,31 @@ function AgentView({ activeProjects }: AgentViewProps) {
     setAgent(agentData)
     setAssignment(assignmentData)
 
+    // Auto-detect PR if assignment exists but no prUrl
+    if (assignmentData && !assignmentData.prUrl && !assignmentData.isBaseBranchAgent) {
+      try {
+        const result = await window.electronAPI.detectPullRequest(assignmentData.id)
+        if (result?.found && result.prUrl) {
+          // Find the project that contains this agent
+          for (const project of activeProjects) {
+            try {
+              const refreshedAssignments = await window.electronAPI.getAssignmentsForProject(project.path)
+              const refreshed = refreshedAssignments.assignments.find((a: Assignment) => a.agentId === agentId)
+              if (refreshed) {
+                setAssignment(refreshed)
+                break
+              }
+            } catch {
+              // Continue to next project
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[AgentView] Failed to auto-detect PR:', err)
+        // Silent failure - don't block UI load
+      }
+    }
+
     // Restore UI state if available
     if (agentData?.uiState) {
       const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = agentData.uiState

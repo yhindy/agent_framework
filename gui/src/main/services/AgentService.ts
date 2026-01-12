@@ -39,6 +39,14 @@ interface AgentSession {
 export class AgentService {
   private sessions: Map<string, AgentSession>
   private claudeSessionInfoService?: ClaudeSessionInfoService
+  private prDetectionCache: Map<string, {
+    timestamp: number
+    found: boolean
+    prUrl?: string
+    prStatus?: string
+  }> = new Map()
+
+  private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
   constructor() {
     this.sessions = new Map()
@@ -1050,6 +1058,9 @@ export class AgentService {
           status: 'pr_open'
         })
 
+        // Clear detection cache for this assignment
+        this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
+
         console.log('[AgentService] PR created:', prUrl)
         return { url: prUrl }
       } catch (prError: any) {
@@ -1070,6 +1081,9 @@ export class AgentService {
             status: 'pr_open'
           })
 
+          // Clear detection cache for this assignment
+          this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
+
           return { url: prUrl }
         }
         throw prError
@@ -1077,6 +1091,184 @@ export class AgentService {
     } catch (error: any) {
       console.error('[AgentService] Failed to create PR:', error)
       throw new Error(`Failed to create pull request: ${error.message}`)
+    }
+  }
+
+  async detectExistingPullRequest(
+    projectPath: string,
+    assignmentId: string,
+    options?: { force?: boolean }
+  ): Promise<{
+    found: boolean
+    prUrl?: string
+    prStatus?: string
+    createdAt?: string
+  } | null> {
+    try {
+      // 1. Load assignment
+      const { assignments } = await this.getAssignments(projectPath)
+      const assignment = assignments.find(a => a.id === assignmentId)
+
+      if (!assignment) {
+        console.log('[AgentService] detectExistingPullRequest: Assignment not found')
+        return null
+      }
+
+      // 2. If prUrl already exists, do a fresh status check to get latest state
+      if (assignment.prUrl) {
+        console.log('[AgentService] detectExistingPullRequest: PR already tracked, refreshing status:', assignment.prUrl)
+        try {
+          const statusResult = await this.checkPullRequestStatus(projectPath, assignmentId, { silent: true })
+          // checkPullRequestStatus returns { status: 'ERROR' } on failure instead of throwing
+          if (statusResult.status === 'ERROR') {
+            console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', statusResult.error)
+            // Fall back to stored status
+            return {
+              found: true,
+              prUrl: assignment.prUrl,
+              prStatus: assignment.prStatus
+            }
+          }
+          return {
+            found: true,
+            prUrl: assignment.prUrl,
+            prStatus: statusResult.status,
+            createdAt: statusResult.createdAt
+          }
+        } catch (error: any) {
+          console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', error.message)
+          // Fall back to stored status
+          return {
+            found: true,
+            prUrl: assignment.prUrl,
+            prStatus: assignment.prStatus
+          }
+        }
+      }
+
+      // 3. Check cache
+      const cacheKey = `${projectPath}:${assignmentId}`
+      const cached = this.prDetectionCache.get(cacheKey)
+      if (cached && !options?.force) {
+        const isStillFresh = cached.timestamp + this.PR_DETECTION_CACHE_TTL_MS > Date.now()
+        if (isStillFresh) {
+          console.log('[AgentService] detectExistingPullRequest: Returning cached result')
+          return {
+            found: cached.found,
+            prUrl: cached.prUrl,
+            prStatus: cached.prStatus
+          }
+        }
+      }
+
+      // 4. Get worktree path
+      const config = this.getProjectConfig(projectPath)
+      const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
+
+      let worktreePath: string
+      if (assignment.agentId.startsWith(`${projectName}-`)) {
+        worktreePath = join(dirname(projectPath), assignment.agentId)
+      } else {
+        worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
+      }
+
+      // 5. Get remote
+      const remote = await this.getRemote(worktreePath)
+      if (!remote) {
+        console.log('[AgentService] detectExistingPullRequest: No remote configured')
+        return null
+      }
+
+      // 6. Get the actual current branch from git (more reliable than stored value)
+      let currentBranch: string
+      try {
+        const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
+        currentBranch = branchOutput.trim()
+        if (!currentBranch) {
+          console.log('[AgentService] detectExistingPullRequest: Could not determine current branch')
+          return null
+        }
+      } catch (error: any) {
+        console.warn('[AgentService] detectExistingPullRequest: Error getting current branch:', error.message)
+        return null
+      }
+
+      // 7. Check if branch exists on remote
+      try {
+        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
+        if (!remoteRefs.trim()) {
+          console.log('[AgentService] detectExistingPullRequest: Branch not on remote:', currentBranch)
+          // Branch not on remote, cache negative result
+          this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
+          return { found: false }
+        }
+      } catch (error: any) {
+        console.warn('[AgentService] detectExistingPullRequest: Error checking remote refs:', error.message)
+        return null
+      }
+
+      // 8. Run gh pr list to find existing PR
+      let prData: { url: string; state: string; createdAt: string } | null = null
+      try {
+        const { stdout } = await execAsync(
+          `gh pr list --head "${currentBranch}" --json number,url,state,createdAt --jq ".[0]"`,
+          { cwd: projectPath }
+        )
+
+        // 9. Parse result
+        if (stdout.trim() && stdout.trim() !== 'null') {
+          prData = JSON.parse(stdout.trim())
+        }
+      } catch (error: any) {
+        console.warn('[AgentService] detectExistingPullRequest: GitHub CLI error:', error.message)
+        return null
+      }
+
+      if (!prData) {
+        // No PR found
+        console.log('[AgentService] detectExistingPullRequest: No existing PR found')
+        this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
+        return { found: false }
+      }
+
+      // 9. PR found, update .agent-info
+      console.log('[AgentService] detectExistingPullRequest: Found existing PR:', prData.url)
+      const agentInfoPath = join(worktreePath, '.agent-info')
+      if (existsSync(agentInfoPath)) {
+        const updates: Partial<AgentInfo> = {
+          prUrl: prData.url,
+          prStatus: prData.state // OPEN, MERGED, CLOSED
+        }
+
+        if (prData.state === 'OPEN') {
+          updates.status = 'pr_open'
+        } else if (prData.state === 'MERGED') {
+          updates.status = 'merged'
+        } else if (prData.state === 'CLOSED') {
+          updates.status = 'closed'
+        }
+
+        this.updateAgentInfo(worktreePath, updates)
+      }
+
+      // 10. Cache positive result
+      this.prDetectionCache.set(cacheKey, {
+        timestamp: Date.now(),
+        found: true,
+        prUrl: prData.url,
+        prStatus: prData.state
+      })
+
+      return {
+        found: true,
+        prUrl: prData.url,
+        prStatus: prData.state,
+        createdAt: prData.createdAt
+      }
+    } catch (error: any) {
+      console.error('[AgentService] detectExistingPullRequest: Unexpected error:', error.message)
+      // Don't cache errors
+      return null
     }
   }
 

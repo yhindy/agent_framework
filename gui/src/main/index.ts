@@ -693,6 +693,11 @@ function setupIPC(): void {
     return result
   })
 
+  ipcMain.handle('assignments:detectPR', async (_event, assignmentId: string, force?: boolean) => {
+    const projectPath = await findProjectForAssignment(assignmentId)
+    return services!.agent.detectExistingPullRequest(projectPath, assignmentId, { force })
+  })
+
   // PR Polling handlers
   ipcMain.handle('prPolling:start', async (_event, assignmentId: string, subscriberId: string) => {
     if (!services?.prPolling) return

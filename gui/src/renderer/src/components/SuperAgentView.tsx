@@ -11,6 +11,7 @@ import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
+import './AgentView.css' // For shared PR badge styles
 import { SuperAgentInfo } from '../types/agent'
 
 interface SuperAgentViewProps {
@@ -84,6 +85,22 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
       setError(null)
       const details = await window.electronAPI.getSuperAgentDetails(agentId)
       setAgent(details)
+
+      // Auto-detect PR if no prUrl
+      if (details && !details.prUrl) {
+        try {
+          const result = await window.electronAPI.detectPullRequest(details.id)
+          if (result?.found && result.prUrl) {
+            // Reload agent to get updated data
+            const refreshed = await window.electronAPI.getSuperAgentDetails(agentId!)
+            if (refreshed) {
+              setAgent(refreshed)
+            }
+          }
+        } catch (err) {
+          console.error('[SuperAgentView] Failed to auto-detect PR:', err)
+        }
+      }
 
       // Restore UI state if available
       if (details?.uiState) {
@@ -332,9 +349,21 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         </div>
 
         <div className="agent-actions">
-          <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
-            {isCreatingPR ? 'Creating...' : 'Make PR'}
-          </button>
+          {/* PR Status Badge or Make PR Button */}
+          {agent?.prStatus && agent.prUrl ? (
+            <button
+              className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
+              onClick={() => window.open(agent.prUrl, '_blank')}
+              title="Open PR on GitHub"
+            >
+              PR: {agent.prStatus}
+              <span className="pr-open-icon">↗</span>
+            </button>
+          ) : (
+            <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
+              {isCreatingPR ? 'Creating...' : 'Make PR'}
+            </button>
+          )}
           <button onClick={handleOpenCursor} className="compact-button">
             Cursor
           </button>
