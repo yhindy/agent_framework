@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AgentService } from '../AgentService'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 
 // Mock electron
@@ -25,6 +25,7 @@ vi.mock('child_process', () => ({
 }))
 
 const mockExec = vi.mocked(exec)
+const mockExecFile = vi.mocked(execFile)
 const mockReadFileSync = vi.mocked(readFileSync)
 const mockExistsSync = vi.mocked(existsSync)
 const mockWriteFileSync = vi.mocked(writeFileSync)
@@ -80,6 +81,29 @@ const setupExecMock = (handlers: Record<string, { stdout?: string; stderr?: stri
     // Default: return empty
     cb(null, { stdout: '', stderr: '' })
     return {} as ReturnType<typeof exec>
+  })
+}
+
+// Helper to mock execFile calls (used by checkPullRequestStatus)
+const setupExecFileMock = (response: { stdout?: string; stderr?: string; error?: Error }) => {
+  mockExecFile.mockImplementation((
+    _file: string,
+    _args: readonly string[] | undefined | null,
+    _opts: unknown,
+    callback?: unknown
+  ) => {
+    const cb = (typeof _opts === 'function' ? _opts : callback) as (
+      error: Error | null,
+      stdout: string,
+      stderr: string
+    ) => void
+
+    if (response.error) {
+      cb(response.error, '', '')
+    } else {
+      cb(null, response.stdout || '', response.stderr || '')
+    }
+    return {} as ReturnType<typeof execFile>
   })
 }
 
@@ -374,41 +398,46 @@ describe('AgentService - detectExistingPullRequest', () => {
       consoleSpy.mockRestore()
     })
 
-    it('should skip detection if prUrl already exists', async () => {
+    it('should attempt refresh and fallback to stored status if prUrl already exists', async () => {
       const existingPrUrl = 'https://github.com/test/repo/pull/99'
       setupStandardFileMocks({
         prUrl: existingPrUrl,
-        prStatus: 'OPEN'
+        prStatus: 'MERGED'
       })
 
+      // Mock git worktree list for getAssignments
       setupExecMock({
         'git worktree list': {
           stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
         }
       })
 
+      // Mock execFile to fail (simulating GitHub API error)
+      setupExecFileMock({ error: new Error('GitHub API unavailable') })
+
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       const result = await agentService.detectExistingPullRequest(mockProjectPath, mockAssignmentId)
 
+      // Should return stored status when refresh fails
       expect(result).toEqual({
         found: true,
         prUrl: existingPrUrl,
-        prStatus: 'OPEN'
+        prStatus: 'MERGED' // Falls back to stored status
       })
 
-      // Verify gh commands were NOT called
-      const ghCalls = mockExec.mock.calls.filter((call) => String(call[0]).includes('gh '))
-      expect(ghCalls.length).toBe(0)
+      // Verify detection was skipped (no gh pr list or git ls-remote)
+      const ghListCalls = mockExec.mock.calls.filter((call) => String(call[0]).includes('gh pr list'))
+      expect(ghListCalls.length).toBe(0)
 
-      // Verify git ls-remote was NOT called
       const lsRemoteCalls = mockExec.mock.calls.filter((call) =>
         String(call[0]).includes('git ls-remote')
       )
       expect(lsRemoteCalls.length).toBe(0)
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[AgentService] detectExistingPullRequest: PR already tracked:',
+        '[AgentService] detectExistingPullRequest: PR already tracked, refreshing status:',
         existingPrUrl
       )
 

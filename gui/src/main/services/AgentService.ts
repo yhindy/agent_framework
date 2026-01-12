@@ -1123,13 +1123,35 @@ export class AgentService {
         return null
       }
 
-      // 2. If prUrl already exists and not force, return existing info
-      if (assignment.prUrl && !options?.force) {
-        console.log('[AgentService] detectExistingPullRequest: PR already tracked:', assignment.prUrl)
-        return {
-          found: true,
-          prUrl: assignment.prUrl,
-          prStatus: assignment.prStatus
+      // 2. If prUrl already exists, do a fresh status check to get latest state
+      if (assignment.prUrl) {
+        console.log('[AgentService] detectExistingPullRequest: PR already tracked, refreshing status:', assignment.prUrl)
+        try {
+          const statusResult = await this.checkPullRequestStatus(projectPath, assignmentId, { silent: true })
+          // checkPullRequestStatus returns { status: 'ERROR' } on failure instead of throwing
+          if (statusResult.status === 'ERROR') {
+            console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', statusResult.error)
+            // Fall back to stored status
+            return {
+              found: true,
+              prUrl: assignment.prUrl,
+              prStatus: assignment.prStatus
+            }
+          }
+          return {
+            found: true,
+            prUrl: assignment.prUrl,
+            prStatus: statusResult.status,
+            createdAt: statusResult.createdAt
+          }
+        } catch (error: any) {
+          console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', error.message)
+          // Fall back to stored status
+          return {
+            found: true,
+            prUrl: assignment.prUrl,
+            prStatus: assignment.prStatus
+          }
         }
       }
 
