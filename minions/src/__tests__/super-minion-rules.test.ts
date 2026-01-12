@@ -120,8 +120,16 @@ describe('Super Minion Rules', () => {
       expect(rulesContent).toContain('Simplify implementation')
     })
 
-    it('should include validation agent', () => {
-      expect(rulesContent).toContain('Validate implementation')
+    it('should include test runner agent', () => {
+      expect(rulesContent).toContain('Run tests')
+    })
+
+    it('should include acceptance criteria checker agent', () => {
+      expect(rulesContent).toContain('Verify acceptance criteria')
+    })
+
+    it('should spawn all three verification agents in parallel', () => {
+      expect(rulesContent).toContain('spawn all three agents in ONE message')
     })
 
     it('should define PASS/FAIL outputs', () => {

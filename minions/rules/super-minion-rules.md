@@ -184,7 +184,7 @@ When spawning each Task subagent, you MUST:
 
 ## Phase 5: Verification
 
-After implementation completes, run verification **in parallel**:
+After implementation completes, run verification **in parallel** (spawn all three agents in ONE message):
 
 ```
 Task(subagent_type="code-simplifier", description="Simplify implementation", prompt="""
@@ -197,27 +197,45 @@ Simplify and refine for clarity without changing functionality:
 4. Do NOT add features or change behavior
 """)
 
-Task(subagent_type="general-purpose", description="Validate implementation", prompt="""
-Validate the implementation against acceptance criteria and engineering design.
+Task(subagent_type="general-purpose", description="Run tests", prompt="""
+Run the test suite and verify implementation quality.
+
+Tasks:
+1. **Run the full test suite** and report pass/fail results
+2. **Check for regressions** - Ensure no existing tests were broken
+3. **Verify new tests exist** - Confirm tests were added for new functionality
+
+Output:
+- **PASS** - All tests pass, no regressions
+- **FAIL** - Test failures (list specific failures)
+""")
+
+Task(subagent_type="general-purpose", description="Verify acceptance criteria", prompt="""
+Verify that EACH acceptance criterion has been satisfied.
 
 ACCEPTANCE CRITERIA:
 1. [criterion 1]
 2. [criterion 2]
 ...
 
-Tasks:
-1. **Run the test suite** and report results
-2. **Verify each criterion** - For each acceptance criterion, confirm it is met with evidence
-3. **Check design alignment** - Verify implementation matches `.engineering-design.md`
+For EACH criterion:
+1. Find evidence that it was implemented (code, tests, behavior)
+2. Verify it works as specified
+3. Check it matches the engineering design in `.engineering-design.md`
 
-Output:
-- **PASS** - All criteria met, tests pass, implementation matches design
-- **FAIL** - Issues found (list specific failures)
+Output a checklist:
+- Criterion #1: SATISFIED / NOT SATISFIED (with evidence or gap)
+- Criterion #2: SATISFIED / NOT SATISFIED (with evidence or gap)
+...
+
+Final verdict:
+- **PASS** - All criteria satisfied with evidence
+- **FAIL** - One or more criteria not satisfied (list which ones)
 """)
 ```
 
 **After verification:**
-- If both pass → declare completion (see Completion section)
+- If all three pass → declare completion (see Completion section)
 - If issues found → use judgment:
   - **Test failures**: Spawn a debugger agent to investigate and fix
   - **Missing criteria**: Spawn additional implementation agents

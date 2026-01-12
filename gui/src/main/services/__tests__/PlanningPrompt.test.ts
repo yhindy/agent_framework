@@ -26,8 +26,8 @@ PHASE 4 - IMPLEMENTATION:
 2. Use parallel agents for independent components
 
 PHASE 5 - VERIFICATION:
-1. Spawn code simplifier and test validator IN PARALLEL
-2. Verify all criteria are met before declaring completion
+1. Spawn THREE agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker
+2. Only declare completion when all three pass
 
 Task: ${taskPrompt}
 
