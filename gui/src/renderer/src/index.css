@@ -10,8 +10,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: var(--bg-base);
+  color: var(--text-secondary);
   overflow: hidden;
 }
 
@@ -30,39 +30,74 @@ button {
   font-family: inherit;
   cursor: pointer;
   border: none;
-  background: #0e639c;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: background 0.2s;
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-button);
+  transition: all var(--transition-base);
 }
 
 button:hover {
-  background: #1177bb;
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow-sm);
+  transform: translateY(-1px);
 }
 
 button:active {
-  background: #0d5489;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 button:disabled {
-  background: #3e3e42;
+  background: var(--bg-muted);
   cursor: not-allowed;
-  color: #858585;
+  color: var(--text-disabled);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Ghost button variant */
+button.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+button.ghost:hover {
+  background: var(--bg-overlay);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: none;
+}
+
+/* Secondary button variant */
+button.secondary {
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+}
+
+button.secondary:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  box-shadow: none;
 }
 
 input, select, textarea {
-  background: #3c3c3c;
-  border: 1px solid #5a5a5a;
-  color: #d4d4d4;
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 14px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: #0e639c;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
 }
 
