@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NotificationService } from '../NotificationService'
+import { SettingsService } from '../SettingsService'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
 import { BrowserWindow, Notification } from 'electron'
 import { readFileSync, existsSync } from 'fs'
@@ -38,10 +39,35 @@ vi.mock('fs', () => ({
   statSync: vi.fn(() => ({ mtimeMs: Date.now() }))
 }))
 
+// Mock SettingsService
+vi.mock('../SettingsService', () => ({
+  SettingsService: vi.fn().mockImplementation(() => ({
+    getSettings: vi.fn().mockReturnValue({
+      notifications: {
+        enabled: true,
+        cooldownSeconds: 30
+      },
+      defaultTool: {
+        tool: 'claude',
+        claudeModel: 'opusplan',
+        cursorCLIModel: 'auto'
+      },
+      defaultAgent: {
+        workflowMode: 'planning',
+        yoloMode: true,
+        chromeIntegration: true
+      },
+      version: 1
+    }),
+    updateSettings: vi.fn()
+  }))
+}))
+
 describe('Notification System Integration Tests', () => {
   let notificationService: NotificationService
   let sessionInfoService: ClaudeSessionInfoService
   let mockMainWindow: any
+  let mockSettingsService: SettingsService
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -57,7 +83,8 @@ describe('Notification System Integration Tests', () => {
       focus: vi.fn()
     } as unknown as BrowserWindow
 
-    notificationService = new NotificationService(mockMainWindow)
+    mockSettingsService = new SettingsService()
+    notificationService = new NotificationService(mockMainWindow, mockSettingsService)
     notificationService.clearAllCooldowns()
     notificationService.setWindowFocus(false) // Start with window unfocused
 

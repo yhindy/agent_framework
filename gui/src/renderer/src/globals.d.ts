@@ -102,6 +102,11 @@ declare global {
       onTeleportResumeFailed: (callback: (data: { agentId: string; reason: string }) => void) => () => void
       retryResumeAgent: (agentId: string) => Promise<void>
       startFreshSession: (agentId: string) => Promise<void>
+
+      // Settings APIs
+      getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
+      updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
+      openFeedback: () => Promise<void>
     }
   }
 }
