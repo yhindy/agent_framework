@@ -12,6 +12,7 @@ import {
   CLAUDE_WORKING_PATTERNS,
   CLAUDE_IDLE_INDICATORS,
   CLAUDE_START_PATTERN,
+  CODEX_WORKING_PATTERNS,
   SHELL_WORKING_PATTERNS,
   SHELL_IDLE_INDICATORS
 } from './IdleDetector'
@@ -272,6 +273,10 @@ export class TerminalService {
           args.push('--session-id', sessionId)
         }
         break
+      case 'codex':
+        command = 'codex'
+        args = this.getCodexArgs(mode, prompt)
+        break
       case 'cursor-cli':
         command = 'cursor'
         args = this.getCursorArgs(mode, agentId, prompt, model)
@@ -459,20 +464,43 @@ export class TerminalService {
       }, 1000) // 1 second interval - mtime caching makes this efficient
 
     } else {
-      // Pattern-based IdleDetector for non-Claude tools (cursor, etc.)
+      // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
       // Format display name as "project: branch_suffix" for cleaner notifications
       const projectName = projectPath.split('/').pop() || 'project'
       const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
       const displayName = `${projectName}: ${branchSuffix}`
 
+      // Determine patterns based on tool
+      let workingPatterns: RegExp[]
+      let idleIndicators: RegExp[]
+      let requireStartSignal = false
+      let startPattern: RegExp | undefined
+
+      if (tool === 'cursor-cli') {
+        // Cursor CLI uses Claude patterns and requires start signal
+        workingPatterns = CLAUDE_WORKING_PATTERNS
+        idleIndicators = CLAUDE_IDLE_INDICATORS
+        requireStartSignal = true
+        startPattern = CLAUDE_START_PATTERN
+      } else if (tool === 'codex') {
+        // Codex uses codex-specific working patterns to detect activity
+        workingPatterns = CODEX_WORKING_PATTERNS
+        idleIndicators = []
+        requireStartSignal = false
+      } else {
+        // Other tools: no patterns
+        workingPatterns = []
+        idleIndicators = []
+      }
+
       idleDetector = new IdleDetector(
         {
-          workingPatterns: tool === 'cursor-cli' ? CLAUDE_WORKING_PATTERNS : [],
-          idleIndicators: tool === 'cursor-cli' ? CLAUDE_IDLE_INDICATORS : [],
+          workingPatterns,
+          idleIndicators,
           idleThreshold: 2000,
           inputGracePeriod: 1000,
-          requireStartSignal: true,
-          startPattern: CLAUDE_START_PATTERN
+          requireStartSignal,
+          startPattern
         },
         {
           onWaitingForInput: (_context: string) => {
@@ -652,6 +680,25 @@ You can spawn as many child agents as needed to complete the task quickly. Maxim
     if (model) {
       args.push('--model', model)
     }
+
+    // Add prompt if provided
+    if (prompt) {
+      if (mode === 'planning') {
+        const planPrompt = `Create a plan for: ${prompt}`
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+      } else {
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+      }
+    }
+
+    return args
+  }
+
+  private getCodexArgs(mode: string, prompt?: string): string[] {
+    const args: string[] = []
+
+    // Hardcode model to gpt-5.2-codex as per requirements
+    args.push('--model', 'gpt-5.2-codex')
 
     // Add prompt if provided
     if (prompt) {

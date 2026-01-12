@@ -45,6 +45,15 @@ echo "   From: $FRAMEWORK_DIR"
 echo "   To:   $TARGET"
 echo ""
 
+# Check for Codex CLI
+if ! command -v codex &> /dev/null; then
+    echo -e "${YELLOW}Warning: Codex CLI not found.${NC}"
+    echo "   If you plan to use Codex agents, install it with:"
+    echo "   npm install -g @openai/codex-cli"
+    echo "   Or visit: https://github.com/openai/openai-codex-cli"
+    echo ""
+fi
+
 # Create directory structure
 echo -e "${BLUE}📁 Creating directory structure...${NC}"
 mkdir -p "$TARGET/minions/assignments"

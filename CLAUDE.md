@@ -63,6 +63,7 @@ This document provides essential context for AI assistants working with the Agen
 - Minions CLI: Shell scripts for worktree management and agent setup
 - Signal Protocol: Communication system between agents and the orchestrator
 - Git worktree isolation for parallel agent work without conflicts
+- Multi-tool support: Claude Desktop, Cursor CLI, and Codex CLI
 
 ## Tech Stack
 
@@ -76,12 +77,44 @@ This document provides essential context for AI assistants working with the Agen
 ### CLI (Minions)
 - **Shell**: Bash scripts
 - **Dependencies**: git, python3, gh (GitHub CLI)
+- **Agent Tools**: Claude Desktop, Cursor CLI (cursor-cli), or Codex CLI (codex)
 
 ### Runtime Requirements
 - Node.js 20.x
 - npm (workspaces)
 - Git (for worktrees)
 - Python 3 (for JSON parsing in shell scripts)
+- At least one agent tool: Claude Desktop, Cursor CLI, or Codex CLI
+
+### Agent Tool Setup
+
+The framework supports three agent tools. At least one must be installed:
+
+#### Claude Desktop
+- Install from: https://claude.ai/download
+- No additional configuration required
+- Spawned via AppleScript on macOS
+
+#### Cursor CLI
+- Install: `npm install -g cursor-cli`
+- Command: `cursor-cli "<prompt>"`
+- Status detection: Pattern matching in terminal output
+- Model selection: Available in GUI
+
+#### Codex CLI
+- Install: `npm install -g openai-codex-cli` (or your Codex CLI package)
+- Command: `codex --model gpt-5.2-codex "<prompt>"`
+- Model: **gpt-5.2-codex (hardcoded, no selection available)**
+- API Key: Set `OPENAI_API_KEY` environment variable
+- Status detection: Pattern matching in terminal output
+- Note: `install.sh` warns if `codex` command is not found in PATH
+
+**Environment Variables for Codex:**
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+Add to `~/.zshrc` or `~/.bashrc` to persist across sessions.
 
 ## Dependency Management
 
@@ -277,12 +310,24 @@ Renderer Process (React)
 ```
 
 ### Agent Lifecycle
-1. **Create Assignment** - User creates via GUI with prompt, tool, model
+1. **Create Assignment** - User creates via GUI with prompt, tool (claude/cursor-cli/codex), model
 2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
-3. **Start Agent** - TerminalService spawns PTY with Claude/Cursor
-4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes
+3. **Start Agent** - TerminalService spawns PTY with selected tool (Claude/Cursor/Codex)
+4. **Monitor** - ClaudeSessionInfoService watches JSONL for state changes (Claude only)
 5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
 6. **Teardown** - Clean up worktree when done
+
+### Tool Selection
+
+The GUI allows selecting from three agent tools when creating an assignment:
+
+| Tool | Model Selection | Status Detection | Command |
+|------|-----------------|------------------|---------|
+| **claude** | Yes (multiple models) | JSONL file parsing | AppleScript launch |
+| **cursor-cli** | Yes (multiple models) | Pattern matching | `cursor-cli "<prompt>"` |
+| **codex** | No (hardcoded to gpt-5.2-codex) | Pattern matching | `codex --model gpt-5.2-codex "<prompt>"` |
+
+**Note:** Codex always uses the `gpt-5.2-codex` model. This is hardcoded in the CLI command and cannot be changed from the GUI.
 
 ### Signal Protocol
 Agents communicate with the orchestrator via stdout signals:
@@ -370,6 +415,25 @@ If build-gui fails with "Cannot find module 'electron/package.json'":
 - Check that `electron` is installed at root: `ls node_modules/electron/package.json`
 - Run `npm ci` to ensure all dependencies are properly installed
 - See the "Dependency Management" section for the convention on where to place dependencies
+
+### Codex Tool Issues
+
+**Codex Command Not Found:**
+- Verify Codex CLI is installed: `which codex`
+- Install if missing: `npm install -g openai-codex-cli` (or appropriate package)
+- Check PATH includes npm global bin directory: `npm bin -g`
+- The `install.sh` script warns if `codex` is not found but does not block installation
+
+**API Key Not Working:**
+- Verify environment variable is set: `echo $OPENAI_API_KEY`
+- Ensure variable is exported in shell config (`~/.zshrc` or `~/.bashrc`)
+- Restart terminal or source config file: `source ~/.zshrc`
+- Test directly: `codex --model gpt-5.2-codex "test prompt"`
+
+**Model Selection Not Available:**
+- This is expected behavior - Codex always uses `gpt-5.2-codex`
+- Model selection is hardcoded in the TerminalService
+- Cannot be changed from GUI (by design)
 
 ## Git Workflow
 

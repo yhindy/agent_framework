@@ -804,13 +804,19 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps) {
                         value={formData.tool}
                         onChange={(e) => {
                           const newTool = e.target.value
-                          const defaultModel = newTool === 'cursor-cli' ? 'auto' : 'opus'
+                          let defaultModel = 'opus'
+                          if (newTool === 'cursor-cli') {
+                            defaultModel = 'auto'
+                          } else if (newTool === 'codex') {
+                            defaultModel = 'gpt-5.2-codex'
+                          }
                           setFormData({ ...formData, tool: newTool, model: defaultModel })
                         }}
                       >
                         <option value="claude">Claude</option>
                         <option value="cursor">Cursor</option>
                         <option value="cursor-cli">Cursor CLI</option>
+                        <option value="codex">OpenAI Codex</option>
                       </select>
                     </div>
 
