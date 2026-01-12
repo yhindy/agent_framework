@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, watch, FSWatcher, statSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { log } from './Logger'
 
 /**
  * ClaudeSessionInfoService - Reads Claude's session JSONL files to extract
@@ -154,7 +155,7 @@ export class ClaudeSessionInfoService {
   findSessionFile(sessionId: string, worktreePath: string): string | null {
     const projectPath = this.getClaudeProjectPath(worktreePath)
     if (!projectPath) {
-      console.warn(`[ClaudeSessionInfoService] Could not find Claude project directory for worktree: ${worktreePath}`)
+      log.claudeSession.warn(`Could not find Claude project directory for worktree: ${worktreePath}`)
       return null
     }
 
@@ -163,7 +164,7 @@ export class ClaudeSessionInfoService {
       return sessionFile
     }
 
-    console.warn(`[ClaudeSessionInfoService] Session file not found: ${sessionFile}`)
+    log.claudeSession.warn(`Session file not found: ${sessionFile}`)
     return null
   }
 
@@ -461,7 +462,7 @@ export class ClaudeSessionInfoService {
 
       // Debug state detection
       if (process.env.NODE_ENV === 'development') {
-        console.log('[ClaudeSessionInfoService] Parsed session state:', state, {
+        log.claudeSession.debug('Parsed session state:', state, {
           lastLine: lines[lines.length - 1]?.substring(0, 100),
           linesCount: lines.length
         })
@@ -486,7 +487,7 @@ export class ClaudeSessionInfoService {
 
       return info
     } catch (error) {
-      console.error(`Failed to parse session file ${sessionFile}:`, error)
+      log.claudeSession.error(`Failed to parse session file ${sessionFile}:`, error)
       return null
     }
   }
@@ -657,7 +658,7 @@ export class ClaudeSessionInfoService {
 
       this.watchers.set(sessionId, watcher)
     } catch (error) {
-      console.error(`Failed to watch session ${sessionId}:`, error)
+      log.claudeSession.error(`Failed to watch session ${sessionId}:`, error)
     }
   }
 

@@ -1,4 +1,5 @@
 import { Notification, BrowserWindow } from 'electron'
+import { log } from './Logger'
 
 export interface NotificationOptions {
   title: string
@@ -70,7 +71,7 @@ export class NotificationService {
 
       notification.show()
     } catch (error) {
-      console.error('[NotificationService] Failed to show notification:', error)
+      log.notification.error('Failed to show notification:', error)
       return false
     }
 

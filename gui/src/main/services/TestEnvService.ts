@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
+import { log } from './Logger'
 
 interface TestEnvCommand {
   id: string
@@ -42,10 +43,10 @@ export class TestEnvService {
   loadConfig(projectPath: string): TestEnvConfig {
     const configPath = join(projectPath, 'minions', 'config.json')
     
-    console.log('[TestEnvService] Loading config from:', configPath)
-    
+    log.testEnv.debug('Loading config from:', configPath)
+
     if (!existsSync(configPath)) {
-      console.log('[TestEnvService] Config file not found at:', configPath)
+      log.testEnv.debug('Config file not found at:', configPath)
       // Return empty config if file doesn't exist
       return { defaultCommands: [] }
     }
@@ -55,7 +56,7 @@ export class TestEnvService {
       const config = JSON.parse(content)
       return { defaultCommands: config.testEnvironments || [] }
     } catch (error) {
-      console.error('[TestEnvService] Error loading config.json:', error)
+      log.testEnv.error('Error loading config.json:', error)
       return { defaultCommands: [] }
     }
   }
@@ -128,7 +129,7 @@ export class TestEnvService {
 
     // Handle exit
     terminal.onExit((exitCode) => {
-      console.log(`Test env process ${command.name} exited with code ${exitCode.exitCode}`)
+      log.testEnv.debug(`Test env process ${command.name} exited with code ${exitCode.exitCode}`)
       processInfo.isRunning = false
       this.mainWindow.webContents.send('testEnv:exited', agentId, command.id, exitCode.exitCode)
     })
@@ -223,7 +224,7 @@ export class TestEnvService {
         process.pty.resize(cols, rows)
       } catch (error) {
         // Silently ignore resize errors - terminal may have exited
-        console.warn(`[TestEnvService] Failed to resize terminal ${commandId}:`, error)
+        log.testEnv.warn(`Failed to resize terminal ${commandId}:`, error)
       }
     }
   }

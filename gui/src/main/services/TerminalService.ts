@@ -16,6 +16,7 @@ import {
   SHELL_WORKING_PATTERNS,
   SHELL_IDLE_INDICATORS
 } from './IdleDetector'
+import { log } from './Logger'
 
 // Simple ANSI strip function to avoid ESM issues
 function stripAnsi(str: string): string {
@@ -105,12 +106,7 @@ export class TerminalService {
       worktreePath = resolve(join(projectPath, '..', `${projectName}-${agentId}`))
     }
 
-    console.log('[TerminalService] getWorktreePath:', {
-      projectPath,
-      agentId,
-      projectName,
-      worktreePath
-    })
+    log.terminal.debug('getWorktreePath:', { projectPath, agentId, projectName, worktreePath })
 
     return worktreePath
   }
@@ -122,14 +118,14 @@ export class TerminalService {
 
   private async updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): Promise<void> {
     if (!this.agentService) {
-      console.warn('AgentService not set, cannot persist state')
+      log.terminal.warn('AgentService not set, cannot persist state')
       return
     }
 
     try {
       this.agentService.updateAgentInfo(worktreePath, updates)
     } catch (error) {
-      console.error('Failed to update agent info:', error)
+      log.terminal.error('Failed to update agent info:', error)
     }
   }
 
@@ -167,7 +163,7 @@ export class TerminalService {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
     if (existingSession) {
-      console.log(`[TerminalService] Cleaning up existing terminal for ${agentId} before starting`)
+      log.terminal.debug(`Cleaning up existing terminal for ${agentId} before starting`)
       this.stopAgent(agentId)
     }
 
@@ -193,9 +189,9 @@ export class TerminalService {
       )
       if (sessionState && sessionState !== 'unknown') {
         isResume = true
-        console.log(`[TerminalService] Resuming session ${agentInfo.claudeSessionId} (state: ${sessionState})`)
+        log.terminal.debug(`Resuming session ${agentInfo.claudeSessionId} (state: ${sessionState})`)
       } else {
-        console.log(`[TerminalService] Session ${agentInfo.claudeSessionId} not found in JSONL, creating new`)
+        log.terminal.debug(`Session ${agentInfo.claudeSessionId} not found in JSONL, creating new`)
       }
     }
 
@@ -209,7 +205,7 @@ export class TerminalService {
 
         if (teleportSessionId) {
           // Teleporting from cloud - use --teleport flag with cloud session ID
-          console.log(`[TerminalService] Teleporting cloud session ${teleportSessionId} for ${agentId}`)
+          log.terminal.info(`Teleporting cloud session ${teleportSessionId} for ${agentId}`)
           args = ['--teleport', teleportSessionId]
 
           // Add model if specified
@@ -313,7 +309,7 @@ export class TerminalService {
         cwdStats = statSync(worktreePath)
         cwdIsDirectory = cwdStats.isDirectory()
       } catch (statError) {
-        console.error('[TerminalService] Failed to stat worktree path:', statError)
+        log.terminal.error('Failed to stat worktree path:', statError)
       }
     }
 
@@ -325,39 +321,20 @@ export class TerminalService {
         const shellStats = statSync(shell)
         shellIsExecutable = (shellStats.mode & 0o111) !== 0 // Check execute bit
       } catch (statError) {
-        console.error('[TerminalService] Failed to stat shell:', statError)
+        log.terminal.error('Failed to stat shell:', statError)
       }
     }
 
     // Debug logging for spawn issues
-    console.log('[TerminalService] Spawning PTY:', {
-      shell,
-      shellExists,
-      shellIsExecutable,
-      cwd: worktreePath,
-      cwdExists,
-      cwdIsDirectory,
-      agentId,
-      projectPath,
-      envVarCount: Object.keys(spawnEnv).length,
-      platform: process.platform
-    })
+    log.terminal.debug('Spawning PTY:', { shell, cwd: worktreePath, agentId })
 
     // Pre-validation warnings (don't throw - let spawn handle actual errors)
     if (!cwdExists || !cwdIsDirectory) {
-      console.warn('[TerminalService] WARNING: Working directory may not exist or is not a directory:', {
-        worktreePath,
-        cwdExists,
-        cwdIsDirectory
-      })
+      log.terminal.warn('Working directory may not exist or is not a directory:', worktreePath)
     }
 
     if (!shellExists || !shellIsExecutable) {
-      console.warn('[TerminalService] WARNING: Shell may not exist or is not executable:', {
-        shell,
-        shellExists,
-        shellIsExecutable
-      })
+      log.terminal.warn('Shell may not exist or is not executable:', shell)
     }
 
     let terminal: pty.IPty
@@ -370,19 +347,7 @@ export class TerminalService {
         env: spawnEnv
       })
     } catch (error: any) {
-      console.error('[TerminalService] PTY spawn failed:', {
-        errorMessage: error?.message,
-        errorCode: error?.code,
-        errorStack: error?.stack,
-        shell,
-        cwd: worktreePath,
-        cwdExists,
-        cwdIsDirectory,
-        shellExists,
-        shellIsExecutable,
-        platform: process.platform,
-        nodeVersion: process.version
-      })
+      log.terminal.error('PTY spawn failed:', error?.message)
       throw error
     }
 
@@ -427,11 +392,11 @@ export class TerminalService {
               claudeLastSeen: new Date().toISOString()
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
-            }).catch(err => console.error('Failed to update agent info:', err))
+            }).catch(err => log.terminal.error('Failed to update agent info:', err))
 
           } else if (currentState === 'working') {
             // Transitioned to working - clear waiting state
-            console.log(`[TerminalService] ${agentId} is working`)
+            log.terminal.debug(`${agentId} is working`)
 
             // Clear notification cooldown when user provides input
             if (lastKnownState === 'waiting') {
@@ -447,7 +412,7 @@ export class TerminalService {
               claudeLastSeen: new Date().toISOString()
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
-            }).catch(err => console.error('Failed to update agent info:', err))
+            }).catch(err => log.terminal.error('Failed to update agent info:', err))
           }
 
           lastKnownState = currentState
@@ -455,11 +420,11 @@ export class TerminalService {
       }
 
       // Check state IMMEDIATELY (no delay for fast Claude responses)
-      console.log(`[TerminalService] Performing immediate state check for ${agentId}`)
+      log.terminal.debug(`Performing immediate state check for ${agentId}`)
       checkAndBroadcastState()
 
       // Then poll every 1 second (faster than 2s, still efficient with caching)
-      console.log(`[TerminalService] Starting 1s polling for ${agentId} (session: ${effectiveSessionId})`)
+      log.terminal.debug(`Starting 1s polling for ${agentId}`)
       statePollingInterval = setInterval(() => {
         checkAndBroadcastState()
       }, 1000) // 1 second interval - mtime caching makes this efficient
@@ -514,13 +479,13 @@ export class TerminalService {
             })
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true
-            }).catch(err => console.error('Failed to update agent info:', err))
+            }).catch(err => log.terminal.error('Failed to update agent info:', err))
           },
           onResumedWork: () => {
             this.mainWindow.webContents.send('agent:resumedWork', agentId)
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false
-            }).catch(err => console.error('Failed to update agent info:', err))
+            }).catch(err => log.terminal.error('Failed to update agent info:', err))
           }
         }
       )
@@ -588,7 +553,7 @@ export class TerminalService {
     // Handle exit
     terminal.onExit((data) => {
       const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
-      console.log(`[TerminalService] Terminal exited for ${agentId} - ${exitInfo}`)
+      log.terminal.debug(`Terminal exited for ${agentId} - ${exitInfo}`)
 
       // Clean up idle detector (legacy, for non-Claude tools)
       session.idleDetector?.dispose()
@@ -606,7 +571,7 @@ export class TerminalService {
       // Mark session as inactive on exit
       if (tool === 'claude' && worktreePath) {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
-          .catch(err => console.error('Failed to mark session inactive:', err))
+          .catch(err => log.terminal.error('Failed to mark session inactive:', err))
       }
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')
@@ -747,7 +712,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
       stripped.includes('Could not resume') ||
       stripped.includes('Error resuming session')
     )) {
-      console.warn(`Resume failed for ${agentId}, attempting fresh start...`)
+      log.terminal.warn(`Resume failed for ${agentId}, attempting fresh start...`)
 
       // Mark that we're not resuming anymore
       ;(session as any)._attemptingResume = false
@@ -757,7 +722,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
         this.updateAgentInfo(session.worktreePath, {
           claudeSessionActive: false,
           claudeSessionId: undefined
-        }).catch(err => console.error('Failed to clear session:', err))
+        }).catch(err => log.terminal.error('Failed to clear session:', err))
       }
 
       // Kill current PTY and restart fresh
@@ -775,7 +740,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
           session.prompt,
           session.model,
           session.yolo
-        ).catch(err => console.error(`Failed to restart agent ${agentId}:`, err))
+        ).catch(err => log.terminal.error(`Failed to restart agent ${agentId}:`, err))
       }
 
       return
@@ -812,7 +777,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     this.readAgentInfo(session.worktreePath).then((agentInfo) => {
       // Only update if the cloud session ID is different from what's stored
       if (agentInfo?.cloudSessionId !== cloudSessionId) {
-        console.log(`[TerminalService] Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+        log.terminal.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
 
         this.updateAgentInfo(session.worktreePath, {
           cloudSessionId
@@ -820,11 +785,11 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
           // Broadcast update so UI can refresh (enables Teleport to Cloud button)
           this.mainWindow.webContents.send('agents:updated')
         }).catch((err) => {
-          console.error('Failed to store cloud session ID:', err)
+          log.terminal.error('Failed to store cloud session ID:', err)
         })
       }
     }).catch((err) => {
-      console.error('Failed to read agent info for cloud session detection:', err)
+      log.terminal.error('Failed to read agent info for cloud session detection:', err)
     })
   }
 
@@ -906,17 +871,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
     // Debug logging to understand spawn failures
-    console.log('[TerminalService] Starting plain terminal:', {
-      fullTerminalId,
-      shell,
-      shellExists: existsSync(shell),
-      cwd: worktreePath,
-      cwdExists: existsSync(worktreePath),
-      platform: process.platform,
-      SHELL: process.env.SHELL,
-      hasProcessEnv: !!process.env,
-      envKeys: Object.keys(process.env).length
-    })
+    log.terminal.debug('Starting plain terminal:', { fullTerminalId, shell, cwd: worktreePath })
 
     // Create a clean environment object for node-pty
     // node-pty/posix_spawn can fail if env has non-string values or special properties
@@ -941,14 +896,7 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
         env: spawnEnv
       })
     } catch (error) {
-      console.error('[TerminalService] Failed to spawn plain terminal:', {
-        error,
-        shell,
-        cwd: worktreePath,
-        platform: process.platform,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined
-      })
+      log.terminal.error('Failed to spawn plain terminal:', error instanceof Error ? error.message : String(error))
       throw new Error(`Failed to spawn terminal shell "${shell}": ${error instanceof Error ? error.message : String(error)}`)
     }
 
