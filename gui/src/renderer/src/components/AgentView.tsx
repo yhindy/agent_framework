@@ -3,11 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
-import ConfirmModal from './ConfirmModal'
 import SessionInfoPanel from './SessionInfoPanel'
+import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
-import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
@@ -51,16 +50,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const navigate = useNavigate()
   const [agent, setAgent] = useState<AgentSession | null>(null)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [showCleanupModal, setShowCleanupModal] = useState(false)
-  const [cleanupAction, setCleanupAction] = useState<'teardown' | 'unassign'>('unassign')
-  const [showForceModal, setShowForceModal] = useState(false)
-  const [_teardownError, setTeardownError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<string>('agent')
   const [testEnvCommands, setTestEnvCommands] = useState<any[]>([])
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
-  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
@@ -91,16 +85,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
     enabled: assignment?.status === 'pr_open' || false
   })
-
-  const teardownMessages = [
-    'Returning minion to the break room...',
-    'Cleaning up banana peels from the workspace...',
-    'Shredding incriminating documents...',
-    'Wiping fingerprints from the keyboard...',
-    'Returning stolen shrink rays...',
-    'Escaping before Gru finds out...',
-    'Restocking the vending machine...'
-  ]
 
   useEffect(() => {
     if (!agentId) return
@@ -294,13 +278,8 @@ function AgentView({ activeProjects }: AgentViewProps) {
   }
 
   const getStatusClass = (status: string): string => {
-    switch(status) {
-      case 'working': return 'working'
-      case 'pr_open': return 'pr_open'
-      case 'merged': return 'merged'
-      case 'idle': return 'idle'
-      default: return 'idle'
-    }
+    const validStatuses = ['working', 'pr_open', 'merged']
+    return validStatuses.includes(status) ? status : 'idle'
   }
 
   const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
@@ -310,64 +289,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
       const element = e.currentTarget
       element.classList.add('copy-flash')
       setTimeout(() => element.classList.remove('copy-flash'), 300)
-    }
-  }
-
-  const handleCleanupClick = (action: 'teardown' | 'unassign') => {
-    setCleanupAction(action)
-    setShowCleanupModal(true)
-  }
-
-  const handleConfirmCleanup = async () => {
-    if (!agentId) return
-
-    let snackbarId: string | undefined
-    try {
-      setShowCleanupModal(false)
-
-      if (cleanupAction === 'teardown') {
-        snackbarId = showLoading({
-          title: 'Archiving Mission...',
-          messages: teardownMessages
-        })
-        await window.electronAPI.teardownAgent(agentId, false)
-        hideLoading(snackbarId)
-      } else {
-        await window.electronAPI.unassignAgent(agentId)
-      }
-
-      // Navigate back to home
-      navigate('/workspace')
-    } catch (error: any) {
-      if (snackbarId) hideLoading(snackbarId)
-
-      // Check if error is due to uncommitted changes
-      if (cleanupAction === 'teardown' && error.message.includes('uncommitted changes')) {
-        setTeardownError(error.message)
-        setShowForceModal(true)
-      } else {
-        alert(`Error during cleanup: ${error.message}`)
-      }
-    }
-  }
-
-  const handleForceTeardown = async () => {
-    if (!agentId) return
-
-    const snackbarId = showLoading({
-      title: 'Force Archiving Mission...',
-      messages: teardownMessages
-    })
-    try {
-      setShowForceModal(false)
-      await window.electronAPI.teardownAgent(agentId, true)
-      hideLoading(snackbarId)
-
-      // Navigate back to home
-      navigate('/workspace')
-    } catch (error: any) {
-      hideLoading(snackbarId)
-      alert(`Error during force teardown: ${error.message}`)
     }
   }
 
@@ -513,15 +434,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
           )}
 
           {assignment && !assignment.isBaseBranchAgent && (
-            <div className="cleanup-dropdown">
-              <button className="cleanup-button compact-button icon-only">🗑️</button>
-              <div className="cleanup-menu">
-                <button onClick={() => handleCleanupClick('unassign')}>Unassign</button>
-                <button onClick={() => handleCleanupClick('teardown')} className="danger-text">
-                  Teardown
-                </button>
-              </div>
-            </div>
+            <AgentCleanupDropdown
+              agentId={agentId || ''}
+              onCleanupComplete={() => navigate('/workspace')}
+            />
           )}
         </div>
       </div>
@@ -654,31 +570,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
           ))}
         </div>
       </div>
-
-      <ConfirmModal
-        isOpen={showCleanupModal}
-        title={cleanupAction === 'teardown' ? 'Teardown Minion?' : 'Unassign Minion?'}
-        message={
-          cleanupAction === 'teardown'
-            ? `This will remove the worktree for ${agentId}. Any uncommitted changes will be lost. This action cannot be undone.`
-            : `This will unassign ${agentId} and make it available for new missions. The worktree will be kept.`
-        }
-        confirmText={cleanupAction === 'teardown' ? 'Teardown' : 'Unassign'}
-        confirmVariant={cleanupAction === 'teardown' ? 'danger' : 'primary'}
-        onConfirm={handleConfirmCleanup}
-        onCancel={() => setShowCleanupModal(false)}
-      />
-
-      <ConfirmModal
-        isOpen={showForceModal}
-        title="Uncommitted Changes Detected"
-        message={`${agentId} has uncommitted changes. Force teardown will permanently delete all uncommitted work. Are you sure you want to proceed?`}
-        confirmText="Force Teardown"
-        cancelText="Cancel"
-        confirmVariant="danger"
-        onConfirm={handleForceTeardown}
-        onCancel={() => setShowForceModal(false)}
-      />
 
       {showPRConfirm && assignment && (
         <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>

@@ -424,7 +424,8 @@ export class TerminalService {
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: true,
               claudeState: 'waiting',
-              claudeLastSeen: new Date().toISOString()
+              claudeLastSeen: new Date().toISOString(),
+              waitingSince: new Date().toISOString()
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
@@ -444,7 +445,8 @@ export class TerminalService {
             this.updateAgentInfo(worktreePath, {
               isWaitingForInput: false,
               claudeState: 'working',
-              claudeLastSeen: new Date().toISOString()
+              claudeLastSeen: new Date().toISOString(),
+              waitingSince: undefined
             }).then(() => {
               this.mainWindow.webContents.send('agents:updated')
             }).catch(err => console.error('Failed to update agent info:', err))
