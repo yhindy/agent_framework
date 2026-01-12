@@ -694,21 +694,8 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:detectPR', async (_event, assignmentId: string, force?: boolean) => {
-    // Find which project contains this assignment
-    const activeProjects = services!.project.getActiveProjects()
-    for (const project of activeProjects) {
-      try {
-        const { assignments } = await services!.agent.getAssignments(project.path)
-        const found = assignments.find((a: any) => a.id === assignmentId)
-        if (found) {
-          return services!.agent.detectExistingPullRequest(project.path, assignmentId, { force })
-        }
-      } catch (err) {
-        // Continue searching other projects
-        console.error(`[IPC] Error searching project ${project.path} for assignment:`, err)
-      }
-    }
-    throw new Error('Assignment not found in any active project')
+    const projectPath = await findProjectForAssignment(assignmentId)
+    return services!.agent.detectExistingPullRequest(projectPath, assignmentId, { force })
   })
 
   // PR Polling handlers

@@ -89,7 +89,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
       // Auto-detect PR if no prUrl
       if (details && !details.prUrl) {
         try {
-          const result = await window.electronAPI.detectPullRequest(details.agentId)
+          const result = await window.electronAPI.detectPullRequest(details.id)
           if (result?.found && result.prUrl) {
             // Reload agent to get updated data
             const refreshed = await window.electronAPI.getSuperAgentDetails(agentId!)
