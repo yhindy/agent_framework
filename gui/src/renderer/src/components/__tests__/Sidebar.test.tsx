@@ -164,10 +164,11 @@ describe('Sidebar Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.removeItem('collapsedSuperMinions')
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
   })
 
-  it('renders super minion and its child', async () => {
+  it('collapses super minion children by default on first load', async () => {
     render(
       <MemoryRouter>
         <Sidebar
@@ -186,8 +187,8 @@ describe('Sidebar Integration', () => {
       expect(screen.getByText('super-1')).toBeInTheDocument()
     })
 
-    // Child should also be visible by default (since not collapsed)
-    expect(screen.getByText('child-1')).toBeInTheDocument()
+    // Child should be hidden by default on first load
+    expect(screen.queryByText('child-1')).not.toBeInTheDocument()
 
     // Super minion should have the leading icons container with crown
     const superItem = screen.getByText('super-1').closest('.agent-item')
@@ -196,7 +197,7 @@ describe('Sidebar Integration', () => {
     expect(leadingIcons).toContainHTML('👑')
   })
 
-  it('collapses children when super minion toggle is clicked', async () => {
+  it('toggles children when super minion chevron is clicked', async () => {
     render(
       <MemoryRouter>
         <Sidebar
@@ -214,10 +215,14 @@ describe('Sidebar Integration', () => {
       expect(screen.getByText('super-1')).toBeInTheDocument()
     })
 
-    const superItem = screen.getByText('super-1').closest('.agent-item')!
-    fireEvent.click(superItem)
+    const chevron = screen.getByTitle('Toggle child agents')
+    fireEvent.click(chevron)
 
-    // Child should be gone
+    expect(screen.getByText('child-1')).toBeInTheDocument()
+
+    fireEvent.click(chevron)
+
+    // Child should be gone again
     expect(screen.queryByText('child-1')).not.toBeInTheDocument()
   })
 })
@@ -1033,4 +1038,3 @@ describe('Sidebar icon alignment', () => {
     expect(normalIcon?.textContent).toBe('🍌')
   })
 })
-
