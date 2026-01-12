@@ -45,15 +45,28 @@ echo "   From: $FRAMEWORK_DIR"
 echo "   To:   $TARGET"
 echo ""
 
+# Check for Codex CLI
+if ! command -v codex &> /dev/null; then
+    echo -e "${YELLOW}Warning: Codex CLI not found.${NC}"
+    echo "   If you plan to use Codex agents, install it with:"
+    echo "   npm install -g @openai/codex-cli"
+    echo "   Or visit: https://github.com/openai/openai-codex-cli"
+    echo ""
+fi
+
 # Create directory structure
 echo -e "${BLUE}📁 Creating directory structure...${NC}"
 mkdir -p "$TARGET/minions/assignments"
 mkdir -p "$TARGET/.cursor/rules"
 
-# Copy Cursor rules
+# Copy Cursor rules (if they exist)
 echo -e "${BLUE}📋 Copying configuration files...${NC}"
-cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
-echo "   ✓ .cursor/rules/agent-rules.mdc"
+if [ -f "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" ]; then
+    cp "$FRAMEWORK_DIR/.cursor/rules/agent-rules.mdc" "$TARGET/.cursor/rules/"
+    echo "   ✓ .cursor/rules/agent-rules.mdc"
+else
+    echo "   ℹ️  .cursor/rules/agent-rules.mdc not found (optional)"
+fi
 
 # Detect project name
 PROJECT_NAME=$(basename "$TARGET")

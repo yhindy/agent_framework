@@ -367,3 +367,110 @@ describe('Dashboard Model Selection', () => {
     expect(modelSelect.value).toBe('opus')
   })
 })
+
+describe('Dashboard Codex Integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('displays Codex as a tool option', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    const toolSelect = getSelectByLabelText('Tool')
+    const options = Array.from(toolSelect.options).map(opt => ({
+      value: opt.value,
+      text: opt.textContent
+    }))
+
+    expect(options).toContainEqual({ value: 'codex', text: 'OpenAI Codex' })
+  })
+
+  it('does not show model dropdown when codex is selected', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Select codex tool
+    const toolSelect = getSelectByLabelText('Tool')
+    fireEvent.change(toolSelect, { target: { value: 'codex' } })
+
+    // Model label should not exist
+    expect(screen.queryByText('Model')).not.toBeInTheDocument()
+  })
+
+  it('automatically sets model to gpt-5.2-codex when codex is selected', async () => {
+    const mockCreateAssignment = vi.fn().mockResolvedValue({ agentId: 'test-agent-123' })
+    window.electronAPI.createAssignmentForProject = mockCreateAssignment
+
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Select codex tool
+    const toolSelect = getSelectByLabelText('Tool')
+    fireEvent.change(toolSelect, { target: { value: 'codex' } })
+
+    // Fill in required fields
+    const branchInput = screen.getByPlaceholderText('user-auth')
+    fireEvent.change(branchInput, { target: { value: 'test-feature' } })
+
+    const textareas = screen.getAllByRole('textbox')
+    const promptTextarea = textareas.find(t => t.tagName === 'TEXTAREA')
+    fireEvent.change(promptTextarea!, { target: { value: 'Test task description' } })
+
+    // Submit the form
+    const submitButton = screen.getByText('Start Agent')
+    fireEvent.click(submitButton)
+
+    // Wait for the API call
+    await waitFor(() => {
+      expect(mockCreateAssignment).toHaveBeenCalled()
+    })
+
+    // Verify the model is set to gpt-5.2-codex
+    const callArgs = mockCreateAssignment.mock.calls[0]
+    expect(callArgs[1]).toMatchObject({
+      tool: 'codex',
+      model: 'gpt-5.2-codex'
+    })
+  })
+
+  it('shows model dropdown when switching from codex to claude', async () => {
+    render(
+      <MemoryRouter>
+        <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
+      </MemoryRouter>
+    )
+
+    await openSingleAgentForm()
+
+    // Select codex tool
+    const toolSelect = getSelectByLabelText('Tool')
+    fireEvent.change(toolSelect, { target: { value: 'codex' } })
+
+    // Model dropdown should not exist
+    expect(screen.queryByText('Model')).not.toBeInTheDocument()
+
+    // Switch back to claude
+    fireEvent.change(toolSelect, { target: { value: 'claude' } })
+
+    // Model dropdown should now exist
+    await waitFor(() => {
+      expect(screen.getByText('Model')).toBeInTheDocument()
+    })
+  })
+})

@@ -58,6 +58,20 @@ export const CLAUDE_IDLE_INDICATORS = [
 
 export const CLAUDE_START_PATTERN = /Claude Code/
 
+// Codex-specific patterns (OpenAI agent CLI)
+export const CODEX_WORKING_PATTERNS = [
+  /Analyzing/i,
+  /Processing/i,
+  /Thinking/i,
+  /Working/i,
+  /Running/i,
+  /Making changes/i,
+  /Implementing/i,
+  /Refactoring/i,
+  /Updating/i,
+  /^\s*\.\.\./m // Progress dots at start of line
+]
+
 // Shell-specific patterns (for plain terminals)
 export const SHELL_WORKING_PATTERNS = [
   ...CLAUDE_WORKING_PATTERNS, // Include Claude patterns since users run Claude in plain terminals

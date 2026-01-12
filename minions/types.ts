@@ -3,7 +3,7 @@
  * These types are shared between the shell scripts metadata and the GUI application.
  */
 
-export type AgentTool = 'claude' | 'cursor' | 'cursor-cli';
+export type AgentTool = 'claude' | 'cursor' | 'cursor-cli' | 'codex';
 export type AgentMode = 'planning' | 'dev' | 'idle';
 export type AssignmentStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'merging' | 'archived' | 'blocked';
 
