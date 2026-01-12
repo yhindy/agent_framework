@@ -667,3 +667,40 @@
   justify-content: center;
 }
 
+/* Sidebar Footer - Settings Button */
+.sidebar-footer {
+  border-top: 1px solid #3c3c3c;
+  padding: 8px;
+  margin-top: auto;
+  margin-bottom: 48px; /* Space for collapse button */
+}
+
+.settings-nav-item {
+  width: 100%;
+}
+
+.settings-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-icon svg {
+  color: currentColor;
+}
+
+/* Collapsed state for sidebar footer */
+.sidebar.collapsed .sidebar-footer {
+  padding: 8px 6px;
+  border-top: none;
+}
+
+.sidebar.collapsed .settings-nav-item {
+  justify-content: center;
+  padding: 8px;
+}
+
+.sidebar.collapsed .settings-nav-item .nav-label {
+  display: none !important;
+}
+

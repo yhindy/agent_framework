@@ -1,0 +1,465 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1e1e1e;
+  color: #cccccc;
+  overflow-y: auto;
+}
+
+.settings-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 14px;
+  color: #858585;
+}
+
+/* Header */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px 20px;
+  background: #1e1e1e;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.settings-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.save-status {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.save-status--saving {
+  color: #dcdcaa;
+  background: rgba(220, 220, 170, 0.15);
+  border: 1px solid rgba(220, 220, 170, 0.3);
+}
+
+.save-status--saved {
+  color: #4ec9b0;
+  background: rgba(78, 201, 176, 0.15);
+  border: 1px solid rgba(78, 201, 176, 0.3);
+}
+
+/* Content Container */
+.settings-content {
+  padding: 0 32px 48px;
+  max-width: 720px;
+}
+
+/* Section Styles */
+.settings-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b6b6b;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 16px;
+  padding-left: 2px;
+}
+
+.settings-card {
+  background: #252526;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.settings-card:hover {
+  border-color: #404040;
+}
+
+/* Setting Item Styles */
+.setting-item {
+  padding: 20px 24px;
+  border-bottom: 1px solid #2d2d2d;
+  transition: background 0.15s ease;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-item:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.setting-text.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.setting-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8e8e8;
+  letter-spacing: -0.1px;
+}
+
+.setting-description {
+  font-size: 13px;
+  color: #808080;
+  line-height: 1.5;
+}
+
+/* Custom Checkbox Styles */
+.checkbox-setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+
+.checkbox-setting input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: #2d2d30;
+  border: 2px solid #4a4a4a;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.checkbox-setting input[type='checkbox']:hover {
+  border-color: #606060;
+  background: #363638;
+}
+
+.checkbox-setting input[type='checkbox']:checked {
+  background: #0e639c;
+  border-color: #0e639c;
+}
+
+.checkbox-setting input[type='checkbox']:checked:hover {
+  background: #1177bb;
+  border-color: #1177bb;
+}
+
+.checkbox-setting input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-setting input[type='checkbox']:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.4);
+}
+
+/* Input Styles */
+.setting-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cooldown-input {
+  width: 72px;
+  padding: 10px 12px;
+  background: #2d2d30;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  transition: all 0.15s ease;
+}
+
+.cooldown-input:hover {
+  border-color: #505050;
+  background: #333336;
+}
+
+.cooldown-input:focus {
+  outline: none;
+  border-color: #0e639c;
+  box-shadow: 0 0 0 3px rgba(14, 99, 156, 0.2);
+}
+
+/* Hide default number spinners and add custom ones */
+.cooldown-input::-webkit-inner-spin-button,
+.cooldown-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cooldown-input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.input-suffix {
+  font-size: 13px;
+  color: #707070;
+  font-weight: 500;
+}
+
+/* Select Styles */
+.settings-select {
+  min-width: 200px;
+  padding: 10px 36px 10px 14px;
+  background: #2d2d30;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  color: #e8e8e8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23808080' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+}
+
+.settings-select:hover {
+  border-color: #505050;
+  background-color: #333336;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0a0a0' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: #0e639c;
+  box-shadow: 0 0 0 3px rgba(14, 99, 156, 0.2);
+}
+
+.settings-select option {
+  background: #2d2d30;
+  color: #e8e8e8;
+  padding: 8px;
+}
+
+/* Codex Model Badge */
+.codex-model-badge {
+  font-size: 13px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  color: #9cdcfe;
+  background: rgba(156, 220, 254, 0.1);
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(156, 220, 254, 0.2);
+  font-weight: 500;
+}
+
+/* Workflow Radio Styles */
+.workflow-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.workflow-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #2a2a2c;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.workflow-radio::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  border: 2px solid #3c3c3c;
+  transition: border-color 0.2s ease;
+}
+
+.workflow-radio:hover {
+  background: #303032;
+}
+
+.workflow-radio:hover::before {
+  border-color: #505050;
+}
+
+.workflow-radio.selected {
+  background: rgba(14, 99, 156, 0.08);
+}
+
+.workflow-radio.selected::before {
+  border-color: #0e639c;
+}
+
+/* Custom Radio Button */
+.workflow-radio input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: #2d2d30;
+  border: 2px solid #4a4a4a;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.workflow-radio input[type='radio']:hover {
+  border-color: #606060;
+}
+
+.workflow-radio.selected input[type='radio'] {
+  border-color: #0e639c;
+  background: #0e639c;
+}
+
+.workflow-radio.selected input[type='radio']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border-radius: 50%;
+}
+
+.workflow-radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.workflow-radio-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8e8e8;
+}
+
+.workflow-radio.selected .workflow-radio-title {
+  color: #ffffff;
+}
+
+.workflow-radio-description {
+  font-size: 13px;
+  color: #808080;
+  line-height: 1.4;
+}
+
+/* Feedback Section Styles */
+.feedback-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.feedback-text {
+  font-size: 14px;
+  color: #a0a0a0;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.feedback-button {
+  align-self: flex-start;
+  background: transparent;
+  color: #4ec9b0;
+  border: 1px solid #4ec9b0;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.feedback-button:hover {
+  background: rgba(78, 201, 176, 0.1);
+  border-color: #5fd9c0;
+  color: #5fd9c0;
+  transform: translateY(-1px);
+}
+
+.feedback-button:active {
+  transform: translateY(0);
+  background: rgba(78, 201, 176, 0.15);
+}
+
+/* Focus visible for accessibility */
+.settings-select:focus-visible,
+.cooldown-input:focus-visible,
+.checkbox-setting input[type='checkbox']:focus-visible,
+.workflow-radio input[type='radio']:focus-visible,
+.feedback-button:focus-visible {
+  outline: 2px solid #0e639c;
+  outline-offset: 2px;
+}
+
+/* Subtle animation for settings changes */
+@keyframes settingUpdated {
+  0% {
+    background: rgba(78, 201, 176, 0.1);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.setting-item.updated {
+  animation: settingUpdated 0.5s ease-out;
+}

@@ -1,6 +1,7 @@
 # Agent Framework
 .agent-info
 *.bak
+.engineering-design.md
 
 # OS
 .DS_Store
