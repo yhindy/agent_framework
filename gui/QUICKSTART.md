@@ -5,7 +5,7 @@ Get the Minion Orchestrator GUI up and running in 5 minutes. 🍌
 ## Step 1: Prerequisites
 
 ```bash
-# Verify Node.js is installed (need 18+)
+# Verify Node.js is installed (need 20.x or later)
 node --version
 
 # Verify you have the agent framework set up

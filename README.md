@@ -59,9 +59,7 @@ your-project/
 │   ├── templates/           # Spec templates
 │   ├── assignments.json     # Track active missions
 │   └── README.md            # Minion guide
-├── gui/                     # GUI Orchestrator source (optional)
-└── .cursor/rules/
-    └── agent-rules.mdc      # Cursor IDE rules for minions
+└── gui/                     # GUI Orchestrator source (optional)
 ```
 
 ## Installation & Removal
@@ -116,7 +114,7 @@ A desktop app for managing minions with a visual interface:
 
 ```bash
 # Launch from the framework root
-./minions/bin/dashboard.sh
+npm run gui:dev
 ```
 
 Features:
