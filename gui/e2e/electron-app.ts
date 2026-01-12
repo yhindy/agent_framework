@@ -94,7 +94,23 @@ export async function launchElectronApp(options: LaunchOptions = {}): Promise<El
     mainWindow,
     evaluateInMain: <T>(fn: () => T | Promise<T>): Promise<T> => app.evaluate(fn),
     getMainProcessLogs: () => [...mainProcessLogs],
-    close: () => app.close(),
+    close: async () => {
+      try {
+        // Give app time to clean up gracefully
+        await app.evaluate(({ app: electronApp }) => {
+          electronApp.quit()
+        })
+        // Wait briefly for cleanup
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      } catch {
+        // Ignore errors during close
+      }
+      try {
+        await app.close()
+      } catch {
+        // App may already be closed
+      }
+    },
   }
 }
 
@@ -130,11 +146,28 @@ export async function createTestProject(name = 'test-project'): Promise<string> 
   execSync('git config user.name "Test User"', { cwd: tmpDir })
 
   await writeFile(path.join(tmpDir, 'README.md'), '# Test Project\n')
-  execSync('git add -A && git commit -m "Initial commit"', { cwd: tmpDir })
 
-  const minionsDir = path.join(tmpDir, '.minions')
-  await mkdir(path.join(minionsDir, 'assignments'), { recursive: true })
-  await mkdir(path.join(minionsDir, 'active'), { recursive: true })
+  // Create minions config structure (required by AgentService)
+  const minionsDir = path.join(tmpDir, 'minions')
+  await mkdir(minionsDir, { recursive: true })
+
+  const config = {
+    project: {
+      name: name,
+      defaultBaseBranch: 'master',
+    },
+    setup: {
+      filesToCopy: [],
+      postSetupCommands: [],
+      requiredFiles: [],
+      preflightCommands: [],
+    },
+    assignments: [],
+    testEnvironments: [],
+  }
+  await writeFile(path.join(minionsDir, 'config.json'), JSON.stringify(config, null, 2))
+
+  execSync('git add -A && git commit -m "Initial commit"', { cwd: tmpDir })
 
   return tmpDir
 }

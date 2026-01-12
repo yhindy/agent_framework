@@ -8,26 +8,24 @@ import { test, expect, createAppPage } from './fixtures'
 
 const TERMINAL_RENDER_TIME = 2000
 
-function hasElement(selectors: string[]): () => boolean {
-  return () => selectors.some((sel) => document.querySelector(sel) !== null)
-}
-
 test.describe('Terminal Interactions', () => {
   test.describe('Terminal Rendering', () => {
     test('should render xterm terminal component', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
       await appPage.callIPC<{ id: string }>('createAssignment', {
         prompt: 'Terminal test',
         tool: 'claude',
+        branch: 'e2e-terminal',
       })
 
       await appPage.page.waitForTimeout(TERMINAL_RENDER_TIME)
 
-      const hasTerminalUI = await appPage.page.evaluate(
-        hasElement(['.xterm', '.xterm-viewport', '[data-testid="terminal"]', '.terminal-container'])
-      )
+      const hasTerminalUI = await appPage.page.evaluate(() => {
+        const selectors = ['.xterm', '.xterm-viewport', '[data-testid="terminal"]', '.terminal-container']
+        return selectors.some((sel) => document.querySelector(sel) !== null)
+      })
 
       expect(typeof hasTerminalUI).toBe('boolean')
     })
@@ -65,11 +63,12 @@ test.describe('Terminal Interactions', () => {
 
     test('should handle terminal input/output via IPC', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
       await appPage.callIPC<{ id: string }>('createAssignment', {
         prompt: 'Terminal I/O test',
         tool: 'claude',
+        branch: 'e2e-terminal-io',
       })
 
       const hasTerminalListener = await appPage.page.evaluate(() => {
@@ -116,11 +115,12 @@ test.describe('Terminal Interactions', () => {
 test.describe('Terminal Output Verification', () => {
   test('should verify terminal content can be read', async ({ electronApp, testProject }) => {
     const appPage = createAppPage(electronApp)
-    await appPage.callIPC('selectProjectWithPath', testProject)
+    await appPage.callIPC('selectProject', testProject)
 
     await appPage.callIPC('createAssignment', {
       prompt: 'Output verification test',
       tool: 'claude',
+      branch: 'e2e-output-verify',
     })
 
     await appPage.page.waitForTimeout(TERMINAL_RENDER_TIME)

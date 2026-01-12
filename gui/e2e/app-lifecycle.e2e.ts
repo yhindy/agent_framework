@@ -21,10 +21,14 @@ test.describe('Application Lifecycle', () => {
     })
 
     test('should have reasonable window dimensions', async ({ electronApp }) => {
-      const viewport = electronApp.mainWindow.viewportSize()
-      expect(viewport).toBeTruthy()
-      expect(viewport?.width).toBeGreaterThan(400)
-      expect(viewport?.height).toBeGreaterThan(300)
+      // Get window bounds from main process as viewport may not be set
+      const bounds = await electronApp.app.evaluate(({ BrowserWindow }) => {
+        const win = BrowserWindow.getAllWindows()[0]
+        return win?.getBounds()
+      })
+      expect(bounds).toBeTruthy()
+      expect(bounds?.width).toBeGreaterThan(400)
+      expect(bounds?.height).toBeGreaterThan(300)
     })
 
     test('should render the React app root', async ({ electronApp }) => {
@@ -50,7 +54,7 @@ test.describe('Application Lifecycle', () => {
         return api ? Object.keys(api) : []
       })
 
-      const requiredMethods = ['selectProject', 'getAgents', 'createAssignment', 'onAgentsUpdated']
+      const requiredMethods = ['selectProject', 'listAgents', 'createAssignment', 'onAgentListUpdate']
       for (const method of requiredMethods) {
         expect(apiMethods, `Missing API method: ${method}`).toContain(method)
       }

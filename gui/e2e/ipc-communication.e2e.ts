@@ -10,7 +10,7 @@ test.describe('IPC Communication', () => {
   test.describe('Project IPC', () => {
     test('should get current project path via IPC', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
       const currentProject = await appPage.callIPC<string | null>('getCurrentProject')
       expect(currentProject).toBeTruthy()
@@ -26,17 +26,17 @@ test.describe('IPC Communication', () => {
   test.describe('Agent IPC', () => {
     test('should list agents via IPC (empty initially)', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
-      const agents = await appPage.callIPC<unknown[]>('getAgents')
+      const agents = await appPage.callIPC<unknown[]>('listAgents')
       expect(Array.isArray(agents)).toBe(true)
     })
 
-    test('should handle getAgents error gracefully when no project', async ({ electronApp }) => {
+    test('should handle listAgents error gracefully when no project', async ({ electronApp }) => {
       const appPage = createAppPage(electronApp)
 
       try {
-        const agents = await appPage.callIPC<unknown[]>('getAgents')
+        const agents = await appPage.callIPC<unknown[]>('listAgents')
         expect(Array.isArray(agents)).toBe(true)
       } catch (error) {
         expect(error).toBeTruthy()
@@ -47,12 +47,13 @@ test.describe('IPC Communication', () => {
   test.describe('Assignment IPC', () => {
     test('should create assignment via IPC', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
       const assignment = await appPage.callIPC<{ id: string }>('createAssignment', {
         prompt: 'Test prompt for E2E test',
         tool: 'claude',
         model: 'claude-sonnet-4-20250514',
+        branch: 'e2e-test',
       })
 
       expect(assignment).toBeTruthy()
@@ -61,10 +62,11 @@ test.describe('IPC Communication', () => {
 
     test('should get assignments via IPC', async ({ electronApp, testProject }) => {
       const appPage = createAppPage(electronApp)
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
 
-      const assignments = await appPage.callIPC<unknown[]>('getAssignments')
-      expect(Array.isArray(assignments)).toBe(true)
+      const result = await appPage.callIPC<{ assignments: unknown[] }>('getAssignments')
+      expect(result).toBeTruthy()
+      expect(Array.isArray(result.assignments)).toBe(true)
     })
   })
 
@@ -73,17 +75,14 @@ test.describe('IPC Communication', () => {
       const appPage = createAppPage(electronApp)
 
       const deps = await appPage.callIPC<{
-        git: boolean
-        python: boolean
-        gh: boolean
-        claude?: boolean
-        cursorCli?: boolean
-        codex?: boolean
+        ghInstalled: boolean
+        ghAuthenticated: boolean
+        error?: string
       }>('checkDependencies')
 
       expect(deps).toBeTruthy()
-      expect(typeof deps.git).toBe('boolean')
-      expect(typeof deps.python).toBe('boolean')
+      expect(typeof deps.ghInstalled).toBe('boolean')
+      expect(typeof deps.ghAuthenticated).toBe('boolean')
     })
   })
 
@@ -110,12 +109,12 @@ test.describe('IPC Communication', () => {
           const api = (
             window as unknown as {
               electronAPI: {
-                onAgentsUpdated: (cb: () => void) => () => void
+                onAgentListUpdate: (cb: () => void) => () => void
               }
             }
           ).electronAPI
 
-          const cleanup = api.onAgentsUpdated(() => {
+          const cleanup = api.onAgentListUpdate(() => {
             cleanup()
             resolve(true)
           })
@@ -127,10 +126,11 @@ test.describe('IPC Communication', () => {
         })
       })
 
-      await appPage.callIPC('selectProjectWithPath', testProject)
+      await appPage.callIPC('selectProject', testProject)
       await appPage.callIPC('createAssignment', {
         prompt: 'Event test',
         tool: 'claude',
+        branch: 'e2e-event-test',
       })
 
       const received = await eventReceived
