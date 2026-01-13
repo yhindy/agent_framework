@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import ProjectPicker from './components/ProjectPicker'
 import MainLayout from './components/MainLayout'
 import { SnackbarProvider } from './contexts/SnackbarContext'
+import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import SnackbarContainer from './components/SnackbarContainer'
 import './App.css'
 
@@ -47,38 +48,40 @@ function App() {
 
   return (
     <SnackbarProvider>
-      <Router>
-        <div className="app-container">
-          <Routes>
-            <Route
-              path="/"
-              element={
-                activeProjects.length > 0 ? (
-                  <Navigate to="/workspace" replace />
-                ) : (
-                  <ProjectPicker onProjectSelect={handleProjectSelect} />
-                )
-              }
-            />
-            <Route
-              path="/workspace/*"
-              element={
-                activeProjects.length > 0 ? (
-                  <MainLayout
-                    activeProjects={activeProjects}
-                    onProjectRemove={handleRemoveProject}
-                    onProjectAdd={handleProjectAdd}
-                    onRefresh={refreshState}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
-            />
-          </Routes>
-        </div>
-      </Router>
-      <SnackbarContainer />
+      <KeyboardShortcutsProvider>
+        <Router>
+          <div className="app-container">
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  activeProjects.length > 0 ? (
+                    <Navigate to="/workspace" replace />
+                  ) : (
+                    <ProjectPicker onProjectSelect={handleProjectSelect} />
+                  )
+                }
+              />
+              <Route
+                path="/workspace/*"
+                element={
+                  activeProjects.length > 0 ? (
+                    <MainLayout
+                      activeProjects={activeProjects}
+                      onProjectRemove={handleRemoveProject}
+                      onProjectAdd={handleProjectAdd}
+                      onRefresh={refreshState}
+                    />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+            </Routes>
+          </div>
+        </Router>
+        <SnackbarContainer />
+      </KeyboardShortcutsProvider>
     </SnackbarProvider>
   )
 }
