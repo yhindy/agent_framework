@@ -286,11 +286,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }
 
-  const getStatusClass = (status: string): string => {
-    const validStatuses = ['working', 'pr_open', 'merged']
-    return validStatuses.includes(status) ? status : 'idle'
-  }
-
   const handleConfirmCreatePR = async () => {
     if (!assignment) return
     await handleConfirmCreatePRHook(assignment.id, loadAgentData)
@@ -374,7 +369,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
   const isRunning = agent.terminalPid !== null
 
-  // Build badges array for the header
+  // Build badges array for the header - consistent across Minion and Super Minion
   const headerBadges: HeaderBadge[] = []
   if (assignment) {
     headerBadges.push({
@@ -383,17 +378,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
       variant: 'feature',
       copyable: true
     })
+    // ID badge is shown in SessionInfoPanel expanded view, but we still pass it for consistency
     headerBadges.push({
       label: 'ID',
       value: agentId || '',
       variant: 'id',
-      copyable: true
-    })
-    headerBadges.push({
-      label: 'Status',
-      value: assignment.status,
-      variant: 'status',
-      statusColor: getStatusClass(assignment.status) as 'working' | 'idle' | 'pr_open' | 'merged' | 'blocked',
       copyable: true
     })
   }
@@ -462,6 +451,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
         badges={headerBadges}
         tool={assignment?.tool}
         isRunning={isRunning}
+        status={assignment?.status}
         actions={headerActions}
       />
 

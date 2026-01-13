@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react'
+import { ReactNode } from 'react'
 import SessionInfoPanel from './SessionInfoPanel'
 import './AgentHeader.css'
 
@@ -25,6 +25,8 @@ interface AgentHeaderProps {
   tool?: string
   /** Whether the agent is running */
   isRunning?: boolean
+  /** Agent status for display in SessionInfoPanel */
+  status?: string
   /** Action buttons (right side) */
   actions?: ReactNode
   /** Optional task count for super minions */
@@ -39,11 +41,10 @@ function AgentHeader({
   badges = [],
   tool,
   isRunning = false,
+  status,
   actions,
   taskCount
 }: AgentHeaderProps) {
-  const [isInfoExpanded, setIsInfoExpanded] = useState(false)
-
   const handleCopyToClipboard = (text: string, e: React.MouseEvent) => {
     navigator.clipboard.writeText(text)
     const element = e.currentTarget
@@ -51,9 +52,8 @@ function AgentHeader({
     setTimeout(() => element.classList.remove('header-copy-flash'), 300)
   }
 
-  // Filter out 'id' variant badges - they go in the expandable info panel
+  // Filter out 'id' variant badges - they are shown in the SessionInfoPanel expanded view
   const displayBadges = badges.filter(badge => badge.variant !== 'id')
-  const idBadge = badges.find(badge => badge.variant === 'id')
 
   const getStatusDotClass = (status?: string): string => {
     const validStatuses = ['working', 'pr_open', 'merged', 'blocked']
@@ -99,37 +99,14 @@ function AgentHeader({
           </div>
         ))}
 
-        {/* Session Info Panel - inline with badges */}
-        {tool === 'claude' && (
-          <SessionInfoPanel agentId={agentId} isRunning={isRunning} />
-        )}
-
-        {/* Expandable Info Panel for Agent ID */}
-        {idBadge && (
-          <div className="header-info-toggle">
-            <button
-              className={`info-toggle-btn ${isInfoExpanded ? 'expanded' : ''}`}
-              onClick={() => setIsInfoExpanded(!isInfoExpanded)}
-              title={isInfoExpanded ? 'Hide agent info' : 'Show agent info'}
-            >
-              <span className="info-toggle-icon">i</span>
-            </button>
-            {isInfoExpanded && (
-              <div className="header-info-panel">
-                <div className="info-panel-row">
-                  <span className="info-panel-label">{idBadge.label}</span>
-                  <span
-                    className="info-panel-value copyable"
-                    onClick={(e) => handleCopyToClipboard(idBadge.value, e)}
-                    title="Click to copy"
-                  >
-                    {idBadge.value}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Session Info Panel - unified info panel for all agents */}
+        {/* For claude tool: shows model + state + session details */}
+        {/* For other tools: shows status + agent ID */}
+        <SessionInfoPanel
+          agentId={agentId}
+          isRunning={tool === 'claude' ? isRunning : false}
+          status={status}
+        />
       </div>
 
       {/* Right section: Actions */}

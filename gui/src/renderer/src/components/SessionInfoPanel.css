@@ -79,6 +79,27 @@
   color: var(--color-warning);
 }
 
+/* Status badge variants for non-claude tools */
+.state-badge.state-idle {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.state-badge.state-pr_open {
+  background: var(--color-purple-alt-dim);
+  color: var(--color-purple-alt);
+}
+
+.state-badge.state-merged {
+  background: var(--color-teal-dim);
+  color: var(--color-teal);
+}
+
+.state-badge.state-blocked {
+  background: var(--color-error-dim);
+  color: var(--color-error);
+}
+
 .expand-button {
   background: none;
   border: none;

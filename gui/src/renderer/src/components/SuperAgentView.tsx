@@ -274,14 +274,15 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   const taskCount = agent.taskInvocations?.length || 0
   const isRunning = agent.terminalPid !== null
 
-  // Build badges array for the header
+  // Build badges array for the header - consistent with Minion view
   const headerBadges: HeaderBadge[] = [
     {
-      label: 'Mission',
+      label: 'Feature',
       value: agent.feature,
       variant: 'feature',
       copyable: true
     },
+    // ID badge is shown in SessionInfoPanel expanded view, but we still pass it for consistency
     {
       label: 'ID',
       value: agent.agentId,
@@ -290,10 +291,14 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   ]
 
+  // Derive status for super agent (use status field if available, otherwise derive from state)
+  const agentStatus = agent.status || (isRunning ? 'working' : 'idle')
+
   // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
+  // This logic is IDENTICAL to AgentView for consistency
   const headerActions = (
     <>
-      {/* PR Status Badge or Make PR Button */}
+      {/* PR Status Badge or Make PR Button - logic matches AgentView exactly */}
       {agent?.prStatus && agent.prUrl ? (
         <button
           className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
@@ -302,12 +307,32 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         >
           PR: {agent.prStatus}
           <span className="pr-open-icon">↗</span>
+          {agentStatus === 'pr_open' && (
+            <button
+              className="pr-refresh-btn"
+              onClick={async (e) => {
+                e.stopPropagation()
+                try {
+                  await window.electronAPI.checkPullRequestStatus(agent.agentId)
+                } catch (err: any) {
+                  console.error('Failed to refresh PR status:', err)
+                }
+              }}
+              title="Refresh PR status"
+            >
+              ↻
+            </button>
+          )}
         </button>
-      ) : (
-        <button onClick={handleCreatePRClick} className="compact-button success" disabled={isCreatingPR}>
+      ) : agentStatus !== 'pr_open' && agentStatus !== 'merged' && agentStatus !== 'closed' ? (
+        <button
+          onClick={handleCreatePRClick}
+          className="compact-button success"
+          disabled={isCreatingPR}
+        >
           {isCreatingPR ? 'Creating...' : 'Make PR'}
         </button>
-      )}
+      ) : null}
 
       {/* Cursor Button */}
       <button onClick={handleOpenCursor} className="compact-button">
@@ -332,6 +357,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         badges={headerBadges}
         tool={agent.tool}
         isRunning={isRunning}
+        status={agentStatus}
         actions={headerActions}
         taskCount={taskCount}
       />
