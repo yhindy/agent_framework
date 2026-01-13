@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '../Dashboard'
 import { MemoryRouter } from 'react-router-dom'
 import React from 'react'
+import { KeyboardShortcutsProvider } from '../../contexts/KeyboardShortcutsContext'
 
 // Mock the hooks
 vi.mock('../../hooks/useLoadingSnackbar', () => ({
@@ -25,10 +26,22 @@ Object.defineProperty(window, 'electronAPI', {
     createSuperAssignment: vi.fn().mockResolvedValue({ agentId: 'super-agent-123' }),
     onAssignmentsUpdate: vi.fn().mockReturnValue(() => {}),
     checkDependencies: vi.fn().mockResolvedValue({ ghInstalled: true, ghAuthenticated: true }),
-    getProjects: vi.fn().mockResolvedValue([])
+    getProjects: vi.fn().mockResolvedValue([]),
+    onAgentStateChanged: vi.fn().mockReturnValue(() => {}),
+    onAgentWaitingForInput: vi.fn().mockReturnValue(() => {}),
+    onAgentResumedWork: vi.fn().mockReturnValue(() => {})
   },
   writable: true
 })
+
+// Wrapper component with all required providers
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+  <MemoryRouter>
+    <KeyboardShortcutsProvider>
+      {children}
+    </KeyboardShortcutsProvider>
+  </MemoryRouter>
+)
 
 const mockProjects = [
   { name: 'test-project', path: '/path/to/project' }
@@ -93,9 +106,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('clicking New Minion shows type selection, then Single Agent form', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -108,9 +121,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('shows Workflow radio cards for Single Agent', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -123,9 +136,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('defaults to Plan First workflow with opusplan model', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -141,9 +154,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('switches model to haiku when Start Immediately is selected', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -159,9 +172,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('switches model to opusplan when Plan First is selected', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -181,9 +194,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('shows Start Agent CTA button for Single Agent', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -193,9 +206,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
 
   it('displays all available Claude models', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -219,9 +232,9 @@ describe('Dashboard Creation Modal - Single Agent Form', () => {
     window.electronAPI.createAssignmentForProject = mockCreateAssignment
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -262,9 +275,9 @@ describe('Dashboard Creation Modal - Orchestrator Form', () => {
 
   it('clicking New Minion shows type selection, then Orchestrator form', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openOrchestratorForm()
@@ -277,9 +290,9 @@ describe('Dashboard Creation Modal - Orchestrator Form', () => {
 
   it('shows Create Plan CTA button for Orchestrator', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openOrchestratorForm()
@@ -289,9 +302,9 @@ describe('Dashboard Creation Modal - Orchestrator Form', () => {
 
   it('does not show Workflow selector for Orchestrator', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openOrchestratorForm()
@@ -303,9 +316,9 @@ describe('Dashboard Creation Modal - Orchestrator Form', () => {
 
   it('shows inline education text for Orchestrator', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openOrchestratorForm()
@@ -321,9 +334,9 @@ describe('Dashboard Creation Modal - Navigation', () => {
 
   it('Cancel button closes modal', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -347,9 +360,9 @@ describe('Dashboard Model Selection', () => {
 
   it('preserves model selection when switching between fields', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -375,9 +388,9 @@ describe('Dashboard Codex Integration', () => {
 
   it('displays Codex as a tool option', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -393,9 +406,9 @@ describe('Dashboard Codex Integration', () => {
 
   it('does not show model dropdown when codex is selected', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -413,9 +426,9 @@ describe('Dashboard Codex Integration', () => {
     window.electronAPI.createAssignmentForProject = mockCreateAssignment
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()
@@ -451,9 +464,9 @@ describe('Dashboard Codex Integration', () => {
 
   it('shows model dropdown when switching from codex to claude', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Dashboard activeProjects={mockProjects} onRefresh={() => {}} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await openSingleAgentForm()

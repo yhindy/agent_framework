@@ -76,7 +76,8 @@ describe('Session Persistence', () => {
       parseSessionInfo: vi.fn(),
       findSessionFile: vi.fn(),
       watchSession: vi.fn(),
-      unwatchSession: vi.fn()
+      unwatchSession: vi.fn(),
+      extractGitBranch: vi.fn().mockReturnValue(null) // For late branch detection
     } as any
 
     terminalService = new TerminalService(mockMainWindow)

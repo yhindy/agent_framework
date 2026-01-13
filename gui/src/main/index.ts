@@ -7,10 +7,12 @@ import { AgentService } from './services/AgentService'
 import { TerminalService } from './services/TerminalService'
 import { FileWatcherService } from './services/FileWatcherService'
 import { TestEnvService } from './services/TestEnvService'
+import { SettingsService } from './services/SettingsService'
 import { NotificationService } from './services/NotificationService'
 import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 import { TeleportService } from './services/TeleportService'
+import { TeleportMetadataService } from './services/TeleportMetadataService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -22,11 +24,14 @@ let services: {
   terminal: TerminalService
   fileWatcher: FileWatcherService
   testEnv: TestEnvService
+  settings: SettingsService
   notification: NotificationService
   prPolling: PRPollingService
   claudeSessionInfo: ClaudeSessionInfoService
   teleport: TeleportService
+  teleportMetadata: TeleportMetadataService
 } | null = null
+
 
 function createWindow(): void {
   // Always use PNG for BrowserWindow icon (cross-platform compatibility)
@@ -93,7 +98,8 @@ function initializeServices(): void {
 
   const agentService = new AgentService()
   const projectService = new ProjectService(agentService)
-  const notificationService = new NotificationService(mainWindow)
+  const settingsService = new SettingsService()
+  const notificationService = new NotificationService(mainWindow, settingsService)
   const claudeSessionInfoService = new ClaudeSessionInfoService()
   const terminalService = new TerminalService(mainWindow, notificationService)
 
@@ -110,10 +116,12 @@ function initializeServices(): void {
     terminal: terminalService,
     fileWatcher: new FileWatcherService(mainWindow),
     testEnv: new TestEnvService(mainWindow),
+    settings: settingsService,
     notification: notificationService,
     prPolling: new PRPollingService(mainWindow, agentService),
     claudeSessionInfo: claudeSessionInfoService,
-    teleport: new TeleportService()
+    teleport: new TeleportService(),
+    teleportMetadata: new TeleportMetadataService()
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -151,10 +159,50 @@ function initializeServices(): void {
 
       // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
       services.agent.listAgents(project.path)
-        .then(agents => {
+        .then(async agents => {
           for (const agent of agents) {
             // Check for Claude sessions with session IDs (use JSONL to verify they exist)
             if (agent.claudeSessionId && agent.tool === 'claude') {
+              // Special handling for teleported sessions (cloudSessionId present)
+              if (agent.cloudSessionId || agent.isTeleportedSession) {
+                console.log(`[Startup] Validating teleported session for ${agent.id}`)
+
+                // Read full agent info from disk to pass to validation
+                const agentInfo = services!.agent.readAgentInfo(agent.worktreePath)
+                if (!agentInfo) {
+                  console.log(`[Startup] Could not read agent info for ${agent.id}`)
+                  continue
+                }
+
+                // Validate teleported session
+                const validation = await services!.agent.validateTeleportSession(agentInfo)
+
+                if (!validation.isValid) {
+                  console.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
+
+                  // Send notification to user about failed validation
+                  mainWindow?.webContents.send('agent:teleportValidationFailed', {
+                    agentId: agent.id,
+                    reason: validation.reason,
+                    canRetry: validation.canResume
+                  })
+
+                  // Update agent info with validation error
+                  services!.agent.updateAgentInfo(agent.worktreePath, {
+                    claudeSessionActive: false
+                  })
+
+                  continue
+                }
+
+                if (!validation.canResume) {
+                  console.log(`[Startup] Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
+                  continue
+                }
+
+                console.log(`[Startup] Teleported session ${agent.id} validated successfully`)
+              }
+
               // Check actual session state from JSONL
               const sessionState = services!.claudeSessionInfo.getSessionState(
                 agent.claudeSessionId,
@@ -192,6 +240,12 @@ function initializeServices(): void {
                     }
                   } catch (error) {
                     console.error(`Failed to resume agent ${agent.id}:`, error)
+
+                    // Send failure notification to UI
+                    mainWindow?.webContents.send('agent:resumeFailed', {
+                      agentId: agent.id,
+                      error: error instanceof Error ? error.message : String(error)
+                    })
                   }
                 }, delay)
               } else {
@@ -422,6 +476,46 @@ function setupIPC(): void {
     return services!.agent.getSuperAgentDetails(projectPath, agentId)
   })
 
+  // Validate and potentially retry a teleported session
+  ipcMain.handle('agents:validateTeleport', async (_event, agentId: string) => {
+    try {
+      const projectPath = await findProjectForAgent(agentId)
+      const agents = await services!.agent.listAgents(projectPath)
+      const agent = agents.find(a => a.id === agentId)
+
+      if (!agent) {
+        return { success: false, error: 'Agent not found' }
+      }
+
+      // Read full agent info from disk
+      const agentInfo = services!.agent.readAgentInfo(agent.worktreePath)
+      if (!agentInfo) {
+        return { success: false, error: 'Could not read agent info' }
+      }
+
+      // Validate the teleported session
+      const validation = await services!.agent.validateTeleportSession(agentInfo)
+
+      if (validation.isValid && validation.canResume) {
+        // Update lastValidatedAt timestamp
+        services!.agent.updateAgentInfo(agent.worktreePath, {
+          lastValidatedAt: new Date().toISOString(),
+          claudeSessionActive: true
+        })
+
+        return { success: true, validation }
+      }
+
+      return { success: false, validation }
+    } catch (error) {
+      console.error(`Failed to validate teleport for ${agentId}:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
   ipcMain.handle('agents:approvePlan', async (_event, superAgentId: string, planId: string) => {
     const projectPath = await findProjectForAgent(superAgentId)
     const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
@@ -646,6 +740,12 @@ function setupIPC(): void {
           )
           mainWindow?.webContents.send('agents:updated')
           console.log('[IPC] Started teleported agent:', result.agentId)
+
+          // 5. Branch detection is now handled by late detection in TerminalService polling
+          // The initial JSONL is usually empty for teleported sessions, so we rely on
+          // late detection after the first user interaction populates the file
+          console.log('[IPC] Branch detection will happen via late detection in polling loop')
+
         } catch (error) {
           console.error('Failed to start teleported agent:', error)
           throw error
@@ -792,10 +892,48 @@ function setupIPC(): void {
     }
 
     await services!.agent.unassignAgent(projectPath, agentId)
-    
+
     // Trigger updates
     mainWindow?.webContents.send('agents:updated')
     mainWindow?.webContents.send('assignments:updated')
+  })
+
+  ipcMain.handle('agents:retry-resume', async (_event, agentId: string) => {
+    const activeProjects = services!.project.getActiveProjects()
+    let projectPath: string | null = null
+
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      const found = agents.find(a => a.id === agentId)
+      if (found) {
+        projectPath = project.path
+        break
+      }
+    }
+
+    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
+
+    await services!.terminal.retryResumeSession(projectPath, agentId)
+    mainWindow?.webContents.send('agents:updated')
+  })
+
+  ipcMain.handle('agents:start-fresh', async (_event, agentId: string) => {
+    const activeProjects = services!.project.getActiveProjects()
+    let projectPath: string | null = null
+
+    for (const project of activeProjects) {
+      const agents = await services!.agent.listAgents(project.path)
+      const found = agents.find(a => a.id === agentId)
+      if (found) {
+        projectPath = project.path
+        break
+      }
+    }
+
+    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
+
+    await services!.terminal.startFreshSession(projectPath, agentId)
+    mainWindow?.webContents.send('agents:updated')
   })
 
   // Test Environment handlers
@@ -877,6 +1015,21 @@ function setupIPC(): void {
 
   ipcMain.on('testEnv:resize', (_event, agentId: string, commandId: string, cols: number, rows: number) => {
     services!.testEnv.resize(agentId, commandId, cols, rows)
+  })
+
+  // Settings handlers
+  ipcMain.handle('settings:get', async () => {
+    return services!.settings.getSettings()
+  })
+
+  ipcMain.handle('settings:update', async (_event, updates: Partial<import('../shared/types/settings').AppSettings>) => {
+    return services!.settings.updateSettings(updates)
+  })
+
+  ipcMain.handle('settings:openFeedback', async () => {
+    const { shell } = require('electron')
+    const feedbackUrl = 'https://github.com/yhindy/agent_framework/issues/new'
+    await shell.openExternal(feedbackUrl)
   })
 
   // Claude Session Info APIs

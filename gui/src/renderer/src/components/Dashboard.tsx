@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { usePRPolling } from '../hooks/usePRPolling'
+import { useKeyboardShortcutsContext } from '../contexts/KeyboardShortcutsContext'
 import MissionDropdown from './MissionDropdown'
 import ProjectPicker from './ProjectPicker'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import AgentStateIndicator from './AgentStateIndicator'
+import type { DefaultToolSettings } from '../../../shared/types/settings'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -80,6 +82,22 @@ const COLUMN_CONFIG = {
 
 type ColumnKey = keyof typeof COLUMN_CONFIG
 
+/**
+ * Get the default model for the given tool based on user settings
+ */
+function getDefaultModelForTool(tool: string, toolSettings: DefaultToolSettings): string {
+  switch (tool) {
+    case 'claude':
+      return toolSettings.claudeModel
+    case 'cursor-cli':
+      return toolSettings.cursorCLIModel
+    case 'codex':
+      return 'gpt-5.2-codex' // Hardcoded per CLAUDE.md
+    default:
+      return 'opusplan'
+  }
+}
+
 function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
@@ -115,6 +133,59 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     isSuper: false
   })
 
+  // Keyboard shortcuts context
+  const { registerModalControls, unregisterModalControls } = useKeyboardShortcutsContext()
+
+  // Register modal controls for keyboard shortcuts
+  useEffect(() => {
+    // Helper to get default project path
+    const getDefaultProject = () => {
+      const lastProject = localStorage.getItem('lastSelectedProjectPath')
+      const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
+        ? lastProject
+        : (activeProjects.length === 1 ? activeProjects[0].path : '')
+      return defaultProject
+    }
+
+    registerModalControls({
+      openNewMinionModal: () => {
+        // Reset form and open with type selection
+        setFormData(prev => ({ ...prev, projectPath: getDefaultProject(), isSuper: false }))
+        setShowTypeSelection(true)
+        setShowCreateForm(true)
+      },
+      openSuperMinionModal: () => {
+        // Set isSuper and open directly to form
+        setFormData(prev => ({ ...prev, projectPath: getDefaultProject(), isSuper: true }))
+        setShowTypeSelection(false)
+        setShowCreateForm(true)
+      },
+      openTeleportModal: () => {
+        setTeleportProjectPath(getDefaultProject())
+        setTeleportInput('')
+        setShowTeleportForm(true)
+      },
+      openProjectPicker: () => setShowAddProjectModal(true),
+      closeCurrentModal: () => {
+        setShowCreateForm(false)
+        setShowTeleportForm(false)
+        setShowAddProjectModal(false)
+        setShowPRConfirm(false)
+      },
+      isModalOpen: showCreateForm || showTeleportForm || showAddProjectModal || showPRConfirm
+    })
+
+    return () => unregisterModalControls()
+  }, [
+    showCreateForm,
+    showTeleportForm,
+    showAddProjectModal,
+    showPRConfirm,
+    registerModalControls,
+    unregisterModalControls,
+    activeProjects
+  ])
+
   useEffect(() => {
     loadAssignments()
     checkDependencies()
@@ -138,6 +209,26 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       unsubscribeState()
     }
   }, [activeProjects])
+
+  // Load default settings on mount and apply to formData
+  useEffect(() => {
+    const loadDefaults = async () => {
+      try {
+        const settings = await window.electronAPI.getSettings()
+        setFormData(prev => ({
+          ...prev,
+          tool: settings.defaultTool.tool,
+          model: getDefaultModelForTool(settings.defaultTool.tool, settings.defaultTool),
+          mode: settings.defaultAgent.workflowMode,
+          yolo: settings.defaultAgent.yoloMode,
+          chrome: settings.defaultAgent.chromeIntegration
+        }))
+      } catch (error) {
+        console.error('Failed to load default settings:', error)
+      }
+    }
+    loadDefaults()
+  }, [])
 
   // Auto-poll PR status for all pr_open assignments
   const prOpenAssignments = assignments.filter(a => a.status === 'pr_open')
@@ -256,19 +347,38 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
         navigate(`/workspace/agent/${agentId}`)
       }
 
-      setFormData({
-        projectPath: '',
-        agentId: '',
-        shortName: '',
-        prompt: '',
-        tool: 'claude',
-        model: 'opusplan',
-        mode: 'planning',
-        status: 'pending',
-        yolo: false,
-        chrome: true,
-        isSuper: false
-      })
+      // Reset form but preserve settings-based defaults by re-fetching
+      try {
+        const settings = await window.electronAPI.getSettings()
+        setFormData({
+          projectPath: '',
+          agentId: '',
+          shortName: '',
+          prompt: '',
+          tool: settings.defaultTool.tool,
+          model: getDefaultModelForTool(settings.defaultTool.tool, settings.defaultTool),
+          mode: settings.defaultAgent.workflowMode,
+          status: 'pending',
+          yolo: settings.defaultAgent.yoloMode,
+          chrome: settings.defaultAgent.chromeIntegration,
+          isSuper: false
+        })
+      } catch {
+        // Fallback to hardcoded defaults if settings fail
+        setFormData({
+          projectPath: '',
+          agentId: '',
+          shortName: '',
+          prompt: '',
+          tool: 'claude',
+          model: 'opusplan',
+          mode: 'planning',
+          status: 'pending',
+          yolo: true,
+          chrome: true,
+          isSuper: false
+        })
+      }
       setShowTypeSelection(true)
 
       // Wait a moment for worktree creation then refresh

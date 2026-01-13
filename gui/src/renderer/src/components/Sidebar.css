@@ -231,6 +231,37 @@
   background: #094771;
 }
 
+.agent-item.failed {
+  background: #3d1a1a;
+  border-left: 3px solid #f48771;
+}
+
+.agent-item.failed:hover {
+  background: #4a2020;
+}
+
+/* Active state supersedes failed state */
+.agent-item.active.failed {
+  background: #094771;
+  border-left: 3px solid #f48771;
+}
+
+.agent-item.active.failed:hover {
+  background: #094771;
+}
+
+.agent-item-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-icon {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 2px;
+  width: 16px;
+}
+
 .collapse-chevron {
   font-size: 12px;
   line-height: 1;
@@ -336,6 +367,60 @@
   font-size: 12px;
   font-weight: bold;
   animation: pulse-attention 1.5s ease-in-out infinite;
+}
+
+.failure-badge-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.failure-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: #f48771;
+  color: #000;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.failure-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.agent-item:hover .failure-actions {
+  opacity: 1;
+}
+
+.retry-btn,
+.start-fresh-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.retry-btn:hover {
+  background: rgba(100, 200, 255, 0.3);
+}
+
+.start-fresh-btn:hover {
+  background: rgba(100, 255, 100, 0.3);
 }
 
 @keyframes pulse-attention {
@@ -665,5 +750,42 @@
 .sidebar.collapsed .dropdown-trigger {
   width: 100%;
   justify-content: center;
+}
+
+/* Sidebar Footer - Settings Button */
+.sidebar-footer {
+  border-top: 1px solid #3c3c3c;
+  padding: 8px;
+  margin-top: auto;
+  margin-bottom: 48px; /* Space for collapse button */
+}
+
+.settings-nav-item {
+  width: 100%;
+}
+
+.settings-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-icon svg {
+  color: currentColor;
+}
+
+/* Collapsed state for sidebar footer */
+.sidebar.collapsed .sidebar-footer {
+  padding: 8px 6px;
+  border-top: none;
+}
+
+.sidebar.collapsed .settings-nav-item {
+  justify-content: center;
+  padding: 8px;
+}
+
+.sidebar.collapsed .settings-nav-item .nav-label {
+  display: none !important;
 }
 

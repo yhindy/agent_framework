@@ -3,6 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import MainLayout from '../MainLayout'
 import { MemoryRouter } from 'react-router-dom'
 import React from 'react'
+import { KeyboardShortcutsProvider } from '../../contexts/KeyboardShortcutsContext'
+import { SnackbarProvider } from '../../contexts/SnackbarContext'
+
+// Wrapper component with all required providers
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+  <MemoryRouter>
+    <SnackbarProvider>
+      <KeyboardShortcutsProvider>
+        {children}
+      </KeyboardShortcutsProvider>
+    </SnackbarProvider>
+  </MemoryRouter>
+)
 
 describe('MainLayout Left Sidebar Collapse', () => {
   const mockProps = {
@@ -22,9 +35,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
     localStorage.setItem('leftSidebarCollapsed', 'true')
 
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -35,9 +48,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
 
   it('does not collapse sidebar when localStorage is not set', async () => {
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -48,9 +61,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
 
   it('saves collapsed state to localStorage when toggled', async () => {
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
@@ -67,9 +80,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
     localStorage.setItem('leftSidebarCollapsed', 'true')
 
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -89,9 +102,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
 
   it('persists collapsed state across component remounts', async () => {
     const { container, unmount } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
@@ -106,9 +119,9 @@ describe('MainLayout Left Sidebar Collapse', () => {
 
     // Remount the component
     const { container: newContainer } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <MainLayout {...mockProps} />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
