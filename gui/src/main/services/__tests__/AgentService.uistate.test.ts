@@ -351,9 +351,11 @@ describe('AgentService - UI State Persistence', () => {
       await agentService.saveUIState(testProjectPath, agentId, uiState)
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[WARN ] [AgentService]',
         expect.stringContaining('Agent')
       )
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[WARN ] [AgentService]',
         expect.stringContaining('.agent-info file missing')
       )
 
