@@ -148,11 +148,6 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     <div className="session-info-panel">
       <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="session-info-badges">
-          <span className="session-badge" title={`Session ID: ${sessionInfo.sessionId}`}>
-            <span className="badge-label">Session:</span>
-            <span className="badge-value">{truncatedSessionId}...</span>
-          </span>
-
           <span className="model-badge" title={`Model: ${sessionInfo.actualModel}`}>
             <span className="badge-label">Model:</span>
             <span className="badge-value">{displayModel}</span>

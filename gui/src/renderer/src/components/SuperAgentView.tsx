@@ -346,6 +346,11 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
               {agent.feature}
             </span>
           </div>
+
+          {/* Session Info - inline in header */}
+          {agent.tool === 'claude' && (
+            <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
+          )}
         </div>
 
         <div className="agent-actions">
@@ -367,19 +372,11 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           <button onClick={handleOpenCursor} className="compact-button">
             Cursor
           </button>
-          <button className="danger compact-button" onClick={handleStop}>
-            Stop
-          </button>
           <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
             🗑️
           </button>
         </div>
       </div>
-
-      {/* Session Info Panel - shows live Claude session data */}
-      {agent.tool === 'claude' && (
-        <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
-      )}
 
       <div className="agent-content">
         {/* Full-width tab bar */}

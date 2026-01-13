@@ -1,128 +1,148 @@
 .session-info-panel {
-  margin-bottom: 8px;
-  border-radius: 6px;
-  background: var(--bg-secondary, #1a1a2e);
-  border: 1px solid var(--border-color, #333);
-  font-size: 12px;
+  display: inline-flex;
+  flex-direction: column;
+  position: relative;
+  margin-left: var(--space-2);
+  vertical-align: middle;
+  font-size: var(--font-size-xs);
 }
 
 .session-info-collapsed {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-overlay);
+  border: 1px solid var(--bg-muted);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
+  transition: background var(--transition-base);
 }
 
 .session-info-collapsed:hover {
-  background: var(--bg-hover, #252538);
+  filter: brightness(1.15);
 }
 
 .session-info-badges {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: var(--space-1);
+  flex-wrap: nowrap;
 }
 
 .session-badge,
 .model-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg-tertiary, #252538);
+  gap: var(--space-1);
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: transparent;
 }
 
 .badge-label {
-  color: var(--text-muted, #888);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: var(--font-size-2xs);
 }
 
 .badge-value {
-  color: var(--text-primary, #fff);
+  color: var(--text-primary);
   font-family: monospace;
+  font-size: var(--font-size-2xs);
 }
 
 .state-badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-2xs);
   font-weight: 500;
 }
 
 .state-badge.state-working {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: var(--color-info-dim);
+  color: var(--color-info);
 }
 
 .state-badge.state-waiting {
-  background: rgba(234, 179, 8, 0.2);
-  color: #fbbf24;
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
 }
 
 .expand-button {
   background: none;
   border: none;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 10px;
+  padding: 0;
+  font-size: var(--font-size-2xs);
+  line-height: 1;
+  transition: color var(--transition-base);
 }
 
 .expand-button:hover {
-  color: var(--text-primary, #fff);
+  color: var(--text-primary);
 }
 
 .session-info-expanded {
-  padding: 8px 10px;
-  border-top: 1px solid var(--border-color, #333);
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 350px;
+  max-width: 450px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
+  z-index: var(--z-dropdown);
+  animation: fadeIn var(--transition-fast);
 }
 
 .info-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .info-label {
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   min-width: 100px;
   flex-shrink: 0;
+  font-size: var(--font-size-xs);
 }
 
 .info-value {
-  color: var(--text-primary, #fff);
+  color: var(--text-primary);
   font-family: monospace;
   word-break: break-all;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
+  font-size: var(--font-size-xs);
 }
 
 .info-value.cost {
-  color: #4ade80;
+  color: var(--color-success);
 }
 
 .info-value .cached {
-  color: var(--text-muted, #888);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .copy-btn {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 2px 4px;
-  font-size: 12px;
+  padding: 2px var(--space-1);
+  font-size: var(--font-size-xs);
   opacity: 0.7;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-base);
 }
 
 .copy-btn:hover {
@@ -136,6 +156,6 @@
 }
 
 .history-entry {
-  color: var(--text-muted, #888);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
 }

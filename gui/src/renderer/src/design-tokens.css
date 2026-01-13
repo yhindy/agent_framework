@@ -10,6 +10,7 @@
   --space-8: 64px;
 
   /* TYPOGRAPHY SCALE */
+  --font-size-2xs: 10px;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
   --font-size-base: 15px;
@@ -51,6 +52,10 @@
   /* COLORS - SEMANTIC */
   --color-success: #00c853;
   --color-success-dim: rgba(0, 200, 83, 0.15);
+  --color-success-bright: #0dbc79;
+  --color-success-bright-hover: #23d18b;
+  --color-success-bright-dim: rgba(13, 188, 121, 0.2);
+  --color-success-bright-glow: rgba(13, 188, 121, 0.5);
   --color-warning: #ffab00;
   --color-warning-dim: rgba(255, 171, 0, 0.15);
   --color-error: #ff5252;
@@ -59,6 +64,14 @@
   --color-info-dim: rgba(68, 138, 255, 0.15);
   --color-purple: #b388ff;
   --color-purple-dim: rgba(179, 136, 255, 0.15);
+  --color-purple-glow: rgba(179, 136, 255, 0.4);
+  --color-purple-alt: #c586c0;
+  --color-purple-alt-dim: rgba(197, 134, 192, 0.2);
+  --color-purple-alt-glow: rgba(197, 134, 192, 0.3);
+  --color-teal: #4ec9b0;
+  --color-teal-dim: rgba(78, 201, 176, 0.2);
+  --color-teal-dark: #3a9d8f;
+  --color-teal-glow: rgba(78, 201, 176, 0.3);
 
   /* COLORS - TEXT */
   --text-primary: #ffffff;

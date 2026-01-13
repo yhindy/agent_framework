@@ -384,14 +384,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
               </div>
             </>
           )}
+
+          {/* Session Info - inline in header */}
+          {assignment?.tool === 'claude' && (
+            <SessionInfoPanel agentId={agentId || ''} isRunning={isRunning} />
+          )}
         </div>
 
         <div className="agent-actions">
-          {assignment?.tool !== 'cursor' && isRunning && (
-            <button onClick={handleStopAgent} className="danger compact-button">
-              Stop
-            </button>
-          )}
           <button onClick={handleOpenCursor} className="compact-button">
             Cursor
           </button>
@@ -441,11 +441,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
           )}
         </div>
       </div>
-
-      {/* Session Info Panel - shows live Claude session data */}
-      {assignment?.tool === 'claude' && (
-        <SessionInfoPanel agentId={agentId || ''} isRunning={isRunning} />
-      )}
 
       <div className="agent-content">
         <div className="unified-tabs">
