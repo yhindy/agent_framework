@@ -181,12 +181,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
-  const handleStop = async () => {
-    if (agent) {
-      await window.electronAPI.stopAgent(agent.agentId)
-    }
-  }
-
   const teardownMessages = [
     'Returning minion to the break room...',
     'Cleaning up banana peels from the workspace...',

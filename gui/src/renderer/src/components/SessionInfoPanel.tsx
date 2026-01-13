@@ -141,7 +141,6 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     )
   }
 
-  const truncatedSessionId = sessionInfo.sessionId.slice(0, 8)
   const displayModel = formatModelName(sessionInfo.actualModel)
 
   return (

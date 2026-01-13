@@ -276,17 +276,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     return status?.isRunning || false
   }
 
-  const handleStopAgent = async () => {
-    if (!agentId) return
-
-    try {
-      await window.electronAPI.stopAgent(agentId)
-      loadAgentData()
-    } catch (error: any) {
-      alert('Error stopping agent: ' + error.message)
-    }
-  }
-
   const handleOpenCursor = async () => {
     if (!agentId) return
 
