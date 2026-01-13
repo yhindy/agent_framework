@@ -189,6 +189,119 @@
 }
 
 /* =============================================================================
+   EXPANDABLE INFO PANEL - Agent ID and additional info
+   ============================================================================= */
+
+.header-info-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.info-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-fast);
+}
+
+.info-toggle-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+  transform: scale(1.05);
+}
+
+.info-toggle-btn.expanded {
+  background: var(--color-info-dim);
+  border-color: var(--color-info);
+}
+
+.info-toggle-icon {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.info-toggle-btn.expanded .info-toggle-icon {
+  color: var(--color-info);
+}
+
+.header-info-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 280px;
+  max-width: 400px;
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  animation: infoPanel-fadeIn var(--transition-fast) ease-out;
+}
+
+@keyframes infoPanel-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.info-panel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.info-panel-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  flex-shrink: 0;
+}
+
+.info-panel-value {
+  color: var(--text-secondary);
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: var(--font-size-xs);
+  word-break: break-all;
+  transition: color var(--transition-base), text-shadow var(--transition-base);
+}
+
+.info-panel-value.copyable {
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.info-panel-value.copyable:hover {
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+  background: var(--bg-muted);
+}
+
+/* =============================================================================
    STATUS DOT - Animated status indicator
    ============================================================================= */
 

@@ -398,14 +398,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
     })
   }
 
-  // Build header actions
+  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
   const headerActions = (
     <>
-      <button onClick={handleOpenCursor} className="compact-button">
-        Cursor
-      </button>
-
-      {assignment?.prStatus && assignment.prUrl && (
+      {/* PR Status Badge or Make PR Button */}
+      {assignment?.prStatus && assignment.prUrl ? (
         <button
           className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
           onClick={() => window.open(assignment.prUrl, '_blank')}
@@ -430,18 +427,22 @@ function AgentView({ activeProjects }: AgentViewProps) {
             </button>
           )}
         </button>
-      )}
-
-      {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
+      ) : assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' ? (
         <button
           onClick={handleCreatePRClick}
-          className="success compact-button"
+          className="compact-button success"
           disabled={isCreatingPR}
         >
           {isCreatingPR ? 'Creating...' : 'Make PR'}
         </button>
-      )}
+      ) : null}
 
+      {/* Cursor Button */}
+      <button onClick={handleOpenCursor} className="compact-button">
+        Cursor
+      </button>
+
+      {/* Cleanup Dropdown */}
       {assignment && !assignment.isBaseBranchAgent && (
         <AgentCleanupDropdown
           agentId={agentId || ''}

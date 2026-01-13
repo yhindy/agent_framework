@@ -4,10 +4,9 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import TaskStatusCard from './TaskStatusCard'
-import ConfirmModal from './ConfirmModal'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
+import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
-import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
@@ -22,9 +21,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
-  const [isTearingDown, setIsTearingDown] = useState(false)
-  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Tab management
   const [activeTab, setActiveTab] = useState<string>('orchestration')
@@ -180,37 +176,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
-  const teardownMessages = [
-    'Returning minion to the break room...',
-    'Cleaning up banana peels from the workspace...',
-    'Shredding incriminating documents...',
-    'Wiping fingerprints from the keyboard...',
-    'Returning stolen shrink rays...',
-    'Escaping before Gru finds out...',
-    'Restocking the vending machine...'
-  ]
-
-  const handleTeardown = async () => {
-    if (!agent) return
-    setIsTearingDown(true)
-    const snackbarId = showLoading({
-      title: 'Archiving Super Mission...',
-      messages: teardownMessages
-    })
-    try {
-      await window.electronAPI.teardownAgent(agent.agentId, true) // Force teardown
-      hideLoading(snackbarId)
-      navigate('/workspace')
-    } catch (err) {
-      hideLoading(snackbarId)
-      console.error('Failed to teardown:', err)
-      setError('Failed to cleanup agent')
-      setShowTeardownConfirm(false)
-    } finally {
-      setIsTearingDown(false)
-    }
-  }
-
   const handleConfirmCreatePR = async () => {
     if (!agent) return
     await handleConfirmCreatePRHook(agent.agentId, loadAgent)
@@ -325,7 +290,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   ]
 
-  // Build header actions
+  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
   const headerActions = (
     <>
       {/* PR Status Badge or Make PR Button */}
@@ -339,16 +304,21 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           <span className="pr-open-icon">↗</span>
         </button>
       ) : (
-        <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
+        <button onClick={handleCreatePRClick} className="compact-button success" disabled={isCreatingPR}>
           {isCreatingPR ? 'Creating...' : 'Make PR'}
         </button>
       )}
+
+      {/* Cursor Button */}
       <button onClick={handleOpenCursor} className="compact-button">
         Cursor
       </button>
-      <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
-        🗑️
-      </button>
+
+      {/* Cleanup Dropdown - consistent with AgentView */}
+      <AgentCleanupDropdown
+        agentId={agent.agentId}
+        onCleanupComplete={() => navigate('/workspace')}
+      />
     </>
   )
 
@@ -503,17 +473,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           )}
         </div>
       </div>
-
-      <ConfirmModal
-        isOpen={showTeardownConfirm}
-        title="Cleanup Super Minion?"
-        message="This will delete the agent worktree and all data. Are you sure?"
-        confirmText="Cleanup"
-        confirmVariant="danger"
-        onConfirm={handleTeardown}
-        onCancel={() => setShowTeardownConfirm(false)}
-        isLoading={isTearingDown}
-      />
 
       {showPRConfirm && agent && (
         <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import SessionInfoPanel from './SessionInfoPanel'
 import './AgentHeader.css'
 
@@ -42,12 +42,18 @@ function AgentHeader({
   actions,
   taskCount
 }: AgentHeaderProps) {
+  const [isInfoExpanded, setIsInfoExpanded] = useState(false)
+
   const handleCopyToClipboard = (text: string, e: React.MouseEvent) => {
     navigator.clipboard.writeText(text)
     const element = e.currentTarget
     element.classList.add('header-copy-flash')
     setTimeout(() => element.classList.remove('header-copy-flash'), 300)
   }
+
+  // Filter out 'id' variant badges - they go in the expandable info panel
+  const displayBadges = badges.filter(badge => badge.variant !== 'id')
+  const idBadge = badges.find(badge => badge.variant === 'id')
 
   const getStatusDotClass = (status?: string): string => {
     const validStatuses = ['working', 'pr_open', 'merged', 'blocked']
@@ -72,7 +78,7 @@ function AgentHeader({
 
       {/* Center section: Metadata badges */}
       <div className="header-metadata">
-        {badges.map((badge, index) => (
+        {displayBadges.map((badge, index) => (
           <div
             key={index}
             className={`header-badge header-badge--${badge.variant || 'default'}`}
@@ -96,6 +102,33 @@ function AgentHeader({
         {/* Session Info Panel - inline with badges */}
         {tool === 'claude' && (
           <SessionInfoPanel agentId={agentId} isRunning={isRunning} />
+        )}
+
+        {/* Expandable Info Panel for Agent ID */}
+        {idBadge && (
+          <div className="header-info-toggle">
+            <button
+              className={`info-toggle-btn ${isInfoExpanded ? 'expanded' : ''}`}
+              onClick={() => setIsInfoExpanded(!isInfoExpanded)}
+              title={isInfoExpanded ? 'Hide agent info' : 'Show agent info'}
+            >
+              <span className="info-toggle-icon">i</span>
+            </button>
+            {isInfoExpanded && (
+              <div className="header-info-panel">
+                <div className="info-panel-row">
+                  <span className="info-panel-label">{idBadge.label}</span>
+                  <span
+                    className="info-panel-value copyable"
+                    onClick={(e) => handleCopyToClipboard(idBadge.value, e)}
+                    title="Click to copy"
+                  >
+                    {idBadge.value}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
