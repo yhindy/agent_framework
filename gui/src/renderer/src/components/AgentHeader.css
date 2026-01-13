@@ -94,7 +94,8 @@
   gap: var(--space-2);
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
+  /* Use visible overflow to allow dropdowns to escape */
+  overflow: visible;
   padding: var(--space-1) 0;
 }
 
@@ -111,7 +112,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
+  height: 32px;
   background: var(--bg-overlay);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -196,14 +198,16 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  /* Ensure dropdowns can escape parent */
+  z-index: 1;
 }
 
 .info-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   background: var(--bg-overlay);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
@@ -250,7 +254,8 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  z-index: var(--z-dropdown);
+  /* Higher z-index to appear above all page content */
+  z-index: var(--z-sticky);
   animation: infoPanel-fadeIn var(--transition-fast) ease-out;
 }
 
@@ -359,7 +364,11 @@
 
 /* Compact button styles for header actions */
 .header-actions .compact-button {
-  padding: var(--space-2) var(--space-3);
+  padding: 0 var(--space-3);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-muted);
   color: var(--text-secondary);
   border: none;
@@ -420,8 +429,9 @@
 }
 
 .header-actions .compact-button.icon-only {
-  padding: var(--space-2);
-  min-width: 36px;
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
 }
 
 /* =============================================================================
@@ -453,7 +463,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
+  padding: 0 var(--space-3);
+  height: 32px;
   border-radius: var(--radius-xl);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);

@@ -62,7 +62,10 @@
 }
 
 .cleanup-button {
-  padding: var(--space-2) var(--space-3);
+  padding: 0 var(--space-3);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
   background: var(--bg-muted);
   color: var(--text-secondary);
   border: none;
@@ -86,7 +89,8 @@
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   min-width: 140px;
-  z-index: 100;
+  /* Use design token for z-index */
+  z-index: var(--z-sticky);
   padding-top: var(--space-1);
 }
 
