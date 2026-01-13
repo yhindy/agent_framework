@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
-import SessionInfoPanel from './SessionInfoPanel'
+import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
@@ -276,17 +276,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     return status?.isRunning || false
   }
 
-  const handleStopAgent = async () => {
-    if (!agentId) return
-
-    try {
-      await window.electronAPI.stopAgent(agentId)
-      loadAgentData()
-    } catch (error: any) {
-      alert('Error stopping agent: ' + error.message)
-    }
-  }
-
   const handleOpenCursor = async () => {
     if (!agentId) return
 
@@ -294,21 +283,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
       await window.electronAPI.openInCursor(agentId)
     } catch (error: any) {
       alert('Error opening Cursor: ' + error.message)
-    }
-  }
-
-  const getStatusClass = (status: string): string => {
-    const validStatuses = ['working', 'pr_open', 'merged']
-    return validStatuses.includes(status) ? status : 'idle'
-  }
-
-  const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
-    navigator.clipboard.writeText(text)
-    // Provide quick visual feedback on the element itself
-    if (e?.currentTarget) {
-      const element = e.currentTarget
-      element.classList.add('copy-flash')
-      setTimeout(() => element.classList.remove('copy-flash'), 300)
     }
   }
 
@@ -395,114 +369,91 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
   const isRunning = agent.terminalPid !== null
 
+  // Build badges array for the header - consistent across Minion and Super Minion
+  const headerBadges: HeaderBadge[] = []
+  if (assignment) {
+    headerBadges.push({
+      label: 'Feature',
+      value: assignment.feature,
+      variant: 'feature',
+      copyable: true
+    })
+    // ID badge is shown in SessionInfoPanel expanded view, but we still pass it for consistency
+    headerBadges.push({
+      label: 'ID',
+      value: agentId || '',
+      variant: 'id',
+      copyable: true
+    })
+  }
+
+  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
+  const headerActions = (
+    <>
+      {/* PR Status Badge or Make PR Button */}
+      {assignment?.prStatus && assignment.prUrl ? (
+        <button
+          className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
+          onClick={() => window.open(assignment.prUrl, '_blank')}
+          title="Open PR on GitHub"
+        >
+          PR: {assignment.prStatus}
+          <span className="pr-open-icon">↗</span>
+          {assignment.status === 'pr_open' && (
+            <button
+              className="pr-refresh-btn"
+              onClick={async (e) => {
+                e.stopPropagation()
+                try {
+                  await window.electronAPI.checkPullRequestStatus(assignment.id)
+                } catch (err: any) {
+                  console.error('Failed to refresh PR status:', err)
+                }
+              }}
+              title="Refresh PR status"
+            >
+              ↻
+            </button>
+          )}
+        </button>
+      ) : assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' ? (
+        <button
+          onClick={handleCreatePRClick}
+          className="compact-button success"
+          disabled={isCreatingPR}
+        >
+          {isCreatingPR ? 'Creating...' : 'Make PR'}
+        </button>
+      ) : null}
+
+      {/* Cursor Button */}
+      <button onClick={handleOpenCursor} className="compact-button">
+        Cursor
+      </button>
+
+      {/* Cleanup Dropdown */}
+      {assignment && !assignment.isBaseBranchAgent && (
+        <AgentCleanupDropdown
+          agentId={agentId || ''}
+          onCleanupComplete={() => navigate('/workspace')}
+        />
+      )}
+    </>
+  )
+
   return (
     <div className="agent-view">
-      <div className="agent-header">
-        <div className="agent-header-left">
-          <div className="agent-title">
-            <h2>🍌 {extractBranchName(assignment?.branch) || agentId}</h2>
-          </div>
-
-          {assignment && (
-            <>
-              <div className="info-badge feature-badge" title={`${assignment.feature} (click to copy)`}>
-                <span className="info-badge-label">Feature:</span>
-                <span
-                  className="info-badge-value copyable"
-                  onClick={(e) => handleCopyToClipboard(assignment.feature, e as any)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {assignment.feature}
-                </span>
-              </div>
-
-              <div className="info-badge agent-id-badge" title={`${agentId || ''} (click to copy)`}>
-                <span
-                  className="info-badge-value copyable"
-                  onClick={(e) => handleCopyToClipboard(agentId || '', e as any)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {agentId}
-                </span>
-              </div>
-
-              <div className="status-badge" title={`${assignment.status} (click to copy)`}>
-                <span className={`status-dot ${getStatusClass(assignment.status)}`} />
-                <span
-                  className="copyable"
-                  onClick={(e) => handleCopyToClipboard(assignment.status, e as any)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {assignment.status}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="agent-actions">
-          {assignment?.tool !== 'cursor' && isRunning && (
-            <button onClick={handleStopAgent} className="danger compact-button">
-              Stop
-            </button>
-          )}
-          <button onClick={handleOpenCursor} className="compact-button">
-            Cursor
-          </button>
-
-          {assignment?.prStatus && assignment.prUrl && (
-            <button
-              className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
-              onClick={() => window.open(assignment.prUrl, '_blank')}
-              title="Open PR on GitHub"
-            >
-              PR: {assignment.prStatus}
-              <span className="pr-open-icon">↗</span>
-              {assignment.status === 'pr_open' && (
-                <button
-                  className="pr-refresh-btn"
-                  onClick={async (e) => {
-                    e.stopPropagation()
-                    try {
-                      await window.electronAPI.checkPullRequestStatus(assignment.id)
-                    } catch (err: any) {
-                      console.error('Failed to refresh PR status:', err)
-                    }
-                  }}
-                  title="Refresh PR status"
-                >
-                  ↻
-                </button>
-              )}
-            </button>
-          )}
-
-          {assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' && (
-            <button
-              onClick={handleCreatePRClick}
-              className="success compact-button"
-              disabled={isCreatingPR}
-            >
-              {isCreatingPR ? 'Creating...' : 'Make PR'}
-            </button>
-          )}
-
-          {assignment && !assignment.isBaseBranchAgent && (
-            <AgentCleanupDropdown
-              agentId={agentId || ''}
-              onCleanupComplete={() => navigate('/workspace')}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Session Info Panel - shows live Claude session data */}
-      {assignment?.tool === 'claude' && (
-        <SessionInfoPanel agentId={agentId || ''} isRunning={isRunning} />
-      )}
+      <AgentHeader
+        icon="🍌"
+        title={extractBranchName(assignment?.branch) || agentId || 'Unknown'}
+        typeLabel="Minion"
+        agentId={agentId || ''}
+        badges={headerBadges}
+        tool={assignment?.tool}
+        isRunning={isRunning}
+        status={assignment?.status}
+        actions={headerActions}
+      />
 
       {/* Teleport Failure Recovery UI */}
       {teleportFailure && (

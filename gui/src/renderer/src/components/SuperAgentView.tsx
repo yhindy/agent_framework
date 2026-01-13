@@ -4,14 +4,12 @@ import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import TaskStatusCard from './TaskStatusCard'
-import ConfirmModal from './ConfirmModal'
-import SessionInfoPanel from './SessionInfoPanel'
+import AgentHeader, { HeaderBadge } from './AgentHeader'
+import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
-import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
-import './AgentView.css' // For shared PR badge styles
 import { SuperAgentInfo } from '../types/agent'
 
 interface SuperAgentViewProps {
@@ -23,9 +21,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showTeardownConfirm, setShowTeardownConfirm] = useState(false)
-  const [isTearingDown, setIsTearingDown] = useState(false)
-  const { showLoading, hideLoading } = useLoadingSnackbar()
 
   // Tab management
   const [activeTab, setActiveTab] = useState<string>('orchestration')
@@ -181,43 +176,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
-  const handleStop = async () => {
-    if (agent) {
-      await window.electronAPI.stopAgent(agent.agentId)
-    }
-  }
-
-  const teardownMessages = [
-    'Returning minion to the break room...',
-    'Cleaning up banana peels from the workspace...',
-    'Shredding incriminating documents...',
-    'Wiping fingerprints from the keyboard...',
-    'Returning stolen shrink rays...',
-    'Escaping before Gru finds out...',
-    'Restocking the vending machine...'
-  ]
-
-  const handleTeardown = async () => {
-    if (!agent) return
-    setIsTearingDown(true)
-    const snackbarId = showLoading({
-      title: 'Archiving Super Mission...',
-      messages: teardownMessages
-    })
-    try {
-      await window.electronAPI.teardownAgent(agent.agentId, true) // Force teardown
-      hideLoading(snackbarId)
-      navigate('/workspace')
-    } catch (err) {
-      hideLoading(snackbarId)
-      console.error('Failed to teardown:', err)
-      setError('Failed to cleanup agent')
-      setShowTeardownConfirm(false)
-    } finally {
-      setIsTearingDown(false)
-    }
-  }
-
   const handleConfirmCreatePR = async () => {
     if (!agent) return
     await handleConfirmCreatePRHook(agent.agentId, loadAgent)
@@ -292,16 +250,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
-  const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
-    navigator.clipboard.writeText(text)
-    // Provide quick visual feedback on the element itself
-    if (e?.currentTarget) {
-      const element = e.currentTarget
-      element.classList.add('copy-flash')
-      setTimeout(() => element.classList.remove('copy-flash'), 300)
-    }
-  }
-
   if (error) {
     return (
       <div className="super-agent-view">
@@ -323,63 +271,96 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   }
 
   const hasTasks = agent.taskInvocations && agent.taskInvocations.length > 0
+  const taskCount = agent.taskInvocations?.length || 0
+  const isRunning = agent.terminalPid !== null
+
+  // Build badges array for the header - consistent with Minion view
+  const headerBadges: HeaderBadge[] = [
+    {
+      label: 'Feature',
+      value: agent.feature,
+      variant: 'feature',
+      copyable: true
+    },
+    // ID badge is shown in SessionInfoPanel expanded view, but we still pass it for consistency
+    {
+      label: 'ID',
+      value: agent.agentId,
+      variant: 'id',
+      copyable: true
+    }
+  ]
+
+  // Derive status for super agent (use status field if available, otherwise derive from state)
+  const agentStatus = agent.status || (isRunning ? 'working' : 'idle')
+
+  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
+  // This logic is IDENTICAL to AgentView for consistency
+  const headerActions = (
+    <>
+      {/* PR Status Badge or Make PR Button - logic matches AgentView exactly */}
+      {agent?.prStatus && agent.prUrl ? (
+        <button
+          className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
+          onClick={() => window.open(agent.prUrl, '_blank')}
+          title="Open PR on GitHub"
+        >
+          PR: {agent.prStatus}
+          <span className="pr-open-icon">↗</span>
+          {agentStatus === 'pr_open' && (
+            <button
+              className="pr-refresh-btn"
+              onClick={async (e) => {
+                e.stopPropagation()
+                try {
+                  await window.electronAPI.checkPullRequestStatus(agent.agentId)
+                } catch (err: any) {
+                  console.error('Failed to refresh PR status:', err)
+                }
+              }}
+              title="Refresh PR status"
+            >
+              ↻
+            </button>
+          )}
+        </button>
+      ) : agentStatus !== 'pr_open' && agentStatus !== 'merged' && agentStatus !== 'closed' ? (
+        <button
+          onClick={handleCreatePRClick}
+          className="compact-button success"
+          disabled={isCreatingPR}
+        >
+          {isCreatingPR ? 'Creating...' : 'Make PR'}
+        </button>
+      ) : null}
+
+      {/* Cursor Button */}
+      <button onClick={handleOpenCursor} className="compact-button">
+        Cursor
+      </button>
+
+      {/* Cleanup Dropdown - consistent with AgentView */}
+      <AgentCleanupDropdown
+        agentId={agent.agentId}
+        onCleanupComplete={() => navigate('/workspace')}
+      />
+    </>
+  )
 
   return (
     <div className="super-agent-view">
-      <div className="agent-header">
-        <div className="agent-header-left">
-          <div className="agent-title">
-            <h2>
-              👑 {extractBranchName(agent.branch) || agent.agentId}
-              <span className="task-badge">Tasks: {agent.taskInvocations?.length || 0}</span>
-            </h2>
-          </div>
-
-          <div className="info-badge mission-badge" title={`${agent.feature} (click to copy)`}>
-            <span className="info-badge-label">Mission:</span>
-            <span
-              className="info-badge-value copyable"
-              onClick={(e) => handleCopyToClipboard(agent.feature, e as any)}
-              role="button"
-              tabIndex={0}
-            >
-              {agent.feature}
-            </span>
-          </div>
-        </div>
-
-        <div className="agent-actions">
-          {/* PR Status Badge or Make PR Button */}
-          {agent?.prStatus && agent.prUrl ? (
-            <button
-              className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
-              onClick={() => window.open(agent.prUrl, '_blank')}
-              title="Open PR on GitHub"
-            >
-              PR: {agent.prStatus}
-              <span className="pr-open-icon">↗</span>
-            </button>
-          ) : (
-            <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
-              {isCreatingPR ? 'Creating...' : 'Make PR'}
-            </button>
-          )}
-          <button onClick={handleOpenCursor} className="compact-button">
-            Cursor
-          </button>
-          <button className="danger compact-button" onClick={handleStop}>
-            Stop
-          </button>
-          <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
-            🗑️
-          </button>
-        </div>
-      </div>
-
-      {/* Session Info Panel - shows live Claude session data */}
-      {agent.tool === 'claude' && (
-        <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
-      )}
+      <AgentHeader
+        icon="👑"
+        title={extractBranchName(agent.branch) || agent.agentId}
+        typeLabel="Super Minion"
+        agentId={agent.agentId}
+        badges={headerBadges}
+        tool={agent.tool}
+        isRunning={isRunning}
+        status={agentStatus}
+        actions={headerActions}
+        taskCount={taskCount}
+      />
 
       <div className="agent-content">
         {/* Full-width tab bar */}
@@ -518,17 +499,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           )}
         </div>
       </div>
-
-      <ConfirmModal
-        isOpen={showTeardownConfirm}
-        title="Cleanup Super Minion?"
-        message="This will delete the agent worktree and all data. Are you sure?"
-        confirmText="Cleanup"
-        confirmVariant="danger"
-        onConfirm={handleTeardown}
-        onCancel={() => setShowTeardownConfirm(false)}
-        isLoading={isTearingDown}
-      />
 
       {showPRConfirm && agent && (
         <div className="modal-overlay" onClick={() => setShowPRConfirm(false)}>

@@ -1,8 +1,13 @@
+/* =============================================================================
+   AGENT VIEW - Container and Layout Styles
+   Header styles have been moved to AgentHeader.css
+   ============================================================================= */
+
 .agent-view {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #1e1e1e;
+  background: var(--bg-surface);
 }
 
 .agent-view-error {
@@ -10,244 +15,13 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #858585;
-  font-size: 16px;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
 }
 
-.agent-header {
-  background: #252526;
-  border-bottom: 1px solid #3e3e42;
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 56px;
-}
-
-.agent-header-left {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-title {
-  display: flex;
-  align-items: center;
-}
-
-.agent-title h2 {
-  font-size: 18px;
-  color: #ffffff;
-  font-weight: 600;
-  margin: 0;
-  display: inline;
-  vertical-align: middle;
-}
-
-.agent-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.agent-actions .compact-button {
-  padding: 6px 12px;
-  background: #3e3e42;
-  color: #cccccc;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.agent-actions .compact-button:hover {
-  background: #4e4e52;
-  transform: translateY(-1px);
-}
-
-.agent-actions .compact-button:active {
-  transform: translateY(0);
-}
-
-.agent-actions .compact-button.primary {
-  background: var(--accent-primary);
-}
-
-.agent-actions .compact-button.primary:hover {
-  background: var(--accent-primary-hover);
-}
-
-.agent-actions .compact-button.danger {
-  background: #c72e1d;
-}
-
-.agent-actions .compact-button.danger:hover {
-  background: #e03e2d;
-}
-
-.agent-actions .compact-button.success {
-  background: #0dbc79;
-}
-
-.agent-actions .compact-button.success:hover {
-  background: #23d18b;
-}
-
-.agent-actions .compact-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.agent-actions .compact-button.icon-only {
-  padding: 6px 10px;
-  min-width: 36px;
-}
-
-.copy-flash {
-  animation: copy-flash-keyframe 0.3s ease-out;
-}
-
-@keyframes copy-flash-keyframe {
-  0% {
-    background: #2d2d2d;
-  }
-  50% {
-    background: #0dbc79;
-    box-shadow: 0 0 8px rgba(13, 188, 121, 0.5);
-  }
-  100% {
-    background: #2d2d2d;
-  }
-}
-
-/* Info Badge Styles */
-.info-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: #2d2d2d;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  font-size: 11px;
-  margin-left: 8px;
-  vertical-align: middle;
-}
-
-.info-badge-label {
-  color: #858585;
-  font-weight: 500;
-}
-
-.info-badge-value {
-  color: #d4d4d4;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-badge-value.copyable {
-  cursor: pointer;
-  transition: color 0.2s, text-shadow 0.2s;
-}
-
-.info-badge-value.copyable:hover {
-  color: #ffffff;
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
-}
-
-.branch-badge .info-badge-value {
-  font-family: 'Courier New', Courier, monospace;
-  color: #9cdcfe;
-}
-
-.branch-badge .info-badge-value.copyable:hover {
-  color: #b8e6ff;
-}
-
-/* Status Badge with Dot Indicator */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: #2d2d2d;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  font-size: 11px;
-  margin-left: 8px;
-  color: #d4d4d4;
-}
-
-.status-badge .copyable {
-  cursor: pointer;
-  transition: color 0.2s, text-shadow 0.2s;
-}
-
-.status-badge .copyable:hover {
-  color: #ffffff;
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.status-dot.working {
-  background: #0dbc79;
-}
-
-.status-dot.idle {
-  background: #858585;
-}
-
-.status-dot.pr_open {
-  background: var(--accent-primary);
-}
-
-.status-dot.merged {
-  background: #9cdcfe;
-}
-
-/* Responsive Design */
-@media (max-width: 1200px) {
-  .branch-badge {
-    display: none;
-  }
-}
-
-.agent-actions button.primary {
-  background: var(--accent-primary);
-}
-
-.agent-actions button.primary:hover {
-  background: var(--accent-primary-hover);
-}
-
-.agent-actions button.danger {
-  background: #c72e1d;
-}
-
-.agent-actions button.danger:hover {
-  background: #e03e2d;
-}
-
-.agent-actions button.success {
-  background: #0dbc79;
-}
-
-.agent-actions button.success:hover {
-  background: #23d18b;
-}
+/* =============================================================================
+   AGENT CONTENT - Main content area with tabs and terminal
+   ============================================================================= */
 
 .agent-content {
   flex: 1;
@@ -262,12 +36,12 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #858585;
+  color: var(--text-muted);
 }
 
 .placeholder-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
+  font-size: var(--space-8);
+  margin-bottom: var(--space-4);
 }
 
 .placeholder-text {
@@ -275,53 +49,59 @@
 }
 
 .placeholder-text p {
-  margin: 4px 0;
-  font-size: 14px;
+  margin: var(--space-1) 0;
+  font-size: var(--font-size-sm);
 }
+
+/* =============================================================================
+   CLEANUP DROPDOWN
+   ============================================================================= */
 
 .cleanup-dropdown {
   position: relative;
 }
 
 .cleanup-button {
-  padding: 8px 12px;
-  background: #3e3e42;
-  color: #cccccc;
+  padding: 0 var(--space-3);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
   border: none;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--transition-base);
 }
 
 .cleanup-button:hover {
-  background: #4e4e52;
+  filter: brightness(1.15);
 }
-
-/* Cleanup button is now a compact button with icon-only class */
 
 .cleanup-menu {
   display: none;
   position: absolute;
   top: 100%;
   right: 0;
-  background: #252526;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-muted);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
   min-width: 140px;
-  z-index: 100;
-  padding-top: 4px;
+  /* Use design token for z-index */
+  z-index: var(--z-sticky);
+  padding-top: var(--space-1);
 }
 
 /* Bridge the gap between button and menu */
 .cleanup-menu::before {
   content: '';
   position: absolute;
-  top: -4px;
+  top: calc(var(--space-1) * -1);
   left: 0;
   right: 0;
-  height: 4px;
+  height: var(--space-1);
 }
 
 .cleanup-dropdown:hover .cleanup-menu {
@@ -331,99 +111,102 @@
 .cleanup-menu button {
   display: block;
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   background: transparent;
-  color: #cccccc;
+  color: var(--text-secondary);
   border: none;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--transition-base);
 }
 
 .cleanup-menu button:hover {
-  background: #2a2d2e;
+  background: var(--bg-overlay);
 }
 
 .cleanup-menu button.danger-text {
-  color: #f48771;
+  color: var(--color-error);
 }
 
 .cleanup-menu button.danger-text:hover {
-  background: rgba(199, 46, 29, 0.2);
+  background: var(--color-error-dim);
 }
 
-/* Unified Tab Interface */
+/* =============================================================================
+   UNIFIED TAB INTERFACE
+   ============================================================================= */
+
 .unified-tabs {
   display: flex;
   gap: 0;
-  background: #252526;
-  border-bottom: 1px solid #333;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
   overflow-x: auto;
 }
 
 .unified-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: var(--space-2);
+  padding: 10px var(--space-4);
   cursor: pointer;
-  border-right: 1px solid #333;
-  background: #2d2d2d;
-  transition: background 0.2s;
+  border-right: 1px solid var(--border-default);
+  background: var(--bg-overlay);
+  transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;
   min-width: fit-content;
 }
 
 .unified-tab:hover {
-  background: #37373d;
+  filter: brightness(1.1);
 }
 
 .unified-tab.active {
-  background: #1e1e1e;
+  background: var(--bg-surface);
   border-bottom: 2px solid var(--accent-primary);
 }
 
 .unified-tab .tab-icon {
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 .unified-tab .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .unified-tab .status-dot.running {
-  background: #0dbc79;
-  box-shadow: 0 0 4px #0dbc79;
+  background: var(--color-success-bright);
+  box-shadow: 0 0 4px var(--color-success-bright);
 }
 
 .unified-tab .status-dot.stopped {
-  background: #858585;
+  background: var(--text-muted);
 }
 
 .unified-tab .tab-name {
-  font-size: 13px;
-  color: #d4d4d4;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
 .unified-tab .tab-port {
-  font-size: 12px;
-  color: #858585;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
 }
 
 .unified-tab .tab-action {
-  margin-left: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
+  margin-left: var(--space-1);
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-2xs);
   border: none;
   border-radius: 3px;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-base);
 }
 
 .unified-tab .tab-action:hover {
@@ -436,35 +219,35 @@
 }
 
 .unified-tab .tab-action.stop {
-  background: #c72e2e;
+  background: var(--color-error);
   color: white;
 }
 
 .unified-tab .tab-action.close {
-  background: #858585;
+  background: var(--text-muted);
   color: white;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding: 2px 5px;
 }
 
 .unified-tab .tab-action.close:hover {
-  background: #c72e2e;
+  background: var(--color-error);
 }
 
 .unified-tab.add-tab {
-  background: #2d2d2d;
+  background: var(--bg-overlay);
   cursor: pointer;
-  border-right: 1px solid #333;
-  padding: 10px 12px;
+  border-right: 1px solid var(--border-default);
+  padding: 10px var(--space-3);
   min-width: auto;
 }
 
 .unified-tab.add-tab:hover {
-  background: #37373d;
+  filter: brightness(1.15);
 }
 
 .unified-tab.add-tab .tab-icon {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   opacity: 0.7;
 }
 
@@ -473,7 +256,10 @@
   overflow: hidden;
 }
 
-/* Modal Styles Copied from Dashboard.css */
+/* =============================================================================
+   MODAL STYLES
+   ============================================================================= */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -488,29 +274,29 @@
 }
 
 .modal-content {
-  background: #252526;
-  border: 1px solid #3e3e42;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   max-width: 500px;
   width: 90%;
 }
 
 .modal-content h2 {
   font-size: 20px;
-  color: #ffffff;
-  margin-bottom: 24px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-5);
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .form-group label {
   display: block;
-  font-size: 13px;
-  color: #d4d4d4;
-  margin-bottom: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
 }
 
 .form-group input,
@@ -520,48 +306,49 @@
 }
 
 .form-hint {
-  font-size: 12px;
-  color: #858585;
-  margin-top: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-2);
   font-style: italic;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
 
 .form-actions button[type='button'] {
-  background: #3e3e42;
+  background: var(--bg-muted);
 }
 
 .form-actions button[type='button']:hover {
-  background: #4e4e52;
+  filter: brightness(1.15);
 }
 
 .form-actions button.primary {
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .form-actions button.primary:hover {
   background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow-sm);
 }
 
 .merge-info {
-  background: #2d2d2d;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  padding: 12px;
-  margin: 16px 0;
-  font-size: 13px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--bg-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin: var(--space-4) 0;
+  font-size: var(--font-size-sm);
 }
 
 .merge-info div {
-  margin-bottom: 6px;
-  color: #d4d4d4;
+  margin-bottom: var(--space-2);
+  color: var(--text-secondary);
 }
 
 .merge-info div:last-child {
@@ -569,12 +356,12 @@
 }
 
 .warning-text {
-  font-size: 13px;
-  color: #dcdcaa;
-  background: rgba(220, 220, 170, 0.1);
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  background: var(--color-warning-dim);
   padding: 10px;
-  border-radius: 4px;
-  border-left: 3px solid #dcdcaa;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-warning);
 }
 
 /* Checkbox styles */
@@ -589,116 +376,30 @@
   cursor: pointer;
   user-select: none;
   flex-wrap: nowrap;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .checkbox-label input[type='checkbox'] {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #f48771;
+  accent-color: var(--color-error);
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 .checkbox-text {
-  font-size: 13px;
-  color: #d4d4d4;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
   line-height: 1;
 }
 
-/* PR Status Badge */
-.pr-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  cursor: pointer;
-  border: 1px solid;
-  transition: all 0.2s ease;
-  background: none;
-}
+/* =============================================================================
+   TELEPORT FAILURE BANNER
+   ============================================================================= */
 
-.pr-status-badge:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.pr-status-open {
-  background: rgba(197, 134, 192, 0.2) !important;
-  color: #c586c0;
-  border-color: #c586c0;
-}
-
-.pr-status-open:hover {
-  background: rgba(197, 134, 192, 0.3) !important;
-  box-shadow: 0 2px 8px rgba(197, 134, 192, 0.3);
-}
-
-.pr-status-merged {
-  background: rgba(78, 201, 176, 0.2) !important;
-  color: #4ec9b0;
-  border-color: #4ec9b0;
-}
-
-.pr-status-merged:hover {
-  background: rgba(78, 201, 176, 0.3) !important;
-  box-shadow: 0 2px 8px rgba(78, 201, 176, 0.3);
-}
-
-.pr-status-closed {
-  background: rgba(133, 133, 133, 0.2) !important;
-  color: #858585;
-  border-color: #858585;
-}
-
-.pr-status-closed:hover {
-  background: rgba(133, 133, 133, 0.3) !important;
-  box-shadow: 0 2px 8px rgba(133, 133, 133, 0.3);
-}
-
-.pr-open-icon {
-  font-size: 11px;
-  opacity: 0.7;
-  transition: opacity 0.2s, transform 0.2s;
-}
-
-.pr-status-badge:hover .pr-open-icon {
-  opacity: 1;
-  transform: translate(1px, -1px);
-}
-
-.pr-refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-  line-height: 1;
-  opacity: 0.7;
-  transition: opacity 0.2s, transform 0.3s ease;
-  margin-left: 2px;
-}
-
-.pr-refresh-btn:hover {
-  opacity: 1;
-}
-
-.pr-refresh-btn:active {
-  transform: rotate(180deg);
-}
-
-/* Teleport Failure Banner */
 .teleport-failure-banner {
   background: rgba(244, 135, 113, 0.15);
   border: 1px solid #f48771;
@@ -748,4 +449,26 @@
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* Compact button styles for teleport failure actions */
+.teleport-failure-actions .compact-button {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-base);
+  font-weight: 500;
+}
+
+.teleport-failure-actions .compact-button:hover {
+  filter: brightness(1.15);
+}
+
+.teleport-failure-actions .compact-button.danger {
+  background: var(--color-error);
+  color: white;
 }

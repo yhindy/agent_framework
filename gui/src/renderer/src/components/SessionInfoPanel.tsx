@@ -23,6 +23,8 @@ interface SessionInfo {
 interface SessionInfoPanelProps {
   agentId: string
   isRunning: boolean
+  /** Status for display when session info is not available */
+  status?: string
 }
 
 function formatModelName(model: string): string {
@@ -53,7 +55,18 @@ function timeAgo(timestamp: string): string {
   return `${Math.floor(diffHours / 24)}d ago`
 }
 
-export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPanelProps) {
+function getStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    working: 'Working',
+    idle: 'Idle',
+    pr_open: 'PR Open',
+    merged: 'Merged',
+    blocked: 'Blocked'
+  }
+  return labels[status] || status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+export default function SessionInfoPanel({ agentId, isRunning, status }: SessionInfoPanelProps) {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
@@ -121,38 +134,98 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
     }
   }
 
-  // Show loading state if running but no session info yet
-  if (!isRunning) {
+  const handleCopyAgentId = async () => {
+    try {
+      await navigator.clipboard.writeText(agentId)
+      setCopyFeedback('agent')
+      setTimeout(() => setCopyFeedback(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  // Not running and no status - show nothing
+  if (!isRunning && !status) {
     return null
   }
 
+  // Not running but we have a status - show minimal view with expand option
+  if (!isRunning) {
+    return (
+      <div className="session-info-panel">
+        <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
+          <div className="session-info-badges">
+            <span className={`state-badge state-${status}`}>
+              {getStatusLabel(status || 'idle')}
+            </span>
+          </div>
+          <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
+            {isExpanded ? '▲' : '▼'}
+          </button>
+        </div>
+        {isExpanded && (
+          <div className="session-info-expanded">
+            <div className="info-row">
+              <span className="info-label">Agent ID:</span>
+              <span className="info-value">
+                {agentId}
+                <button
+                  className="copy-btn"
+                  onClick={handleCopyAgentId}
+                  title="Copy agent ID"
+                >
+                  {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Running but still loading session info
   if (!sessionInfo) {
     return (
       <div className="session-info-panel">
-        <div className="session-info-collapsed">
+        <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
           <div className="session-info-badges">
             <span className="session-badge">
               <span className="badge-label">Session:</span>
               <span className="badge-value">Loading...</span>
             </span>
           </div>
+          <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
+            {isExpanded ? '▲' : '▼'}
+          </button>
         </div>
+        {isExpanded && (
+          <div className="session-info-expanded">
+            <div className="info-row">
+              <span className="info-label">Agent ID:</span>
+              <span className="info-value">
+                {agentId}
+                <button
+                  className="copy-btn"
+                  onClick={handleCopyAgentId}
+                  title="Copy agent ID"
+                >
+                  {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
-  const truncatedSessionId = sessionInfo.sessionId.slice(0, 8)
   const displayModel = formatModelName(sessionInfo.actualModel)
 
   return (
     <div className="session-info-panel">
       <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="session-info-badges">
-          <span className="session-badge" title={`Session ID: ${sessionInfo.sessionId}`}>
-            <span className="badge-label">Session:</span>
-            <span className="badge-value">{truncatedSessionId}...</span>
-          </span>
-
           <span className="model-badge" title={`Model: ${sessionInfo.actualModel}`}>
             <span className="badge-label">Model:</span>
             <span className="badge-value">{displayModel}</span>
@@ -172,6 +245,21 @@ export default function SessionInfoPanel({ agentId, isRunning }: SessionInfoPane
 
       {isExpanded && (
         <div className="session-info-expanded">
+          {/* Agent ID - always shown first */}
+          <div className="info-row">
+            <span className="info-label">Agent ID:</span>
+            <span className="info-value">
+              {agentId}
+              <button
+                className="copy-btn"
+                onClick={handleCopyAgentId}
+                title="Copy agent ID"
+              >
+                {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+              </button>
+            </span>
+          </div>
+
           <div className="info-row">
             <span className="info-label">Session ID:</span>
             <span className="info-value">

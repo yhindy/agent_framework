@@ -1,0 +1,577 @@
+/* =============================================================================
+   AGENT HEADER v2 - Shared Header Component
+   A unified header design for both Minion and Super Minion views
+   ============================================================================= */
+
+.agent-header-v2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  min-height: 64px;
+}
+
+/* =============================================================================
+   IDENTITY SECTION - Icon + Type Label + Title
+   ============================================================================= */
+
+.header-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.header-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, var(--bg-overlay) 0%, var(--bg-muted) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+}
+
+.header-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* Task count indicator (for super minions) */
+.header-task-indicator {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  background: linear-gradient(135deg, var(--color-teal) 0%, var(--color-teal-dark) 100%);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header-type-label {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+}
+
+.header-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+/* =============================================================================
+   METADATA SECTION - Badges + Session Info
+   ============================================================================= */
+
+.header-metadata {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  /* Use visible overflow to allow dropdowns to escape */
+  overflow: visible;
+  padding: var(--space-1) 0;
+}
+
+/* Hide scrollbar but keep functionality */
+.header-metadata::-webkit-scrollbar {
+  height: 0;
+}
+
+/* =============================================================================
+   BADGES - Unified badge system with variants
+   ============================================================================= */
+
+.header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  height: 32px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.header-badge:hover {
+  border-color: var(--border-default);
+}
+
+.header-badge-label {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.header-badge-value {
+  color: var(--text-secondary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--transition-base), text-shadow var(--transition-base);
+}
+
+.header-badge-value.copyable {
+  cursor: pointer;
+}
+
+.header-badge-value.copyable:hover {
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+/* Badge Variants */
+
+/* Feature badge - slightly emphasized */
+.header-badge--feature {
+  background: var(--color-info-dim);
+  border-color: rgba(68, 138, 255, 0.2);
+}
+
+.header-badge--feature .header-badge-value {
+  color: var(--color-info);
+}
+
+/* ID badge - monospace, subtle */
+.header-badge--id {
+  background: var(--bg-surface);
+}
+
+.header-badge--id .header-badge-value {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+}
+
+/* Status badge - with colored dot */
+.header-badge--status {
+  gap: var(--space-1);
+}
+
+/* Count badge - for numeric values */
+.header-badge--count {
+  background: linear-gradient(135deg, var(--color-teal-dim) 0%, rgba(58, 157, 143, 0.15) 100%);
+  border-color: var(--color-teal);
+}
+
+.header-badge--count .header-badge-value {
+  color: var(--color-teal);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* =============================================================================
+   EXPANDABLE INFO PANEL - Agent ID and additional info
+   ============================================================================= */
+
+.header-info-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  /* Ensure dropdowns can escape parent */
+  z-index: 1;
+}
+
+.info-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-fast);
+}
+
+.info-toggle-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+  transform: scale(1.05);
+}
+
+.info-toggle-btn.expanded {
+  background: var(--color-info-dim);
+  border-color: var(--color-info);
+}
+
+.info-toggle-icon {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.info-toggle-btn.expanded .info-toggle-icon {
+  color: var(--color-info);
+}
+
+.header-info-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 280px;
+  max-width: 400px;
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  /* Higher z-index to appear above all page content */
+  z-index: var(--z-sticky);
+  animation: infoPanel-fadeIn var(--transition-fast) ease-out;
+}
+
+@keyframes infoPanel-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.info-panel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.info-panel-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  flex-shrink: 0;
+}
+
+.info-panel-value {
+  color: var(--text-secondary);
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: var(--font-size-xs);
+  word-break: break-all;
+  transition: color var(--transition-base), text-shadow var(--transition-base);
+}
+
+.info-panel-value.copyable {
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.info-panel-value.copyable:hover {
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+  background: var(--bg-muted);
+}
+
+/* =============================================================================
+   STATUS DOT - Animated status indicator
+   ============================================================================= */
+
+.header-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.header-status-dot.working {
+  background: var(--color-success-bright);
+  box-shadow: 0 0 6px var(--color-success-bright-glow);
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+.header-status-dot.idle {
+  background: var(--status-pending);
+}
+
+.header-status-dot.pr_open {
+  background: var(--color-purple-alt);
+  box-shadow: 0 0 6px var(--color-purple-alt-glow);
+}
+
+.header-status-dot.merged {
+  background: var(--color-info);
+  box-shadow: 0 0 6px rgba(68, 138, 255, 0.4);
+}
+
+.header-status-dot.blocked {
+  background: var(--color-error);
+  box-shadow: 0 0 6px rgba(255, 82, 82, 0.4);
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* =============================================================================
+   ACTIONS SECTION - Right-aligned buttons
+   ============================================================================= */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Compact button styles for header actions */
+.header-actions .compact-button {
+  padding: 0 var(--space-3);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-base),
+    transform var(--transition-fast),
+    box-shadow var(--transition-base);
+}
+
+.header-actions .compact-button:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.header-actions .compact-button:active {
+  transform: translateY(0);
+}
+
+.header-actions .compact-button.primary {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+
+.header-actions .compact-button.primary:hover {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow-sm);
+  filter: none;
+}
+
+.header-actions .compact-button.danger {
+  background: var(--color-error);
+  color: white;
+}
+
+.header-actions .compact-button.danger:hover {
+  filter: brightness(1.15);
+}
+
+.header-actions .compact-button.success {
+  background: var(--color-success-bright);
+  color: white;
+}
+
+.header-actions .compact-button.success:hover {
+  background: var(--color-success-bright-hover);
+  filter: none;
+}
+
+.header-actions .compact-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.header-actions .compact-button.icon-only {
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
+}
+
+/* =============================================================================
+   COPY FLASH ANIMATION
+   ============================================================================= */
+
+.header-copy-flash {
+  animation: header-copy-flash-keyframe var(--transition-slow) ease-out;
+}
+
+@keyframes header-copy-flash-keyframe {
+  0% {
+    background: transparent;
+  }
+  50% {
+    background: var(--color-success-bright-dim);
+    text-shadow: 0 0 8px var(--color-success-bright-glow);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* =============================================================================
+   PR STATUS BADGE - Special styling for PR status
+   ============================================================================= */
+
+.header-actions .pr-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  height: 32px;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  cursor: pointer;
+  border: 1px solid;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  background: none;
+}
+
+.header-actions .pr-status-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.header-actions .pr-status-open {
+  background: var(--color-purple-alt-dim);
+  color: var(--color-purple-alt);
+  border-color: var(--color-purple-alt);
+}
+
+.header-actions .pr-status-open:hover {
+  background: rgba(197, 134, 192, 0.3);
+  box-shadow: 0 2px 8px var(--color-purple-alt-glow);
+}
+
+.header-actions .pr-status-merged {
+  background: var(--color-teal-dim);
+  color: var(--color-teal);
+  border-color: var(--color-teal);
+}
+
+.header-actions .pr-status-merged:hover {
+  background: rgba(78, 201, 176, 0.3);
+  box-shadow: 0 2px 8px var(--color-teal-glow);
+}
+
+.header-actions .pr-status-closed {
+  background: rgba(133, 133, 133, 0.2);
+  color: var(--text-muted);
+  border-color: var(--text-muted);
+}
+
+.header-actions .pr-status-closed:hover {
+  background: rgba(133, 133, 133, 0.3);
+  box-shadow: 0 2px 8px rgba(133, 133, 133, 0.3);
+}
+
+.header-actions .pr-open-icon {
+  font-size: var(--font-size-xs);
+  opacity: 0.7;
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+
+.header-actions .pr-status-badge:hover .pr-open-icon {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.header-actions .pr-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  padding: 2px var(--space-1);
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity var(--transition-base), transform var(--transition-slow) ease;
+  margin-left: 2px;
+}
+
+.header-actions .pr-refresh-btn:hover {
+  opacity: 1;
+}
+
+.header-actions .pr-refresh-btn:active {
+  transform: rotate(180deg);
+}
+
+/* =============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================= */
+
+@media (max-width: 900px) {
+  .agent-header-v2 {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .header-metadata {
+    order: 3;
+    width: 100%;
+    flex: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .header-badge--id {
+    display: none;
+  }
+
+  .header-title {
+    font-size: var(--font-size-base);
+  }
+}
