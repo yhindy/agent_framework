@@ -106,3 +106,12 @@
   background: #3c3c3c;
   margin: 4px 0;
 }
+
+/* Keyboard shortcut hints */
+.shortcut-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #888888;
+  font-family: system-ui, -apple-system, sans-serif;
+  opacity: 0.7;
+}

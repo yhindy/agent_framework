@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getModifierSymbol } from '../hooks/useKeyboardShortcuts'
 import './MissionDropdown.css'
 
 interface MissionDropdownProps {
@@ -70,6 +71,7 @@ function MissionDropdown({
               >
                 <span className="mission-dropdown-item-icon">📁</span>
                 <span className="mission-dropdown-item-label">Add Project</span>
+                <span className="shortcut-hint">{getModifierSymbol()}O</span>
               </div>
             </>
           )}
@@ -79,6 +81,7 @@ function MissionDropdown({
           >
             <span className="mission-dropdown-item-icon">🍌</span>
             <span className="mission-dropdown-item-label">New Minion</span>
+            <span className="shortcut-hint">{getModifierSymbol()}N</span>
           </div>
           <div className="mission-dropdown-divider" />
           <div
@@ -87,6 +90,7 @@ function MissionDropdown({
           >
             <span className="mission-dropdown-item-icon">📡</span>
             <span className="mission-dropdown-item-label">Teleport from Cloud</span>
+            <span className="shortcut-hint">{getModifierSymbol()}T</span>
           </div>
         </div>
       )}

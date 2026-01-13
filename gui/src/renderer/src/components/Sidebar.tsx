@@ -5,6 +5,11 @@ import MissionDropdown from './MissionDropdown'
 import { extractBranchName } from '../utils/branchUtils'
 import './Sidebar.css'
 
+interface AgentInfo {
+  id: string
+  isSuperMinion?: boolean
+}
+
 interface SidebarProps {
   activeProjects: any[]
   onNavigate: (path: string) => void
@@ -12,6 +17,7 @@ interface SidebarProps {
   onProjectAdd: () => void
   isCollapsed: boolean
   onToggleCollapse: () => void
+  onAgentListChange?: (agents: AgentInfo[]) => void
 }
 
 interface AgentSession {
@@ -45,7 +51,7 @@ interface TasksByAgent {
   [agentId: string]: TaskInvocation[]
 }
 
-function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse }: SidebarProps) {
+function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
@@ -206,6 +212,67 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       }
     }
   }, [])
+
+  // Notify parent of agent list changes for keyboard navigation
+  // IMPORTANT: This must match the exact visual order in the sidebar
+  useEffect(() => {
+    if (onAgentListChange) {
+      const allAgents: AgentInfo[] = []
+
+      // Iterate through projects in the same order as activeProjects (matches sidebar render order)
+      for (const project of activeProjects) {
+        const agents = agentsByProject[project.path] || []
+        // Filter out agents with missing/empty critical fields
+        const validAgents = agents.filter(a => a.id && a.id.trim() !== '')
+
+        // Apply the SAME sorting as the sidebar display (lines 442-460)
+        const sortedAgents = [...validAgents].sort((a, b) => {
+          // Base branch agents always first
+          if (a.isBaseBranchAgent && !b.isBaseBranchAgent) return -1
+          if (!a.isBaseBranchAgent && b.isBaseBranchAgent) return 1
+
+          // Then waiting agents
+          const aAgentWaiting = waitingAgents.has(a.id)
+          const aPlainWaiting = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${a.id}-`))
+          const aWaiting = aAgentWaiting || aPlainWaiting
+
+          const bAgentWaiting = waitingAgents.has(b.id)
+          const bPlainWaiting = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${b.id}-`))
+          const bWaiting = bAgentWaiting || bPlainWaiting
+
+          if (aWaiting && !bWaiting) return -1
+          if (!aWaiting && bWaiting) return 1
+
+          return a.id.localeCompare(b.id)
+        })
+
+        // Build parent-child hierarchy (matches sidebar render logic)
+        const roots = sortedAgents.filter(a => !a.parentAgentId)
+        const childrenMap: Record<string, AgentSession[]> = {}
+        sortedAgents.forEach(a => {
+          if (a.parentAgentId) {
+            if (!childrenMap[a.parentAgentId]) childrenMap[a.parentAgentId] = []
+            childrenMap[a.parentAgentId].push(a)
+          }
+        })
+
+        // Flatten in visual order: parent, then children recursively
+        const flattenWithChildren = (agent: AgentSession): void => {
+          allAgents.push({
+            id: agent.id,
+            isSuperMinion: agent.isSuperMinion
+          })
+          // Add children in order (only if super minion is not collapsed in sidebar view)
+          const children = childrenMap[agent.id] || []
+          children.forEach(child => flattenWithChildren(child))
+        }
+
+        roots.forEach(root => flattenWithChildren(root))
+      }
+
+      onAgentListChange(allAgents)
+    }
+  }, [agentsByProject, activeProjects, waitingAgents, waitingPlainTerminals, onAgentListChange])
 
   // Save collapsed state to localStorage
   const toggleProjectCollapse = (projectPath: string) => {
