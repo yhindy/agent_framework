@@ -13,6 +13,9 @@ import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 import { TeleportService } from './services/TeleportService'
 import { TeleportMetadataService } from './services/TeleportMetadataService'
+import { createLogger } from './services/logger'
+
+const log = createLogger('Main')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -128,7 +131,7 @@ function initializeServices(): void {
   const activeProjects = services.project.getActiveProjects()
   for (const project of activeProjects) {
     services.agent.migrateAssignments(project.path)
-      .catch(err => console.error(`Failed to migrate assignments for ${project.path}:`, err))
+      .catch(err => log.error(`Failed to migrate assignments for ${project.path}`, err))
 
     // Ensure base branch agent exists for projects with framework installed
     if (!project.needsInstall) {
@@ -150,12 +153,12 @@ function initializeServices(): void {
                 )
                 mainWindow?.webContents.send('agents:updated')
               } catch (error) {
-                console.error('Failed to auto-start base agent Claude:', error)
+                log.error('Failed to auto-start base agent Claude', error)
               }
             }, 2000)
           }
         })
-        .catch(err => console.error(`Failed to ensure base agent for ${project.path}:`, err))
+        .catch(err => log.error(`Failed to ensure base agent for ${project.path}`, err))
 
       // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
       services.agent.listAgents(project.path)
@@ -165,12 +168,12 @@ function initializeServices(): void {
             if (agent.claudeSessionId && agent.tool === 'claude') {
               // Special handling for teleported sessions (cloudSessionId present)
               if (agent.cloudSessionId || agent.isTeleportedSession) {
-                console.log(`[Startup] Validating teleported session for ${agent.id}`)
+                log.debug(`[Startup] Validating teleported session for ${agent.id}`)
 
                 // Read full agent info from disk to pass to validation
                 const agentInfo = services!.agent.readAgentInfo(agent.worktreePath)
                 if (!agentInfo) {
-                  console.log(`[Startup] Could not read agent info for ${agent.id}`)
+                  log.debug(`[Startup] Could not read agent info for ${agent.id}`)
                   continue
                 }
 
@@ -178,7 +181,7 @@ function initializeServices(): void {
                 const validation = await services!.agent.validateTeleportSession(agentInfo)
 
                 if (!validation.isValid) {
-                  console.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
+                  log.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
 
                   // Send notification to user about failed validation
                   mainWindow?.webContents.send('agent:teleportValidationFailed', {
@@ -196,11 +199,11 @@ function initializeServices(): void {
                 }
 
                 if (!validation.canResume) {
-                  console.log(`[Startup] Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
+                  log.debug(`[Startup] Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
                   continue
                 }
 
-                console.log(`[Startup] Teleported session ${agent.id} validated successfully`)
+                log.debug(`[Startup] Teleported session ${agent.id} validated successfully`)
               }
 
               // Check actual session state from JSONL
@@ -211,7 +214,7 @@ function initializeServices(): void {
 
               // Only resume if session exists (not 'unknown')
               if (sessionState !== 'unknown') {
-                console.log(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
+                log.debug(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
 
                 // Stagger resumes to avoid overwhelming
                 const delay = 500 + Math.random() * 2000
@@ -239,7 +242,7 @@ function initializeServices(): void {
                       )
                     }
                   } catch (error) {
-                    console.error(`Failed to resume agent ${agent.id}:`, error)
+                    log.error(`Failed to resume agent ${agent.id}`, error)
 
                     // Send failure notification to UI
                     mainWindow?.webContents.send('agent:resumeFailed', {
@@ -249,12 +252,12 @@ function initializeServices(): void {
                   }
                 }, delay)
               } else {
-                console.log(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
+                log.debug(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
               }
             }
           }
         })
-        .catch(err => console.error(`Failed to auto-resume agents for ${project.path}:`, err))
+        .catch(err => log.error(`Failed to auto-resume agents for ${project.path}`, err))
     }
   }
 
@@ -289,39 +292,39 @@ function setupIPC(): void {
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
     try {
-      console.log('[IPC] Handling project:select for:', projectPath)
+      log.debug('[IPC] Handling project:select for:', projectPath)
       // Legacy wrapper calling addProject
       const project = await services!.project.addProject(projectPath)
-      console.log('[IPC] Project selected successfully:', projectPath)
+      log.debug('[IPC] Project selected successfully:', projectPath)
 
       if (!project.needsInstall) {
         services!.fileWatcher.watchProject(projectPath)
-        console.log('[IPC] Started watching project:', projectPath)
+        log.debug('[IPC] Started watching project:', projectPath)
       }
       return project
     } catch (error: any) {
-      console.error('[IPC] Error in project:select:', error.message)
+      log.error('[IPC] Error in project:select:', error.message)
       throw error
     }
   })
 
   ipcMain.handle('project:add', async (_event, projectPath: string) => {
     try {
-      console.log('[IPC] Handling project:add for:', projectPath)
+      log.debug('[IPC] Handling project:add for:', projectPath)
       const project = await services!.project.addProject(projectPath)
-      console.log('[IPC] Project added successfully:', projectPath)
+      log.debug('[IPC] Project added successfully:', projectPath)
 
       if (!project.needsInstall) {
         // If it became the current project (e.g. was first one), watch it
         const current = services!.project.getCurrentProject()
         if (current?.path === projectPath) {
           services!.fileWatcher.watchProject(projectPath)
-          console.log('[IPC] Started watching project:', projectPath)
+          log.debug('[IPC] Started watching project:', projectPath)
         }
       }
       return project
     } catch (error: any) {
-      console.error('[IPC] Error in project:add:', error.message)
+      log.error('[IPC] Error in project:add:', error.message)
       throw error
     }
   })
@@ -358,12 +361,12 @@ function setupIPC(): void {
               )
               mainWindow?.webContents.send('agents:updated')
             } catch (error) {
-              console.error('Failed to auto-start base agent Claude on project switch:', error)
+              log.error('Failed to auto-start base agent Claude on project switch', error)
             }
           }, 2000)
         }
       } catch (error) {
-        console.error('Error ensuring base branch agent on project switch:', error)
+        log.error('Error ensuring base branch agent on project switch', error)
       }
       services!.fileWatcher.watchProject(current.path)
     }
@@ -375,21 +378,21 @@ function setupIPC(): void {
 
   ipcMain.handle('project:install', async (_event, projectPath: string) => {
     try {
-      console.log('[IPC] Handling project:install for:', projectPath)
+      log.debug('[IPC] Handling project:install for:', projectPath)
       await services!.project.installFramework(projectPath)
-      console.log('[IPC] Framework installed successfully')
+      log.debug('[IPC] Framework installed successfully')
 
       // Re-select (add) to update state
       const project = await services!.project.addProject(projectPath)
-      console.log('[IPC] Project added after installation')
+      log.debug('[IPC] Project added after installation')
 
       services!.fileWatcher.watchProject(projectPath)
-      console.log('[IPC] Started watching project after installation')
+      log.debug('[IPC] Started watching project after installation')
 
       return project
     } catch (error: any) {
-      console.error('[IPC] Error in project:install:', error.message)
-      console.error('[IPC] Installation failed for:', projectPath)
+      log.error('[IPC] Error in project:install:', error.message)
+      log.error('[IPC] Installation failed for:', projectPath)
       throw error
     }
   })
@@ -463,10 +466,10 @@ function setupIPC(): void {
         agent.worktreePath
       )
 
-      console.log(`[IPC] agent:getState for ${agentId}: ${state}`)
+      log.debug(`[IPC] agent:getState for ${agentId}: ${state}`)
       return state
     } catch (error) {
-      console.error(`Failed to get state for ${agentId}:`, error)
+      log.error(`Failed to get state for ${agentId}`, error)
       return 'unknown'
     }
   })
@@ -508,7 +511,7 @@ function setupIPC(): void {
 
       return { success: false, validation }
     } catch (error) {
-      console.error(`Failed to validate teleport for ${agentId}:`, error)
+      log.error(`Failed to validate teleport for ${agentId}`, error)
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error)
@@ -534,13 +537,13 @@ function setupIPC(): void {
 
   // Plain terminal handlers
   ipcMain.handle('plainTerminal:start', async (_event, agentId: string, terminalId: string) => {
-    console.log('[IPC] plainTerminal:start called with:', { agentId, terminalId })
+    log.debug('[IPC] plainTerminal:start called with:', { agentId, terminalId })
     try {
       const projectPath = await findProjectForAgent(agentId)
-      console.log('[IPC] Found project path for agent:', { agentId, projectPath })
+      log.debug('[IPC] Found project path for agent:', { agentId, projectPath })
       return services!.terminal.startPlainTerminal(projectPath, agentId, terminalId)
     } catch (error) {
-      console.error('[IPC] Failed to start plain terminal:', error)
+      log.error('[IPC] Failed to start plain terminal:', error)
       throw error
     }
   })
@@ -596,7 +599,7 @@ function setupIPC(): void {
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
-          console.error('Failed to auto-start agent:', error)
+          log.error('Failed to auto-start agent', error)
         }
       }, 2000) // Wait 2 seconds for worktree to be fully set up
     }
@@ -630,7 +633,7 @@ function setupIPC(): void {
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
-          console.error('Failed to auto-start agent:', error)
+          log.error('Failed to auto-start agent', error)
         }
       }, 2000) // Wait 2 seconds for worktree to be fully set up
     }
@@ -663,7 +666,7 @@ function setupIPC(): void {
           )
           mainWindow?.webContents.send('agents:updated')
         } catch (error) {
-          console.error('Failed to auto-start super minion:', error)
+          log.error('Failed to auto-start super minion', error)
         }
       }, 2000)
     }
@@ -672,7 +675,7 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:teleport', async (_event, projectPath: string, cloudSessionIdOrUrl: string) => {
-    console.log('[IPC] Handling assignments:teleport for:', projectPath || '(auto-detect)', 'input:', cloudSessionIdOrUrl)
+    log.debug('[IPC] Handling assignments:teleport for:', projectPath || '(auto-detect)', 'input:', cloudSessionIdOrUrl)
 
     // 1. Parse and validate the input using TeleportService
     // Supports raw session ID, full URL, or CLI command format
@@ -690,7 +693,7 @@ function setupIPC(): void {
     let resolvedProjectPath = projectPath
     if (!resolvedProjectPath) {
       const activeProjects = services!.project.getActiveProjects()
-      console.log('[IPC] No project path provided, checking active projects:', activeProjects.length)
+      log.debug('[IPC] No project path provided, checking active projects:', activeProjects.length)
 
       if (activeProjects.length === 0) {
         throw new Error('No project selected. Please add a project first before teleporting.')
@@ -698,7 +701,7 @@ function setupIPC(): void {
 
       // Use the first active project as fallback
       resolvedProjectPath = activeProjects[0].path
-      console.log('[IPC] Auto-detected project path:', resolvedProjectPath)
+      log.debug('[IPC] Auto-detected project path:', resolvedProjectPath)
     }
 
     // Extract short session ID for branch naming (e.g., 'session_01CVbxti...' -> '01CVbxti')
@@ -716,7 +719,7 @@ function setupIPC(): void {
 
     try {
       const result = await services!.agent.createAssignment(resolvedProjectPath, assignment)
-      console.log('[IPC] Created teleport assignment:', result.agentId)
+      log.debug('[IPC] Created teleport assignment:', result.agentId)
 
       // Trigger updates after worktree is created
       setTimeout(() => {
@@ -739,22 +742,22 @@ function setupIPC(): void {
             parsedSessionId  // Pass the validated cloud session ID for teleporting
           )
           mainWindow?.webContents.send('agents:updated')
-          console.log('[IPC] Started teleported agent:', result.agentId)
+          log.debug('[IPC] Started teleported agent:', result.agentId)
 
           // 5. Branch detection is now handled by late detection in TerminalService polling
           // The initial JSONL is usually empty for teleported sessions, so we rely on
           // late detection after the first user interaction populates the file
-          console.log('[IPC] Branch detection will happen via late detection in polling loop')
+          log.debug('[IPC] Branch detection will happen via late detection in polling loop')
 
         } catch (error) {
-          console.error('Failed to start teleported agent:', error)
+          log.error('Failed to start teleported agent', error)
           throw error
         }
       }, 2000) // Wait 2 seconds for worktree to be fully set up
 
       return { agentId: result.agentId }
     } catch (error: any) {
-      console.error('[IPC] Failed to teleport session:', error)
+      log.error('[IPC] Failed to teleport session:', error)
       throw new Error(`Failed to teleport session: ${error.message}`)
     }
   })
@@ -772,9 +775,9 @@ function setupIPC(): void {
   ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
     const projectPath = await findProjectForAssignment(assignmentId)
 
-    console.log('[PR] Creating pull request for assignment:', assignmentId, 'autoCommit:', autoCommit)
+    log.debug('[PR] Creating pull request for assignment:', assignmentId, 'autoCommit:', autoCommit)
     const result = await services!.agent.createPullRequest(projectPath, assignmentId, autoCommit)
-    console.log('[PR] Pull request created:', result.url)
+    log.debug('[PR] Pull request created:', result.url)
 
     mainWindow?.webContents.send('assignments:updated')
     
@@ -784,9 +787,9 @@ function setupIPC(): void {
   ipcMain.handle('assignments:checkPR', async (_event, assignmentId: string) => {
     const projectPath = await findProjectForAssignment(assignmentId)
 
-    console.log('[PR] Checking PR status for assignment:', assignmentId)
+    log.debug('[PR] Checking PR status for assignment:', assignmentId)
     const result = await services!.agent.checkPullRequestStatus(projectPath, assignmentId)
-    console.log('[PR] PR status:', result.status)
+    log.debug('[PR] PR status:', result.status)
 
     mainWindow?.webContents.send('assignments:updated')
 
@@ -858,7 +861,7 @@ function setupIPC(): void {
     try {
       services!.testEnv.stopAll(agentId)
     } catch (error) {
-      console.error('Failed to stop test environments:', error)
+      log.error('Failed to stop test environments', error)
     }
     
     await services!.agent.teardownAgent(projectPath, agentId, force)
@@ -1070,7 +1073,7 @@ app.whenReady().then(() => {
       const iconPath = join(resourcesPath, 'icon.png')
       app.dock.setIcon(iconPath)
     } catch (error) {
-      console.warn('Failed to set dock icon:', error)
+      log.warn('Failed to set dock icon', error)
     }
   }
 

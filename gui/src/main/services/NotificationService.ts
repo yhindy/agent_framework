@@ -1,5 +1,8 @@
 import { Notification, BrowserWindow } from 'electron'
 import { SettingsService } from './SettingsService'
+import { createLogger } from './logger'
+
+const log = createLogger('NotificationService')
 
 export interface NotificationOptions {
   title: string
@@ -17,8 +20,6 @@ interface InternalNotificationOptions {
   urgency?: NotificationUrgency
   navigateOnClick?: boolean
 }
-
-const LOG_PREFIX = '[NotificationService]'
 
 export class NotificationService {
   private cooldowns: Map<string, number> = new Map()
@@ -66,7 +67,7 @@ export class NotificationService {
       notification.show()
       return true
     } catch (error) {
-      console.error(`${LOG_PREFIX} Failed to show notification:`, error)
+      log.error('Failed to show notification', error)
       return false
     }
   }

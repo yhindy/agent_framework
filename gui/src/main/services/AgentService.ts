@@ -6,7 +6,9 @@ import { app } from 'electron'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
+import { createLogger } from './logger'
 
+const log = createLogger('AgentService')
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
@@ -261,7 +263,7 @@ export class AgentService {
             agents.push(session)
           }
         } catch (error) {
-          console.error('Error reading base agent info:', error)
+          log.error('Error reading base agent info', error)
         }
       }
 
@@ -279,7 +281,7 @@ export class AgentService {
         if (agentInfo) {
           // Skip agents with missing/empty critical fields (corrupted agent info)
           if (!agentInfo.agentId || agentInfo.agentId.trim() === '') {
-            console.warn(`[AgentService] Skipping agent with corrupted info at ${worktree.path}: missing agentId`)
+            log.warn(`Skipping agent with corrupted info at ${worktree.path}: missing agentId`)
             continue
           }
 
@@ -296,7 +298,7 @@ export class AgentService {
         }
       }
     } catch (error) {
-      console.error('Error listing agents:', error)
+      log.error('Error listing agents', error)
     }
 
     return agents
@@ -394,7 +396,7 @@ export class AgentService {
         }
       }
     } catch (error) {
-      console.error('Error reading .agent-info:', error)
+      log.error('Error reading .agent-info', error)
       return null
     }
   }
@@ -504,7 +506,7 @@ export class AgentService {
     try {
       return JSON.parse(readFileSync(configPath, 'utf-8'))
     } catch (e) {
-      console.error('Error parsing config.json', e)
+      log.error('Error parsing config.json', e)
       return {
         project: { name: 'unknown', defaultBaseBranch: 'main' },
         setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
@@ -574,8 +576,8 @@ export class AgentService {
         [agentInfo.agentId, agentInfo.branch, '--config', configPath],
         { cwd: projectPath }
       )
-      console.log('Setup script output:', stdout)
-      if (stderr) console.error('Setup script errors:', stderr)
+      log.debug('Setup script output:', stdout)
+      if (stderr) log.warn('Setup script errors:', stderr)
 
       // Write agent info to .agent-info file in the worktree
       this.writeAgentInfo(worktreePath, agentInfo)
@@ -584,7 +586,7 @@ export class AgentService {
       // This is important for teleport which fails on dirty worktrees
       await this.commitSetupFiles(worktreePath)
     } catch (error: any) {
-      console.error('Failed to run setup.sh:', error)
+      log.error('Failed to run setup.sh', error)
       throw error
     }
 
@@ -601,12 +603,12 @@ export class AgentService {
       // Check if there are any uncommitted changes
       const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
       if (!statusOutput.trim()) {
-        console.log('[AgentService] No uncommitted setup files to commit')
+        log.info('No uncommitted setup files to commit')
         return
       }
 
-      console.log('[AgentService] Committing setup files in:', worktreePath)
-      console.log('[AgentService] Changed files:', statusOutput.trim())
+      log.info('Committing setup files in:', worktreePath)
+      log.info('Changed files:', statusOutput.trim())
 
       // Add all changes (setup files, .agent-info, etc.)
       await execAsync('git add -A', { cwd: worktreePath })
@@ -614,25 +616,25 @@ export class AgentService {
       // Commit with a setup message
       try {
         await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
-        console.log('[AgentService] Setup files committed successfully')
+        log.info('Setup files committed successfully')
       } catch (commitError: any) {
         // Handle git identity not configured
         if (commitError.message.includes('identity unknown') || commitError.stderr?.includes('identity unknown')) {
-          console.log('[AgentService] Git identity unknown, setting default...')
+          log.info('Git identity unknown, setting default...')
           await execFileAsync('git', ['config', 'user.email', 'minion@local'], { cwd: worktreePath })
           await execFileAsync('git', ['config', 'user.name', 'Minion Setup'], { cwd: worktreePath })
           await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
-          console.log('[AgentService] Setup files committed with default identity')
+          log.info('Setup files committed with default identity')
         } else if (commitError.message.includes('nothing to commit')) {
-          console.log('[AgentService] Nothing to commit after staging')
+          log.info('Nothing to commit after staging')
         } else {
           // Log but don't throw - setup file commit is best-effort
-          console.warn('[AgentService] Failed to commit setup files:', commitError.message)
+          log.warn('Failed to commit setup files:', commitError.message)
         }
       }
     } catch (error: any) {
       // Log but don't throw - setup file commit is best-effort
-      console.warn('[AgentService] Error during setup file commit:', error.message)
+      log.warn('Error during setup file commit:', error.message)
     }
   }
 
@@ -703,7 +705,7 @@ export class AgentService {
           pendingPlans = data.plans.filter((p: ChildPlan) => p.status === 'pending')
         }
       } catch (error) {
-        console.error('Error reading .pending-plans.json:', error)
+        log.error('Error reading .pending-plans.json', error)
       }
     }
 
@@ -877,7 +879,7 @@ export class AgentService {
     // Open in Cursor
     execFile('cursor', [agent.worktreePath], (error) => {
       if (error) {
-        console.error('Error opening Cursor:', error)
+        log.error('Error opening Cursor', error)
       }
     })
   }
@@ -911,7 +913,7 @@ export class AgentService {
             assignments.push(baseAgentInfo)
           }
         } catch (error) {
-          console.error('Error reading base agent info:', error)
+          log.error('Error reading base agent info', error)
         }
       }
 
@@ -930,7 +932,7 @@ export class AgentService {
         }
       }
     } catch (error) {
-      console.error('Error getting assignments:', error)
+      log.error('Error getting assignments', error)
     }
 
     return { assignments }
@@ -948,15 +950,15 @@ export class AgentService {
         args,
         { cwd: projectPath }
       )
-      console.log('Teardown script output:', stdout)
-      if (stderr) console.error('Teardown script errors:', stderr)
+      log.debug('Teardown script output:', stdout)
+      if (stderr) log.warn('Teardown script errors:', stderr)
 
       // Remove from sessions
       this.sessions.delete(agentId)
 
       // No need to update config.json - the .agent-info file is removed with the worktree atomically
     } catch (error: any) {
-      console.error('Failed to run teardown.sh:', error)
+      log.error('Failed to run teardown.sh', error)
 
       // Check if error is due to uncommitted changes
       if (error.stdout && error.stdout.includes('uncommitted changes')) {
@@ -1003,7 +1005,7 @@ export class AgentService {
     const baseInfoPath = join(agent.worktreePath, '.minions-base-info')
 
     if (!existsSync(agentInfoPath) && !existsSync(baseInfoPath)) {
-      console.warn(
+      log.warn(
         `Agent ${agentId} found in worktree list but .agent-info file missing at ${agent.worktreePath}. ` +
         'Skipping UI state save - agent may have been deleted.'
       )
@@ -1028,7 +1030,7 @@ export class AgentService {
     // 1. Try to get from project config first
     const config = this.getProjectConfig(projectPath)
     if (config.project?.defaultBaseBranch) {
-      console.log(`[AgentService] Using default branch from config: ${config.project.defaultBaseBranch}`)
+      log.debug(`Using default branch from config: ${config.project.defaultBaseBranch}`)
       return config.project.defaultBaseBranch
     }
 
@@ -1039,7 +1041,7 @@ export class AgentService {
         return stdout.trim()
       }
     } catch (error) {
-      console.log('[AgentService] Could not get default branch from gh, trying git...')
+      log.info('Could not get default branch from gh, trying git...')
     }
 
     try {
@@ -1101,25 +1103,25 @@ export class AgentService {
       if (statusOutput.trim()) {
         if (autoCommit) {
           // Auto-commit changes
-          console.log('[AgentService] Auto-committing changes...')
+          log.info('Auto-committing changes...')
           await execAsync('git add -A', { cwd: worktreePath })
           const commitMessage = `Complete: ${assignment.feature}`
           
           try {
             await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
-            console.log('[AgentService] Changes committed')
+            log.info('Changes committed')
           } catch (commitError: any) {
             // If identity is unknown, try to set a default one
             if (commitError.message.includes('identity unknown')) {
-              console.log('[AgentService] Git identity unknown, setting default...')
+              log.info('Git identity unknown, setting default...')
               await execFileAsync('git', ['config', 'user.email', 'agent@minions.ai'], { cwd: worktreePath })
               await execFileAsync('git', ['config', 'user.name', 'Minion Agent'], { cwd: worktreePath })
               await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
-              console.log('[AgentService] Changes committed with default identity')
+              log.info('Changes committed with default identity')
             } else if (commitError.stderr && (commitError.stderr.includes('pre-commit') || commitError.stdout.includes('pre-commit') || commitError.message.includes('hook failed'))) {
               throw new Error(`Pre-commit hooks failed. Please fix the issues and try again.\n\n${commitError.stderr || commitError.stdout || commitError.message}`)
             } else if (commitError.message.includes('nothing to commit')) {
-              console.log('[AgentService] Nothing to commit')
+              log.info('Nothing to commit')
             } else {
               throw commitError
             }
@@ -1132,7 +1134,7 @@ export class AgentService {
       // Get default branch and remote
       const baseBranch = await this.getDefaultBranch(projectPath, worktreePath)
       const remote = await this.getRemote(worktreePath)
-      console.log(`[AgentService] Using base branch: ${baseBranch}, remote: ${remote}`)
+      log.debug(`Using base branch: ${baseBranch}, remote: ${remote}`)
 
       // Check if there are commits on this branch
       try {
@@ -1148,17 +1150,17 @@ export class AgentService {
       }
 
       // Push the branch to remote
-      console.log(`[AgentService] Pushing branch to ${remote}...`)
+      log.debug(`Pushing branch to ${remote}...`)
       try {
         await execFileAsync('git', ['push', '-u', remote, assignment.branch], { cwd: worktreePath })
       } catch (pushError: any) {
         // If it's already up to date, that's fine
         if (pushError.stderr && (pushError.stderr.includes('Everything up-to-date') || pushError.stdout.includes('Everything up-to-date'))) {
-          console.log('[AgentService] Branch is already up to date')
+          log.info('Branch is already up to date')
         } else if (pushError.stderr && (pushError.stderr.includes('pre-push') || pushError.stdout.includes('pre-push') || pushError.message.includes('hook failed'))) {
           throw new Error(`Pre-push hooks failed. Please fix the issues and try again.\n\n${pushError.stderr || pushError.stdout || pushError.message}`)
         } else {
-          console.error('Push error details:', pushError)
+          log.error('Push error details', pushError)
           throw new Error(`Failed to push branch to ${remote}: ${pushError.message}`)
         }
       }
@@ -1172,7 +1174,7 @@ export class AgentService {
         : assignment.feature
 
       // Try to create PR
-      console.log('[AgentService] Creating PR...')
+      log.info('Creating PR...')
       try {
         const { stdout } = await execFileAsync(
           'gh',
@@ -1194,12 +1196,12 @@ export class AgentService {
         // Clear detection cache for this assignment
         this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
 
-        console.log('[AgentService] PR created:', prUrl)
+        log.info('PR created:', prUrl)
         return { url: prUrl }
       } catch (prError: any) {
         // Check if PR already exists
         if (prError.message.includes('already exists')) {
-          console.log('[AgentService] PR already exists, fetching URL...')
+          log.info('PR already exists, fetching URL...')
           const { stdout } = await execFileAsync(
             'gh',
             ['pr', 'list', '--head', assignment.branch, '--json', 'url', '--jq', '.[0].url'],
@@ -1222,7 +1224,7 @@ export class AgentService {
         throw prError
       }
     } catch (error: any) {
-      console.error('[AgentService] Failed to create PR:', error)
+      log.error('Failed to create PR:', error)
       throw new Error(`Failed to create pull request: ${error.message}`)
     }
   }
@@ -1243,18 +1245,18 @@ export class AgentService {
       const assignment = assignments.find(a => a.id === assignmentId)
 
       if (!assignment) {
-        console.log('[AgentService] detectExistingPullRequest: Assignment not found')
+        log.info('detectExistingPullRequest: Assignment not found')
         return null
       }
 
       // 2. If prUrl already exists, do a fresh status check to get latest state
       if (assignment.prUrl) {
-        console.log('[AgentService] detectExistingPullRequest: PR already tracked, refreshing status:', assignment.prUrl)
+        log.info('detectExistingPullRequest: PR already tracked, refreshing status:', assignment.prUrl)
         try {
           const statusResult = await this.checkPullRequestStatus(projectPath, assignmentId, { silent: true })
           // checkPullRequestStatus returns { status: 'ERROR' } on failure instead of throwing
           if (statusResult.status === 'ERROR') {
-            console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', statusResult.error)
+            log.warn('detectExistingPullRequest: Failed to refresh status:', statusResult.error)
             // Fall back to stored status
             return {
               found: true,
@@ -1269,7 +1271,7 @@ export class AgentService {
             createdAt: statusResult.createdAt
           }
         } catch (error: any) {
-          console.warn('[AgentService] detectExistingPullRequest: Failed to refresh status:', error.message)
+          log.warn('detectExistingPullRequest: Failed to refresh status:', error.message)
           // Fall back to stored status
           return {
             found: true,
@@ -1285,7 +1287,7 @@ export class AgentService {
       if (cached && !options?.force) {
         const isStillFresh = cached.timestamp + this.PR_DETECTION_CACHE_TTL_MS > Date.now()
         if (isStillFresh) {
-          console.log('[AgentService] detectExistingPullRequest: Returning cached result')
+          log.info('detectExistingPullRequest: Returning cached result')
           return {
             found: cached.found,
             prUrl: cached.prUrl,
@@ -1308,7 +1310,7 @@ export class AgentService {
       // 5. Get remote
       const remote = await this.getRemote(worktreePath)
       if (!remote) {
-        console.log('[AgentService] detectExistingPullRequest: No remote configured')
+        log.info('detectExistingPullRequest: No remote configured')
         return null
       }
 
@@ -1318,11 +1320,11 @@ export class AgentService {
         const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
         currentBranch = branchOutput.trim()
         if (!currentBranch) {
-          console.log('[AgentService] detectExistingPullRequest: Could not determine current branch')
+          log.info('detectExistingPullRequest: Could not determine current branch')
           return null
         }
       } catch (error: any) {
-        console.warn('[AgentService] detectExistingPullRequest: Error getting current branch:', error.message)
+        log.warn('detectExistingPullRequest: Error getting current branch:', error.message)
         return null
       }
 
@@ -1330,13 +1332,13 @@ export class AgentService {
       try {
         const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
         if (!remoteRefs.trim()) {
-          console.log('[AgentService] detectExistingPullRequest: Branch not on remote:', currentBranch)
+          log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
           // Branch not on remote, cache negative result
           this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
           return { found: false }
         }
       } catch (error: any) {
-        console.warn('[AgentService] detectExistingPullRequest: Error checking remote refs:', error.message)
+        log.warn('detectExistingPullRequest: Error checking remote refs:', error.message)
         return null
       }
 
@@ -1353,19 +1355,19 @@ export class AgentService {
           prData = JSON.parse(stdout.trim())
         }
       } catch (error: any) {
-        console.warn('[AgentService] detectExistingPullRequest: GitHub CLI error:', error.message)
+        log.warn('detectExistingPullRequest: GitHub CLI error:', error.message)
         return null
       }
 
       if (!prData) {
         // No PR found
-        console.log('[AgentService] detectExistingPullRequest: No existing PR found')
+        log.info('detectExistingPullRequest: No existing PR found')
         this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
         return { found: false }
       }
 
       // 9. PR found, update .agent-info
-      console.log('[AgentService] detectExistingPullRequest: Found existing PR:', prData.url)
+      log.info('detectExistingPullRequest: Found existing PR:', prData.url)
       const agentInfoPath = join(worktreePath, '.agent-info')
       if (existsSync(agentInfoPath)) {
         const updates: Partial<AgentInfo> = {
@@ -1399,14 +1401,14 @@ export class AgentService {
         createdAt: prData.createdAt
       }
     } catch (error: any) {
-      console.error('[AgentService] detectExistingPullRequest: Unexpected error:', error.message)
+      log.error('detectExistingPullRequest: Unexpected error:', error.message)
       // Don't cache errors
       return null
     }
   }
 
   async migrateAssignments(projectPath: string): Promise<void> {
-    console.log('[AgentService] Starting assignment migration for:', projectPath)
+    log.info('Starting assignment migration for:', projectPath)
 
     try {
       const config = this.getProjectConfig(projectPath)
@@ -1430,7 +1432,7 @@ export class AgentService {
             continue // Already migrated
           } catch {
             // Old format - needs migration
-            console.log('[AgentService] Migrating .agent-info for:', worktree.path)
+            log.info('Migrating .agent-info for:', worktree.path)
 
             const oldInfo = this.parseAgentInfo(agentInfoPath)
             const agentId = oldInfo.AGENT_ID
@@ -1467,14 +1469,14 @@ export class AgentService {
 
       // Clear assignments from config.json after migration
       if (migratedCount > 0 && config.assignments && config.assignments.length > 0) {
-        console.log(`[AgentService] Migrated ${migratedCount} agents, clearing config.json assignments`)
+        log.info(`Migrated ${migratedCount} agents, clearing config.json assignments`)
         config.assignments = []
         this.saveProjectConfig(projectPath, config)
       }
 
-      console.log(`[AgentService] Migration complete: ${migratedCount} agents migrated`)
+      log.info(`Migration complete: ${migratedCount} agents migrated`)
     } catch (error) {
-      console.error('[AgentService] Migration failed:', error)
+      log.error('Migration failed:', error)
     }
   }
 
@@ -1489,7 +1491,7 @@ export class AgentService {
     if (!assignment || !assignment.prUrl) {
       const error = 'Assignment or PR URL not found'
       if (!options?.silent) {
-        console.error('[AgentService]', error)
+        log.error('', error)
       }
       return { status: 'ERROR', error }
     }
@@ -1511,7 +1513,7 @@ export class AgentService {
       if (!prNumberMatch) {
         const error = 'Could not extract PR number from URL'
         if (!options?.silent) {
-          console.error('[AgentService]', error)
+          log.error('', error)
         }
         return { status: 'ERROR', error }
       }
@@ -1545,7 +1547,7 @@ export class AgentService {
       }
     } catch (error: any) {
       if (!options?.silent) {
-        console.error('[AgentService] Failed to check PR status:', error)
+        log.error('Failed to check PR status:', error)
       }
       return { status: 'ERROR', error: error.message }
     }
@@ -1565,11 +1567,11 @@ export class AgentService {
         const content = readFileSync(baseInfoPath, 'utf-8')
         const info = JSON.parse(content) as AgentInfo
         if (info.isBaseBranchAgent && info.agentId === baseAgentId) {
-          console.log(`[AgentService] Base agent already exists: ${baseAgentId}`)
+          log.debug(`Base agent already exists: ${baseAgentId}`)
           return info
         }
       } catch (error) {
-        console.log(`[AgentService] Corrupted base agent info, recreating: ${error}`)
+        log.warn(`Corrupted base agent info, recreating: ${error}`)
       }
     }
 
@@ -1592,7 +1594,7 @@ export class AgentService {
     }
 
     writeFileSync(baseInfoPath, JSON.stringify(agentInfo, null, 2))
-    console.log(`[AgentService] Created base branch agent: ${baseAgentId}`)
+    log.info(`Created base branch agent: ${baseAgentId}`)
 
     return agentInfo
   }

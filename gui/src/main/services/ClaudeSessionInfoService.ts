@@ -1,6 +1,9 @@
 import { readFileSync, existsSync, watch, FSWatcher, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { createLogger } from './logger'
+
+const log = createLogger('ClaudeSessionInfoService')
 
 /**
  * ClaudeSessionInfoService - Reads Claude's session JSONL files to extract
@@ -166,7 +169,7 @@ export class ClaudeSessionInfoService {
     if (!projectPath) {
       // Only log once per session
       if (!this.loggedNotFound.has(sessionId)) {
-        console.warn(`[ClaudeSessionInfoService] Claude project directory not found for: ${worktreePath}`)
+        log.warn(` Claude project directory not found for: ${worktreePath}`)
         this.loggedNotFound.add(sessionId)
       }
       return null
@@ -201,7 +204,7 @@ export class ClaudeSessionInfoService {
 
     // Only log once per session to avoid spam during polling
     if (!this.loggedNotFound.has(sessionId)) {
-      console.warn(`[ClaudeSessionInfoService] Session file not found: ${exactFile}`)
+      log.warn(` Session file not found: ${exactFile}`)
       this.loggedNotFound.add(sessionId)
     }
     return null
@@ -501,7 +504,7 @@ export class ClaudeSessionInfoService {
 
       // Debug state detection
       if (process.env.NODE_ENV === 'development') {
-        console.log('[ClaudeSessionInfoService] Parsed session state:', state, {
+        log.debug(' Parsed session state:', state, {
           lastLine: lines[lines.length - 1]?.substring(0, 100),
           linesCount: lines.length
         })
@@ -526,7 +529,7 @@ export class ClaudeSessionInfoService {
 
       return info
     } catch (error) {
-      console.error(`Failed to parse session file ${sessionFile}:`, error)
+      log.error(`Failed to parse session file ${sessionFile}`, error)
       return null
     }
   }
@@ -697,7 +700,7 @@ export class ClaudeSessionInfoService {
 
       this.watchers.set(sessionId, watcher)
     } catch (error) {
-      console.error(`Failed to watch session ${sessionId}:`, error)
+      log.error(`Failed to watch session ${sessionId}`, error)
     }
   }
 

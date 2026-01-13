@@ -1,5 +1,8 @@
 import { BrowserWindow } from 'electron'
 import { AgentService } from './AgentService'
+import { createLogger } from './logger'
+
+const log = createLogger('PRPollingService')
 
 interface PollingJob {
   assignmentId: string
@@ -309,7 +312,7 @@ export class PRPollingService {
 
     // Check for rate limiting
     if (errorMessage.includes('rate limit') || errorMessage.includes('403') || errorMessage.includes('429')) {
-      console.warn(`[PRPolling] Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
+      log.warn(` Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
       this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs
       return
     }
@@ -317,10 +320,10 @@ export class PRPollingService {
     // Use exponential backoff for other errors
     if (job.errorCount < 3) {
       const backoffMs = this.calculateBackoffMs(job.errorCount)
-      console.warn(`[PRPolling] Error #${job.errorCount} for ${job.assignmentId}, backing off for ${backoffMs / 1000}s`)
+      log.warn(` Error #${job.errorCount} for ${job.assignmentId}, backing off for ${backoffMs / 1000}s`)
     } else {
       // Stop after 3 consecutive errors (this prevents infinite retries)
-      console.warn(`[PRPolling] Stopping polling for ${job.assignmentId} after 3 consecutive errors`)
+      log.warn(` Stopping polling for ${job.assignmentId} after 3 consecutive errors`)
       this.stopPollingJob(job.assignmentId)
     }
   }

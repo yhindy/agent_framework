@@ -1,8 +1,9 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { createLogger } from './logger'
 
-const LOG_PREFIX = '[TeleportMetadataService]'
+const log = createLogger('TeleportMetadataService')
 const REFS_HEADS_PREFIX = 'refs/heads/'
 const POLL_INTERVAL_MS = 1000
 const DEFAULT_MAX_WAIT_SECONDS = 10
@@ -99,7 +100,7 @@ export class TeleportMetadataService {
     maxWaitSeconds: number = DEFAULT_MAX_WAIT_SECONDS
   ): Promise<string | null> {
     const projectPath = this.getClaudeProjectPath(worktreePath)
-    console.log(`${LOG_PREFIX} Looking in Claude project dir: ${projectPath || 'NOT FOUND'}`)
+    log.debug(` Looking in Claude project dir: ${projectPath || 'NOT FOUND'}`)
 
     let lastFoundFile: string | null = null
 
@@ -107,7 +108,7 @@ export class TeleportMetadataService {
       const sessionFile = this.findAnySessionFile(worktreePath)
 
       if (sessionFile && this.hasFileContent(sessionFile)) {
-        console.log(`${LOG_PREFIX} Session file found after ${attempt}s: ${sessionFile}`)
+        log.debug(` Session file found after ${attempt}s: ${sessionFile}`)
         return sessionFile
       }
 
@@ -115,9 +116,9 @@ export class TeleportMetadataService {
       const shouldLog = attempt > 0 && attempt % 3 === 0
       if (shouldLog) {
         if (sessionFile) {
-          console.log(`${LOG_PREFIX} Found file but empty (0 bytes): ${sessionFile}`)
+          log.debug(` Found file but empty (0 bytes): ${sessionFile}`)
         } else {
-          console.log(`${LOG_PREFIX} Waiting for session file... (${attempt}s/${maxWaitSeconds}s)`)
+          log.debug(` Waiting for session file... (${attempt}s/${maxWaitSeconds}s)`)
         }
       }
 
@@ -127,9 +128,9 @@ export class TeleportMetadataService {
 
     // Log final outcome
     if (lastFoundFile) {
-      console.warn(`${LOG_PREFIX} JSONL file exists but is empty - Claude CLI may not sync session history for teleported sessions`)
+      log.warn(` JSONL file exists but is empty - Claude CLI may not sync session history for teleported sessions`)
     } else {
-      console.warn(`${LOG_PREFIX} No JSONL file found after ${maxWaitSeconds}s`)
+      log.warn(` No JSONL file found after ${maxWaitSeconds}s`)
     }
     return null
   }
@@ -180,7 +181,7 @@ export class TeleportMetadataService {
     _sessionId: string, // Kept for API compatibility, not used for lookup
     worktreePath: string
   ): Promise<string | null> {
-    console.log(`${LOG_PREFIX} Extracting branch for teleported session (worktree: ${worktreePath})`)
+    log.debug(` Extracting branch for teleported session (worktree: ${worktreePath})`)
 
     try {
       const sessionFile = await this.waitForSessionFile(worktreePath)
@@ -192,14 +193,14 @@ export class TeleportMetadataService {
       const branchName = this.findGitBranchInJsonl(content)
 
       if (branchName) {
-        console.log(`${LOG_PREFIX} Detected branch: ${branchName}`)
+        log.debug(` Detected branch: ${branchName}`)
       } else {
-        console.log(`${LOG_PREFIX} No gitBranch field found in JSONL`)
+        log.debug(` No gitBranch field found in JSONL`)
       }
 
       return branchName
     } catch (error) {
-      console.error(`${LOG_PREFIX} Failed to extract branch:`, error)
+      log.error(` Failed to extract branch:`, error)
       return null
     }
   }
