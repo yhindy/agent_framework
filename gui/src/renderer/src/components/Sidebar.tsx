@@ -34,6 +34,9 @@ interface AgentSession {
   parentAgentId?: string
   isBaseBranchAgent?: boolean
   branch?: string
+  displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
+  failureReason?: string  // Why session resume failed
+  resumeAttempts?: number  // Number of times we've tried to resume
 }
 
 interface AgentsByProject {
@@ -49,6 +52,13 @@ interface TaskInvocation {
 
 interface TasksByAgent {
   [agentId: string]: TaskInvocation[]
+}
+
+interface TeleportFailure {
+  agentId: string
+  reason: string
+  canRetry: boolean
+  timestamp: number
 }
 
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
@@ -73,6 +83,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const hasInitializedSuperMinionCollapse = useRef(localStorage.getItem('collapsedSuperMinions') !== null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [openSubmenuProject, setOpenSubmenuProject] = useState<string | null>(null)
+  const [failedTeleportSessions, setFailedTeleportSessions] = useState<Map<string, TeleportFailure>>(new Map())
   const submenuRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
   const currentPath = location.pathname
 
@@ -193,11 +204,42 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       })
     })
 
+    // Listen for teleport validation failures
+    const unsubTeleportFailed = window.electronAPI.onTeleportValidationFailed((data) => {
+      console.log('[Sidebar] Teleport validation failed:', data)
+      setFailedTeleportSessions(prev => {
+        const next = new Map(prev)
+        next.set(data.agentId, {
+          agentId: data.agentId,
+          reason: data.reason,
+          canRetry: data.canRetry,
+          timestamp: Date.now()
+        })
+        return next
+      })
+    })
+
+    const unsubResumeFailed = window.electronAPI.onTeleportResumeFailed((data) => {
+      console.log('[Sidebar] Teleport resume failed:', data)
+      setFailedTeleportSessions(prev => {
+        const next = new Map(prev)
+        next.set(data.agentId, {
+          agentId: data.agentId,
+          reason: data.reason,
+          canRetry: false,
+          timestamp: Date.now()
+        })
+        return next
+      })
+    })
+
     return () => {
       unsubscribe()
       unsubStateChanged()
       unsubPlainWaiting()
       unsubPlainResumed()
+      unsubTeleportFailed()
+      unsubResumeFailed()
     }
   }, [activeProjects])
 
@@ -361,77 +403,162 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   }
 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
+  const isSettingsActive = currentPath === '/workspace/settings'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
     : currentPath.startsWith('/workspace/super/')
       ? currentPath.replace('/workspace/super/', '')
       : null
 
+  /**
+   * Determine agent display name based on type and available data.
+   */
+  const getAgentDisplayName = (agent: AgentSession): React.ReactNode => {
+    if (agent.isBaseBranchAgent) {
+      // Show actual branch name for base branch agents (from origin/master)
+      return <div className="agent-id">{agent.branch || 'Base'}</div>
+    }
+
+    const branchName = agent.displayBranchName || agent.branch
+    if (branchName) {
+      return (
+        <div className="agent-branch" title={branchName}>
+          {extractBranchName(branchName)}
+        </div>
+      )
+    }
+
+    return <div className="agent-id">{agent.id}</div>
+  }
+
+  /**
+   * Get the appropriate icon for agent type.
+   */
+  const getAgentTypeIcon = (agent: AgentSession): string => {
+    if (agent.isSuperMinion) return '👑'
+    if (agent.isBaseBranchAgent) return '🏠'
+    return '🍌'
+  }
+
+  /**
+   * Check if agent has any waiting state (main or plain terminals).
+   */
+  const isAgentWaitingForInput = (agentId: string): boolean => {
+    const mainWaiting = waitingAgents.has(agentId)
+    const plainTerminalWaiting = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${agentId}-`))
+    return mainWaiting || plainTerminalWaiting
+  }
+
+  /**
+   * Get teleport failure info for an agent.
+   */
+  const getTeleportFailure = (agent: AgentSession): TeleportFailure | undefined => {
+    const stateFailure = failedTeleportSessions.get(agent.id)
+    if (stateFailure) return stateFailure
+
+    if (agent.failureReason) {
+      return {
+        agentId: agent.id,
+        reason: agent.failureReason,
+        canRetry: (agent.resumeAttempts || 0) < 3,
+        timestamp: Date.now()
+      }
+    }
+
+    return undefined
+  }
+
   const renderAgent = (agent: AgentSession, projectPath: string, depth = 0) => {
     const isActive = activeAgentId === agent.id
-    const isAgentWaiting = waitingAgents.has(agent.id)
-    // Check if any plain terminal for this agent is waiting (terminalId format: `${agentId}-${terminalId}`)
-    const hasWaitingPlainTerminal = Array.from(waitingPlainTerminals).some(tid => tid.startsWith(`${agent.id}-`))
-    const isWaiting = isAgentWaiting || hasWaitingPlainTerminal
+    const isWaiting = isAgentWaitingForInput(agent.id)
     const isCursor = agent.tool === 'cursor'
-    const showSpinner = !isCursor && agent.terminalPid && !isWaiting
+    const teleportFailure = getTeleportFailure(agent)
+    const hasTeleportFailure = !!teleportFailure
+    const showSpinner = !isCursor && agent.terminalPid && !isWaiting && !hasTeleportFailure
     const isCollapsed = collapsedSuperMinions.has(agent.id)
+    const showUnreadBadge = agent.hasUnread && !isWaiting && !hasTeleportFailure
+    const showAttentionBadge = isWaiting && !isActive && !hasTeleportFailure
 
-    const handleAgentItemClick = () => {
-      handleAgentClick(agent, projectPath)
-    }
+    const handleAgentItemClick = () => handleAgentClick(agent, projectPath)
 
     const handleCollapseClick = (e: React.MouseEvent) => {
       e.stopPropagation()
       toggleSuperMinionCollapse(agent.id, e)
     }
 
-    const agentTypeIcon = agent.isSuperMinion ? '👑' : agent.isBaseBranchAgent ? '🏠' : '🍌'
+    const handleRetryClick = async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      try {
+        await window.electronAPI.retryResumeAgent(agent.id)
+      } catch (error) {
+        console.error('Failed to retry resume:', error)
+      }
+    }
+
+    const handleStartFreshClick = async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (confirm('Start a fresh session? This will abandon the failed session and create a new one.')) {
+        try {
+          await window.electronAPI.startFreshSession(agent.id)
+        } catch (error) {
+          console.error('Failed to start fresh session:', error)
+        }
+      }
+    }
+
+    const classNames = [
+      'agent-item',
+      isActive && 'active',
+      isWaiting && 'waiting',
+      hasTeleportFailure && 'failed',
+      agent.isSuperMinion && 'super-minion',
+      agent.isBaseBranchAgent && 'base-branch'
+    ].filter(Boolean).join(' ')
 
     return (
-      <div
-        key={agent.id}
-        className={`agent-item ${isActive ? 'active' : ''} ${isWaiting ? 'waiting' : ''} ${agent.isSuperMinion ? 'super-minion' : ''} ${agent.isBaseBranchAgent ? 'base-branch' : ''}`}
-        onClick={handleAgentItemClick}
-        style={{ paddingLeft: `${depth * 12 + 12}px` }}
-      >
-        <div className="agent-info">
-          <div className="agent-leading-icons">
-            {agent.isSuperMinion ? (
-              <span
-                className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
-                onClick={handleCollapseClick}
-                title="Toggle child agents"
-              >
-                ▼
-              </span>
-            ) : (
-              <span className="chevron-placeholder" aria-hidden="true"></span>
-            )}
-            <span className="agent-type-icon">{agentTypeIcon}</span>
-          </div>
-          <div className="agent-name-container">
-            {agent.isBaseBranchAgent ? (
-              <div className="agent-id">{agent.assignmentId?.split('-').pop()} (Base)</div>
-            ) : agent.branch ? (
-              <div className="agent-branch" title={agent.branch}>
-                {extractBranchName(agent.branch)}
-              </div>
-            ) : (
-              <div className="agent-id">{agent.id}</div>
-            )}
-          </div>
-        </div>
-        <div className="agent-status-indicators">
-          {isWaiting && !isActive && (
-            <div className="attention-badge" title="Waiting for input">!</div>
-          )}
-          {showSpinner && (
-            <div className="agent-spinner">
-              <div className="spinner"></div>
+      <div key={agent.id} className="agent-item-container">
+        <div
+          className={classNames}
+          onClick={handleAgentItemClick}
+          style={{ paddingLeft: `${depth * 12 + 12}px` }}
+        >
+          <div className="agent-info">
+            <div className="agent-leading-icons">
+              {agent.isSuperMinion ? (
+                <span
+                  className={`collapse-chevron ${isCollapsed ? 'collapsed' : ''}`}
+                  onClick={handleCollapseClick}
+                  title="Toggle child agents"
+                >
+                  ▼
+                </span>
+              ) : (
+                <span className="chevron-placeholder" aria-hidden="true"></span>
+              )}
+              <span className="agent-type-icon">{getAgentTypeIcon(agent)}</span>
             </div>
-          )}
-          {agent.hasUnread && !isWaiting && <div className="unread-badge">●</div>}
+            {getAgentDisplayName(agent)}
+            {hasTeleportFailure && (
+              <div className="failure-badge-container">
+                <div className="failure-badge" title={`Failed to resume: ${teleportFailure.reason}`}>⚠</div>
+                <div className="failure-actions">
+                  <button className="retry-btn" title="Retry resuming session" onClick={handleRetryClick}>
+                    🔄
+                  </button>
+                  <button className="start-fresh-btn" title="Start fresh session (abandon old session)" onClick={handleStartFreshClick}>
+                    🆕
+                  </button>
+                </div>
+              </div>
+            )}
+            {showAttentionBadge && <div className="attention-badge" title="Waiting for input">!</div>}
+            {showSpinner && (
+              <div className="agent-spinner">
+                <div className="spinner"></div>
+              </div>
+            )}
+          </div>
+          {showUnreadBadge && <div className="unread-badge">●</div>}
         </div>
       </div>
     )
@@ -612,6 +739,21 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             </div>
           )
         })}
+      </div>
+
+      <div className="sidebar-footer">
+        <div
+          className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}
+          onClick={() => handleNavigate('/workspace/settings')}
+          title="Settings"
+        >
+          <span className="nav-icon settings-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path fillRule="evenodd" d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.4.5v1.2l2.4.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.3h1.2l.5-2.4.8-.3 2 1.3.8-.8-1.3-2 .3-.8 2.3-.4V7.4l-2.4-.5-.3-.8 1.3-2-.8-.8-2 1.3-.7-.2zM9.4 1l.5 2.4L12 2.1l2 2-1.4 2.1 2.4.4v2.8l-2.4.5L14 12l-2 2-2.1-1.4-.5 2.4H6.6l-.5-2.4L4 13.9l-2-2 1.4-2.1L1 9.4V6.6l2.4-.5L2.1 4l2-2 2.1 1.4.4-2.4h2.8zm.6 7c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zM8 9c.6 0 1-.4 1-1s-.4-1-1-1-1 .4-1 1 .4 1 1 1z" clipRule="evenodd"/>
+            </svg>
+          </span>
+          <span className="nav-label">Settings</span>
+        </div>
       </div>
 
       {showAddModal && (

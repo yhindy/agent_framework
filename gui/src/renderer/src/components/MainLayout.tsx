@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Dashboard from './Dashboard'
 import AgentView from './AgentView'
 import SuperAgentView from './SuperAgentView'
+import SettingsPage from './SettingsPage'
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useKeyboardShortcutsContext } from '../contexts/KeyboardShortcutsContext'
@@ -195,6 +196,7 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
           <Route path="/" element={<Dashboard activeProjects={activeProjects} onRefresh={onRefresh} />} />
           <Route path="/agent/:agentId" element={<AgentView activeProjects={activeProjects} />} />
           <Route path="/super/:agentId" element={<SuperAgentView activeProjects={activeProjects} />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>
       <KeyboardShortcutsHelp

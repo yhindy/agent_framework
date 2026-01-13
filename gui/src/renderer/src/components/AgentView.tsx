@@ -7,6 +7,7 @@ import SessionInfoPanel from './SessionInfoPanel'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
@@ -55,6 +56,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
+  const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
@@ -111,11 +116,26 @@ function AgentView({ activeProjects }: AgentViewProps) {
       if (id === agentId) loadTestEnvStatus()
     })
 
+    // Listen for teleport validation failures
+    const unsubscribeTeleportFailed = window.electronAPI.onTeleportValidationFailed((data) => {
+      if (data.agentId === agentId) {
+        setTeleportFailure({ reason: data.reason, canRetry: data.canRetry })
+      }
+    })
+
+    const unsubscribeResumeFailed = window.electronAPI.onTeleportResumeFailed((data) => {
+      if (data.agentId === agentId) {
+        setTeleportFailure({ reason: data.reason, canRetry: false })
+      }
+    })
+
     return () => {
       unsubscribeUpdate()
       unsubscribeStarted()
       unsubscribeStopped()
       unsubscribeExited()
+      unsubscribeTeleportFailed()
+      unsubscribeResumeFailed()
     }
   }, [agentId])
 
@@ -297,6 +317,43 @@ function AgentView({ activeProjects }: AgentViewProps) {
     await handleConfirmCreatePRHook(assignment.id, loadAgentData)
   }
 
+  const handleRetryTeleport = async () => {
+    if (!agentId) return
+
+    setIsRetrying(true)
+    try {
+      const result = await window.electronAPI.validateTeleport(agentId)
+      if (result.success && result.validation?.canResume) {
+        // Clear failure state on successful validation
+        setTeleportFailure(null)
+        // Reload agent data
+        await loadAgentData()
+      } else {
+        // Update failure reason if validation still fails
+        if (result.validation?.reason) {
+          setTeleportFailure({
+            reason: result.validation.reason,
+            canRetry: result.validation.canResume || false
+          })
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to retry teleport validation:', error)
+      setTeleportFailure({
+        reason: error.message || 'Failed to validate session',
+        canRetry: true
+      })
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
+  const handleRemoveFailedAgent = () => {
+    // TODO: Implement cleanup modal for failed teleport sessions
+    // For now, just log a message
+    console.log('Remove failed agent - not yet implemented')
+  }
+
   const handleAddTerminal = () => {
     const newCounter = terminalCounter + 1
     const newTerminalId = `terminal-${newCounter}`
@@ -445,6 +502,36 @@ function AgentView({ activeProjects }: AgentViewProps) {
       {/* Session Info Panel - shows live Claude session data */}
       {assignment?.tool === 'claude' && (
         <SessionInfoPanel agentId={agentId || ''} isRunning={isRunning} />
+      )}
+
+      {/* Teleport Failure Recovery UI */}
+      {teleportFailure && (
+        <div className="teleport-failure-banner">
+          <div className="teleport-failure-content">
+            <div className="teleport-failure-icon">⚠</div>
+            <div className="teleport-failure-message">
+              <div className="teleport-failure-title">Failed to Resume Teleported Session</div>
+              <div className="teleport-failure-reason">{teleportFailure.reason}</div>
+            </div>
+          </div>
+          <div className="teleport-failure-actions">
+            {teleportFailure.canRetry && (
+              <button
+                onClick={handleRetryTeleport}
+                className="compact-button"
+                disabled={isRetrying}
+              >
+                {isRetrying ? 'Retrying...' : 'Retry Resume'}
+              </button>
+            )}
+            <button
+              onClick={handleRemoveFailedAgent}
+              className="compact-button danger"
+            >
+              Remove Agent
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="agent-content">

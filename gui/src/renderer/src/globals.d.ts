@@ -95,6 +95,18 @@ declare global {
       // Claude Session Info APIs
       getClaudeSessionInfo: (agentId: string) => Promise<any>
       onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => void
+
+      // Teleport Validation APIs
+      validateTeleport: (agentId: string) => Promise<{ success: boolean; validation?: any; error?: string }>
+      onTeleportValidationFailed: (callback: (data: { agentId: string; reason: string; canRetry: boolean }) => void) => () => void
+      onTeleportResumeFailed: (callback: (data: { agentId: string; reason: string }) => void) => () => void
+      retryResumeAgent: (agentId: string) => Promise<void>
+      startFreshSession: (agentId: string) => Promise<void>
+
+      // Settings APIs
+      getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
+      updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
+      openFeedback: () => Promise<void>
     }
   }
 }
