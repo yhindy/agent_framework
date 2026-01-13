@@ -107,6 +107,10 @@ declare global {
       getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
       openFeedback: () => Promise<void>
+
+      // Analytics APIs
+      getAnalytics: (options?: { force?: boolean }) => Promise<any>
+      getAnalyticsForDateRange: (start: string, end: string) => Promise<any>
     }
   }
 }

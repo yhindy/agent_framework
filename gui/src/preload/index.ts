@@ -141,6 +141,12 @@ const api = {
   updateSettings: (updates: any) => ipcRenderer.invoke('settings:update', updates),
   openFeedback: () => ipcRenderer.invoke('settings:openFeedback'),
 
+  // Analytics APIs
+  getAnalytics: (options?: { force?: boolean }) =>
+    ipcRenderer.invoke('analytics:get', options),
+  getAnalyticsForDateRange: (start: string, end: string) =>
+    ipcRenderer.invoke('analytics:getForDateRange', start, end),
+
   // Test Environment APIs
   getTestEnvConfig: (agentId?: string) => ipcRenderer.invoke('testEnv:getConfig', agentId),
   getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => 

@@ -760,6 +760,7 @@
   margin-bottom: 48px; /* Space for collapse button */
 }
 
+.analytics-nav-item,
 .settings-nav-item {
   width: 100%;
 }
@@ -780,11 +781,13 @@
   border-top: none;
 }
 
+.sidebar.collapsed .analytics-nav-item,
 .sidebar.collapsed .settings-nav-item {
   justify-content: center;
   padding: 8px;
 }
 
+.sidebar.collapsed .analytics-nav-item .nav-label,
 .sidebar.collapsed .settings-nav-item .nav-label {
   display: none !important;
 }

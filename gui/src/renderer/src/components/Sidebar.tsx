@@ -336,6 +336,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   }
 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
+  const isAnalyticsActive = currentPath === '/workspace/analytics'
   const isSettingsActive = currentPath === '/workspace/settings'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
@@ -675,6 +676,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       </div>
 
       <div className="sidebar-footer">
+        <div
+          className={`nav-item analytics-nav-item ${isAnalyticsActive ? 'active' : ''}`}
+          onClick={() => handleNavigate('/workspace/analytics')}
+          title="Analytics"
+        >
+          <span className="nav-icon">📊</span>
+          <span className="nav-label">Analytics</span>
+        </div>
         <div
           className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}
           onClick={() => handleNavigate('/workspace/settings')}

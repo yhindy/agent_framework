@@ -1,0 +1,87 @@
+.chart-card {
+  background: #252526;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease;
+}
+
+.chart-card:hover {
+  border-color: #404040;
+}
+
+.chart-card.span-2 {
+  grid-column: span 2;
+}
+
+.chart-card.span-3 {
+  grid-column: span 3;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8e8e8;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.1px;
+}
+
+.chart-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Recharts customizations */
+.chart-card .recharts-cartesian-grid-horizontal line,
+.chart-card .recharts-cartesian-grid-vertical line {
+  stroke: #333333;
+}
+
+.chart-card .recharts-text {
+  fill: #808080;
+  font-size: 11px;
+}
+
+.chart-card .recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.chart-card .recharts-default-tooltip {
+  background: #2d2d30 !important;
+  border: 1px solid #404040 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  padding: 10px 14px !important;
+}
+
+.chart-card .recharts-tooltip-label {
+  color: #e8e8e8 !important;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.chart-card .recharts-tooltip-item {
+  color: #cccccc !important;
+  font-size: 13px;
+}
+
+.chart-card .recharts-legend-item-text {
+  color: #a0a0a0 !important;
+  font-size: 12px;
+}
+
+.chart-card .recharts-legend-wrapper {
+  padding-top: 12px !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .chart-card.span-2 {
+    grid-column: span 1;
+  }
+}

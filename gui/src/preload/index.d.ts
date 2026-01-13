@@ -61,6 +61,8 @@ declare const api: {
     getSettings: () => Promise<import('../shared/types/settings').AppSettings>;
     updateSettings: (updates: Partial<import('../shared/types/settings').AppSettings>) => Promise<import('../shared/types/settings').AppSettings>;
     openFeedback: () => Promise<void>;
+    getAnalytics: (options?: { force?: boolean }) => Promise<import('../shared/types/analytics').AnalyticsMetrics>;
+    getAnalyticsForDateRange: (start: string, end: string) => Promise<import('../shared/types/analytics').AnalyticsMetrics>;
     getTestEnvConfig: (agentId?: string) => Promise<any>;
     getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any>;
     startTestEnv: (agentId: string, commandId?: string) => Promise<any>;

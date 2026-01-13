@@ -1,0 +1,109 @@
+.metric-card {
+  background: #252526;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+  border-color: #404040;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.metric-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.metric-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #808080;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.metric-subtitle {
+  font-size: 13px;
+  color: #808080;
+  margin-top: -4px;
+}
+
+.metric-trend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.metric-trend.positive {
+  color: #4ec9b0;
+}
+
+.metric-trend.negative {
+  color: #f48771;
+}
+
+.trend-arrow {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.trend-value {
+  font-weight: 600;
+}
+
+.trend-label {
+  color: #606060;
+  font-weight: 400;
+}
+
+.metric-breakdown {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #333333;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breakdown-label {
+  font-size: 11px;
+  color: #808080;
+  text-transform: capitalize;
+}
+
+.breakdown-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cccccc;
+  background: #333333;
+  padding: 2px 8px;
+  border-radius: 10px;
+}

@@ -408,6 +408,31 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
 
+### Analytics
+The Analytics Page provides usage insights, cost tracking, and productivity metrics.
+
+**Data Sources:**
+- `.agent-info` files: Agent metadata, status, cost, tokens
+- Claude JSONL files: Detailed session metrics for Claude agents
+
+**AnalyticsService (`gui/src/main/services/AnalyticsService.ts`):**
+- Aggregates metrics from all active projects
+- 60-second cache TTL for performance
+- Supports date range filtering (7d, 30d, 90d, all time)
+- Computes time series data for charts
+
+**Tracked Metrics:**
+- Total agents, sessions, cost, tokens (input/output/cached)
+- Tool and model distribution
+- Status distribution
+- Activity and cost trends over time
+
+**Fun Facts & Achievements:**
+- Fun facts: Most productive day, favorite tool, completion rate, cache efficiency
+- Achievements: Milestones for agent counts, streaks, tool diversity, PR merges
+
+**Navigation:** Access via the sidebar Analytics icon (📊)
+
 ## CI/CD Pipeline
 
 GitHub Actions workflow (`.github/workflows/ci.yml`):
@@ -473,6 +498,8 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | `gui/src/main/services/TerminalService.ts` | PTY management |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `gui/src/main/services/AnalyticsService.ts` | Analytics data aggregation |
+| `gui/src/renderer/src/components/AnalyticsPage.tsx` | Analytics UI page |
 | `gui/playwright.config.ts` | E2E test configuration |
 | `gui/e2e/fixtures.ts` | E2E test fixtures and helpers |
 | `gui/e2e/electron-app.ts` | Electron app launch utilities |

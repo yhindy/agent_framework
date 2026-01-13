@@ -13,6 +13,7 @@ import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 import { TeleportService } from './services/TeleportService'
 import { TeleportMetadataService } from './services/TeleportMetadataService'
+import { AnalyticsService } from './services/AnalyticsService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -30,6 +31,7 @@ let services: {
   claudeSessionInfo: ClaudeSessionInfoService
   teleport: TeleportService
   teleportMetadata: TeleportMetadataService
+  analytics: AnalyticsService
 } | null = null
 
 
@@ -121,7 +123,8 @@ function initializeServices(): void {
     prPolling: new PRPollingService(mainWindow, agentService),
     claudeSessionInfo: claudeSessionInfoService,
     teleport: new TeleportService(),
-    teleportMetadata: new TeleportMetadataService()
+    teleportMetadata: new TeleportMetadataService(),
+    analytics: new AnalyticsService(agentService, claudeSessionInfoService)
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -1048,6 +1051,21 @@ function setupIPC(): void {
       }
     }
     return null
+  })
+
+  // Analytics APIs
+  ipcMain.handle('analytics:get', async (_event, options?: { force?: boolean }) => {
+    const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
+    return services!.analytics.getAnalytics(activeProjectPaths, options)
+  })
+
+  ipcMain.handle('analytics:getForDateRange', async (_event, start: string, end: string) => {
+    const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
+    return services!.analytics.getAnalyticsForDateRange(
+      activeProjectPaths,
+      new Date(start),
+      new Date(end)
+    )
   })
 }
 

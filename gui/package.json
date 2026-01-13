@@ -27,6 +27,7 @@
     "chokidar": "^3.6.0",
     "electron-store": "^8.2.0",
     "node-pty": "^1.0.0",
+    "recharts": "^3.6.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
