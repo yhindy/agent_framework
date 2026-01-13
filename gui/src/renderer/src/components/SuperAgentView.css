@@ -1,3 +1,8 @@
+/* =============================================================================
+   SUPER AGENT VIEW - Container and Layout Styles
+   Header styles have been moved to AgentHeader.css
+   ============================================================================= */
+
 .super-agent-view {
   display: flex;
   flex-direction: column;
@@ -6,178 +11,10 @@
   color: var(--text-secondary);
 }
 
-.task-badge {
-  font-size: 0.65em;
-  background: linear-gradient(135deg, var(--color-teal) 0%, var(--color-teal-dark) 100%);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-xl);
-  vertical-align: middle;
-  margin-left: var(--space-2);
-  color: white;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  box-shadow: var(--shadow-sm);
-}
+/* =============================================================================
+   AGENT CONTENT - Main content area
+   ============================================================================= */
 
-/* Agent Header Styles */
-.agent-header {
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--bg-muted);
-  padding: var(--space-3) var(--space-5);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-height: 56px;
-}
-
-.agent-header-left {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-title {
-  display: flex;
-  align-items: center;
-}
-
-.agent-title h2 {
-  font-size: var(--font-size-lg);
-  color: var(--text-primary);
-  font-weight: 600;
-  margin: 0;
-  display: inline;
-  vertical-align: middle;
-}
-
-.agent-actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.agent-actions .compact-button {
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition:
-    background var(--transition-base),
-    transform var(--transition-fast),
-    box-shadow var(--transition-base);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.agent-actions .compact-button:hover {
-  filter: brightness(1.15);
-  transform: translateY(-1px);
-}
-
-.agent-actions .compact-button:active {
-  transform: translateY(0);
-}
-
-.agent-actions .compact-button.primary {
-  background: var(--accent-primary);
-}
-
-.agent-actions .compact-button.primary:hover {
-  background: var(--accent-primary-hover);
-  box-shadow: var(--shadow-glow-sm);
-}
-
-.agent-actions .compact-button.danger {
-  background: var(--color-error);
-}
-
-.agent-actions .compact-button.danger:hover {
-  filter: brightness(1.15);
-}
-
-.agent-actions .compact-button.success {
-  background: var(--color-success-bright);
-  color: white;
-}
-
-.agent-actions .compact-button.success:hover {
-  background: var(--color-success-bright-hover);
-  color: white;
-}
-
-.agent-actions .compact-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.agent-actions .compact-button.icon-only {
-  padding: var(--space-2) var(--space-2);
-  min-width: 36px;
-}
-
-.copy-flash {
-  animation: copy-flash-keyframe var(--transition-slow) ease-out;
-}
-
-@keyframes copy-flash-keyframe {
-  0% {
-    background: var(--bg-overlay);
-  }
-  50% {
-    background: var(--color-success-bright);
-    box-shadow: 0 0 8px var(--color-success-bright-glow);
-  }
-  100% {
-    background: var(--bg-overlay);
-  }
-}
-
-/* Info Badge Styles */
-.info-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  background: var(--bg-overlay);
-  border: 1px solid var(--bg-muted);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  margin-left: var(--space-2);
-  vertical-align: middle;
-}
-
-.info-badge-label {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.info-badge-value {
-  color: var(--text-secondary);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-badge-value.copyable {
-  cursor: pointer;
-  transition:
-    color var(--transition-base),
-    text-shadow var(--transition-base);
-}
-
-.info-badge-value.copyable:hover {
-  color: var(--text-primary);
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
-}
-
-/* Agent Content - Main content area */
 .agent-content {
   flex: 1;
   display: flex;
@@ -185,7 +22,10 @@
   overflow: hidden;
 }
 
-/* Unified Tab Interface */
+/* =============================================================================
+   UNIFIED TAB INTERFACE
+   ============================================================================= */
+
 .unified-tabs {
   display: flex;
   gap: 0;
@@ -303,7 +143,10 @@
   opacity: 0.7;
 }
 
-/* Terminal Area - Contains terminal and optional sidebar */
+/* =============================================================================
+   TERMINAL AREA - Contains terminal and optional sidebar
+   ============================================================================= */
+
 .terminal-area {
   flex: 1;
   display: flex;
@@ -329,7 +172,10 @@
   background: #000;
 }
 
-/* Task Sidebar */
+/* =============================================================================
+   TASK SIDEBAR
+   ============================================================================= */
+
 .task-sidebar {
   border-left: 1px solid var(--border-default);
   display: flex;
@@ -419,7 +265,10 @@
   padding: var(--space-6);
 }
 
-/* Error and loading states */
+/* =============================================================================
+   ERROR AND LOADING STATES
+   ============================================================================= */
+
 .agent-view-error {
   display: flex;
   flex-direction: column;
@@ -450,7 +299,10 @@
   color: var(--text-muted);
 }
 
-/* Modal styles */
+/* =============================================================================
+   MODAL STYLES
+   ============================================================================= */
+
 .modal-overlay {
   position: fixed;
   top: 0;

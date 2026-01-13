@@ -5,13 +5,12 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import TaskStatusCard from './TaskStatusCard'
 import ConfirmModal from './ConfirmModal'
-import SessionInfoPanel from './SessionInfoPanel'
+import AgentHeader, { HeaderBadge } from './AgentHeader'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
-import './AgentView.css' // For shared PR badge styles
 import { SuperAgentInfo } from '../types/agent'
 
 interface SuperAgentViewProps {
@@ -286,16 +285,6 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
-  const handleCopyToClipboard = (text: string, e?: React.MouseEvent) => {
-    navigator.clipboard.writeText(text)
-    // Provide quick visual feedback on the element itself
-    if (e?.currentTarget) {
-      const element = e.currentTarget
-      element.classList.add('copy-flash')
-      setTimeout(() => element.classList.remove('copy-flash'), 300)
-    }
-  }
-
   if (error) {
     return (
       <div className="super-agent-view">
@@ -317,60 +306,65 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   }
 
   const hasTasks = agent.taskInvocations && agent.taskInvocations.length > 0
+  const taskCount = agent.taskInvocations?.length || 0
+  const isRunning = agent.terminalPid !== null
+
+  // Build badges array for the header
+  const headerBadges: HeaderBadge[] = [
+    {
+      label: 'Mission',
+      value: agent.feature,
+      variant: 'feature',
+      copyable: true
+    },
+    {
+      label: 'ID',
+      value: agent.agentId,
+      variant: 'id',
+      copyable: true
+    }
+  ]
+
+  // Build header actions
+  const headerActions = (
+    <>
+      {/* PR Status Badge or Make PR Button */}
+      {agent?.prStatus && agent.prUrl ? (
+        <button
+          className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
+          onClick={() => window.open(agent.prUrl, '_blank')}
+          title="Open PR on GitHub"
+        >
+          PR: {agent.prStatus}
+          <span className="pr-open-icon">↗</span>
+        </button>
+      ) : (
+        <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
+          {isCreatingPR ? 'Creating...' : 'Make PR'}
+        </button>
+      )}
+      <button onClick={handleOpenCursor} className="compact-button">
+        Cursor
+      </button>
+      <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
+        🗑️
+      </button>
+    </>
+  )
 
   return (
     <div className="super-agent-view">
-      <div className="agent-header">
-        <div className="agent-header-left">
-          <div className="agent-title">
-            <h2>
-              👑 {extractBranchName(agent.branch) || agent.agentId}
-              <span className="task-badge">Tasks: {agent.taskInvocations?.length || 0}</span>
-            </h2>
-          </div>
-
-          <div className="info-badge mission-badge" title={`${agent.feature} (click to copy)`}>
-            <span className="info-badge-label">Mission:</span>
-            <span
-              className="info-badge-value copyable"
-              onClick={(e) => handleCopyToClipboard(agent.feature, e as any)}
-              role="button"
-              tabIndex={0}
-            >
-              {agent.feature}
-            </span>
-          </div>
-
-          {/* Session Info - inline in header */}
-          {agent.tool === 'claude' && (
-            <SessionInfoPanel agentId={agentId || ''} isRunning={agent.terminalPid !== null} />
-          )}
-        </div>
-
-        <div className="agent-actions">
-          {/* PR Status Badge or Make PR Button */}
-          {agent?.prStatus && agent.prUrl ? (
-            <button
-              className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
-              onClick={() => window.open(agent.prUrl, '_blank')}
-              title="Open PR on GitHub"
-            >
-              PR: {agent.prStatus}
-              <span className="pr-open-icon">↗</span>
-            </button>
-          ) : (
-            <button onClick={handleCreatePRClick} className="success compact-button" disabled={isCreatingPR}>
-              {isCreatingPR ? 'Creating...' : 'Make PR'}
-            </button>
-          )}
-          <button onClick={handleOpenCursor} className="compact-button">
-            Cursor
-          </button>
-          <button className="danger compact-button icon-only" onClick={() => setShowTeardownConfirm(true)}>
-            🗑️
-          </button>
-        </div>
-      </div>
+      <AgentHeader
+        icon="👑"
+        title={extractBranchName(agent.branch) || agent.agentId}
+        typeLabel="Super Minion"
+        agentId={agent.agentId}
+        badges={headerBadges}
+        tool={agent.tool}
+        isRunning={isRunning}
+        actions={headerActions}
+        taskCount={taskCount}
+      />
 
       <div className="agent-content">
         {/* Full-width tab bar */}

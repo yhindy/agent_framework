@@ -1,3 +1,8 @@
+/* =============================================================================
+   AGENT VIEW - Container and Layout Styles
+   Header styles have been moved to AgentHeader.css
+   ============================================================================= */
+
 .agent-view {
   display: flex;
   flex-direction: column;
@@ -14,250 +19,9 @@
   font-size: var(--font-size-base);
 }
 
-.agent-header {
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--bg-muted);
-  padding: var(--space-3) var(--space-5);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-height: 56px;
-}
-
-.agent-header-left {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-title {
-  display: flex;
-  align-items: center;
-}
-
-.agent-title h2 {
-  font-size: var(--font-size-lg);
-  color: var(--text-primary);
-  font-weight: 600;
-  margin: 0;
-  display: inline;
-  vertical-align: middle;
-}
-
-.agent-actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.agent-actions .compact-button {
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background var(--transition-base), transform var(--transition-fast), box-shadow var(--transition-base);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.agent-actions .compact-button:hover {
-  filter: brightness(1.15);
-  transform: translateY(-1px);
-}
-
-.agent-actions .compact-button:active {
-  transform: translateY(0);
-}
-
-.agent-actions .compact-button.primary {
-  background: var(--accent-primary);
-}
-
-.agent-actions .compact-button.primary:hover {
-  background: var(--accent-primary-hover);
-  box-shadow: var(--shadow-glow-sm);
-  filter: none;
-}
-
-.agent-actions .compact-button.danger {
-  background: var(--color-error);
-}
-
-.agent-actions .compact-button.danger:hover {
-  filter: brightness(1.15);
-}
-
-.agent-actions .compact-button.success {
-  background: var(--color-success-bright);
-  color: white;
-}
-
-.agent-actions .compact-button.success:hover {
-  background: var(--color-success-bright-hover);
-  color: white;
-  filter: none;
-}
-
-.agent-actions .compact-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.agent-actions .compact-button.icon-only {
-  padding: var(--space-2) 10px;
-  min-width: 36px;
-}
-
-.copy-flash {
-  animation: copy-flash-keyframe var(--transition-slow) ease-out;
-}
-
-@keyframes copy-flash-keyframe {
-  0% {
-    background: var(--bg-overlay);
-  }
-  50% {
-    background: var(--color-success-bright);
-    box-shadow: 0 0 8px var(--color-success-bright-glow);
-  }
-  100% {
-    background: var(--bg-overlay);
-  }
-}
-
-/* Info Badge Styles */
-.info-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  background: var(--bg-overlay);
-  border: 1px solid var(--bg-muted);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  margin-left: var(--space-2);
-  vertical-align: middle;
-}
-
-.info-badge-label {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.info-badge-value {
-  color: var(--text-secondary);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-badge-value.copyable {
-  cursor: pointer;
-  transition: color var(--transition-base), text-shadow var(--transition-base);
-}
-
-.info-badge-value.copyable:hover {
-  color: var(--text-primary);
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
-}
-
-.branch-badge .info-badge-value {
-  font-family: 'Courier New', Courier, monospace;
-  color: var(--color-info);
-}
-
-.branch-badge .info-badge-value.copyable:hover {
-  filter: brightness(1.2);
-}
-
-/* Status Badge with Dot Indicator */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  background: var(--bg-overlay);
-  border: 1px solid var(--bg-muted);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  margin-left: var(--space-2);
-  color: var(--text-secondary);
-}
-
-.status-badge .copyable {
-  cursor: pointer;
-  transition: color var(--transition-base), text-shadow var(--transition-base);
-}
-
-.status-badge .copyable:hover {
-  color: var(--text-primary);
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
-}
-
-.status-dot {
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-full);
-}
-
-.status-dot.working {
-  background: var(--color-success-bright);
-}
-
-.status-dot.idle {
-  background: var(--status-pending);
-}
-
-.status-dot.pr_open {
-  background: var(--accent-primary);
-}
-
-.status-dot.merged {
-  background: var(--color-info);
-}
-
-.status-dot.blocked {
-  background: var(--status-blocked);
-}
-
-/* Responsive Design */
-@media (max-width: 1200px) {
-  .branch-badge {
-    display: none;
-  }
-}
-
-.agent-actions button.primary {
-  background: var(--accent-primary);
-}
-
-.agent-actions button.primary:hover {
-  background: var(--accent-primary-hover);
-  box-shadow: var(--shadow-glow-sm);
-}
-
-.agent-actions button.danger {
-  background: var(--color-error);
-}
-
-.agent-actions button.danger:hover {
-  filter: brightness(1.15);
-}
-
-.agent-actions button.success {
-  background: var(--color-success-bright);
-}
-
-.agent-actions button.success:hover {
-  background: var(--color-success-bright-hover);
-}
+/* =============================================================================
+   AGENT CONTENT - Main content area with tabs and terminal
+   ============================================================================= */
 
 .agent-content {
   flex: 1;
@@ -289,6 +53,10 @@
   font-size: var(--font-size-sm);
 }
 
+/* =============================================================================
+   CLEANUP DROPDOWN
+   ============================================================================= */
+
 .cleanup-dropdown {
   position: relative;
 }
@@ -307,8 +75,6 @@
 .cleanup-button:hover {
   filter: brightness(1.15);
 }
-
-/* Cleanup button is now a compact button with icon-only class */
 
 .cleanup-menu {
   display: none;
@@ -363,7 +129,10 @@
   background: var(--color-error-dim);
 }
 
-/* Unified Tab Interface */
+/* =============================================================================
+   UNIFIED TAB INTERFACE
+   ============================================================================= */
+
 .unified-tabs {
   display: flex;
   gap: 0;
@@ -483,7 +252,10 @@
   overflow: hidden;
 }
 
-/* Modal Styles Copied from Dashboard.css */
+/* =============================================================================
+   MODAL STYLES
+   ============================================================================= */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -620,96 +392,10 @@
   line-height: 1;
 }
 
-/* PR Status Badge */
-.pr-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-xl);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  cursor: pointer;
-  border: 1px solid;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-  background: none;
-}
+/* =============================================================================
+   TELEPORT FAILURE BANNER
+   ============================================================================= */
 
-.pr-status-badge:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.pr-status-open {
-  background: var(--color-purple-alt-dim) !important;
-  color: var(--color-purple-alt);
-  border-color: var(--color-purple-alt);
-}
-
-.pr-status-open:hover {
-  background: rgba(197, 134, 192, 0.3) !important;
-  box-shadow: 0 2px 8px var(--color-purple-alt-glow);
-}
-
-.pr-status-merged {
-  background: var(--color-teal-dim) !important;
-  color: var(--color-teal);
-  border-color: var(--color-teal);
-}
-
-.pr-status-merged:hover {
-  background: rgba(78, 201, 176, 0.3) !important;
-  box-shadow: 0 2px 8px var(--color-teal-glow);
-}
-
-.pr-status-closed {
-  background: rgba(133, 133, 133, 0.2) !important;
-  color: var(--text-muted);
-  border-color: var(--text-muted);
-}
-
-.pr-status-closed:hover {
-  background: rgba(133, 133, 133, 0.3) !important;
-  box-shadow: 0 2px 8px rgba(133, 133, 133, 0.3);
-}
-
-.pr-open-icon {
-  font-size: var(--font-size-xs);
-  opacity: 0.7;
-  transition: opacity var(--transition-base), transform var(--transition-base);
-}
-
-.pr-status-badge:hover .pr-open-icon {
-  opacity: 1;
-  transform: translate(1px, -1px);
-}
-
-.pr-refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  padding: 2px var(--space-1);
-  line-height: 1;
-  opacity: 0.7;
-  transition: opacity var(--transition-base), transform var(--transition-slow) ease;
-  margin-left: 2px;
-}
-
-.pr-refresh-btn:hover {
-  opacity: 1;
-}
-
-.pr-refresh-btn:active {
-  transform: rotate(180deg);
-}
-
-/* Teleport Failure Banner */
 .teleport-failure-banner {
   background: rgba(244, 135, 113, 0.15);
   border: 1px solid #f48771;
@@ -759,4 +445,26 @@
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* Compact button styles for teleport failure actions */
+.teleport-failure-actions .compact-button {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-base);
+  font-weight: 500;
+}
+
+.teleport-failure-actions .compact-button:hover {
+  filter: brightness(1.15);
+}
+
+.teleport-failure-actions .compact-button.danger {
+  background: var(--color-error);
+  color: white;
 }
