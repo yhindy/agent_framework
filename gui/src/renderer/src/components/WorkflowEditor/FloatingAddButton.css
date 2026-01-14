@@ -1,7 +1,4 @@
-/* =============================================================================
-   FLOATING ADD BUTTON (FAB)
-   Floating action button with expandable popover for adding workflow steps
-   ============================================================================= */
+/* Floating Add Button */
 
 .floating-add-button {
   position: fixed;
@@ -9,10 +6,6 @@
   right: 32px;
   z-index: var(--z-toast);
 }
-
-/* =============================================================================
-   FAB TRIGGER BUTTON
-   ============================================================================= */
 
 .fab-trigger {
   width: 56px;
@@ -56,10 +49,6 @@
   transition: transform var(--transition-base);
 }
 
-/* =============================================================================
-   FAB POPOVER
-   ============================================================================= */
-
 .fab-popover {
   position: absolute;
   bottom: calc(100% + 16px);
@@ -95,10 +84,6 @@
   text-align: center;
 }
 
-/* =============================================================================
-   STEP TYPE GRID
-   ============================================================================= */
-
 .fab-step-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -126,42 +111,30 @@
   box-shadow: 0 0 0 2px currentColor;
 }
 
-/* Type-specific colors */
-.fab-step-option[data-type="explore"] {
-  color: var(--color-info);
-}
-.fab-step-option[data-type="explore"]:hover {
-  background: var(--color-info-dim);
-  box-shadow: 0 4px 16px rgba(68, 138, 255, 0.25);
-}
+/* Agent type colors */
+.fab-step-option.agent-explore { color: var(--color-info); }
+.fab-step-option.agent-explore:hover { background: var(--color-info-dim); }
 
-.fab-step-option[data-type="plan"] {
-  color: var(--color-warning);
-}
-.fab-step-option[data-type="plan"]:hover {
-  background: var(--color-warning-dim);
-  box-shadow: 0 4px 16px rgba(255, 171, 0, 0.25);
-}
+.fab-step-option.agent-plan { color: var(--color-warning); }
+.fab-step-option.agent-plan:hover { background: var(--color-warning-dim); }
 
-.fab-step-option[data-type="implement"] {
-  color: var(--color-success);
-}
-.fab-step-option[data-type="implement"]:hover {
-  background: var(--color-success-dim);
-  box-shadow: 0 4px 16px rgba(0, 200, 83, 0.25);
-}
+.fab-step-option.agent-implement { color: var(--color-success); }
+.fab-step-option.agent-implement:hover { background: var(--color-success-dim); }
 
-.fab-step-option[data-type="debug"] {
-  color: var(--color-error);
-}
-.fab-step-option[data-type="debug"]:hover {
-  background: var(--color-error-dim);
-  box-shadow: 0 4px 16px rgba(255, 82, 82, 0.25);
-}
+.fab-step-option.agent-debug { color: var(--color-error); }
+.fab-step-option.agent-debug:hover { background: var(--color-error-dim); }
 
-/* =============================================================================
-   STEP ICON AND NAME
-   ============================================================================= */
+.fab-step-option.agent-review { color: var(--color-info); }
+.fab-step-option.agent-review:hover { background: var(--color-info-dim); }
+
+.fab-step-option.agent-test { color: var(--color-success); }
+.fab-step-option.agent-test:hover { background: var(--color-success-dim); }
+
+.fab-step-option.agent-document { color: var(--text-muted); }
+.fab-step-option.agent-document:hover { background: var(--bg-muted); }
+
+.fab-step-option.agent-simplify { color: var(--color-info); }
+.fab-step-option.agent-simplify:hover { background: var(--color-info-dim); }
 
 .fab-step-icon {
   width: 32px;
@@ -178,10 +151,6 @@
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-wide);
 }
-
-/* =============================================================================
-   REDUCED MOTION
-   ============================================================================= */
 
 @media (prefers-reduced-motion: reduce) {
   .fab-trigger {

@@ -18,88 +18,44 @@ function generateId(prefix: string): string {
 }
 
 /**
- * Simple WorkflowService - manages workflow configurations.
- *
- * Simplified model:
- * - A workflow is a sequence of steps
- * - Each step has one or more agents
- * - Multiple agents in a step run in parallel automatically
+ * WorkflowService manages workflow configurations for super minions.
+ * A workflow is a sequence of steps, each containing one or more agents.
+ * Multiple agents in a step run in parallel automatically.
  */
 export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
-  private activeWorkflows: Map<string, WorkflowConfig> = new Map() // projectPath -> workflow
+  private activeWorkflows: Map<string, WorkflowConfig> = new Map()
 
   constructor() {
-    // Initialize with default workflows
     this.workflows.set(DEFAULT_WORKFLOW.id, DEFAULT_WORKFLOW)
     this.workflows.set(DEBUG_WORKFLOW.id, DEBUG_WORKFLOW)
-    log.info('WorkflowService initialized with default and debug workflows')
   }
 
-  // ============================================
-  // Agent Types
-  // ============================================
-
-  /**
-   * Get all available agent types.
-   */
   getSubagentTypes(): SubagentType[] {
     return DEFAULT_SUBAGENT_TYPES
   }
 
-  /**
-   * Get a specific agent type by ID.
-   */
   getSubagentType(id: string): SubagentType | undefined {
     return DEFAULT_SUBAGENT_TYPES.find(t => t.id === id)
   }
 
-  // ============================================
-  // Workflow Management
-  // ============================================
-
-  /**
-   * Get the active workflow for a project.
-   * Returns the workflow set for this project, or DEFAULT_WORKFLOW if none set.
-   */
   getActiveWorkflow(projectPath: string): WorkflowConfig {
     return this.activeWorkflows.get(projectPath) || DEFAULT_WORKFLOW
   }
 
-  /**
-   * Set the active workflow for a project.
-   * This is called when creating a super minion with a custom workflow.
-   */
   setActiveWorkflow(projectPath: string, workflow: WorkflowConfig): void {
     this.activeWorkflows.set(projectPath, workflow)
-    log.info('Set active workflow for project:', {
-      projectPath,
-      workflowId: workflow.id,
-      workflowName: workflow.name,
-      steps: workflow.steps.map(s => ({
-        name: s.name,
-        agents: s.agents.map(a => ({ typeId: a.typeId, customPrompt: a.customPrompt }))
-      }))
-    })
+    log.info('Set active workflow', { projectPath, workflowId: workflow.id })
   }
 
-  /**
-   * Get all available workflows.
-   */
   getAllWorkflows(): WorkflowConfig[] {
     return Array.from(this.workflows.values())
   }
 
-  /**
-   * Get a workflow by ID.
-   */
   getWorkflow(id: string): WorkflowConfig | undefined {
     return this.workflows.get(id)
   }
 
-  /**
-   * Create a new workflow.
-   */
   createWorkflow(name: string, description?: string): WorkflowConfig {
     const workflow: WorkflowConfig = {
       id: generateId('workflow'),
@@ -109,13 +65,9 @@ export class WorkflowService {
       isDefault: false
     }
     this.workflows.set(workflow.id, workflow)
-    log.info('Created workflow:', workflow.id)
     return workflow
   }
 
-  /**
-   * Update a workflow.
-   */
   updateWorkflow(id: string, updates: Partial<WorkflowConfig>): WorkflowConfig {
     const workflow = this.workflows.get(id)
     if (!workflow) {
@@ -124,16 +76,11 @@ export class WorkflowService {
     if (workflow.isDefault) {
       throw new Error('Cannot modify the default workflow')
     }
-
     const updated = { ...workflow, ...updates, id: workflow.id }
     this.workflows.set(id, updated)
-    log.info('Updated workflow:', id)
     return updated
   }
 
-  /**
-   * Delete a workflow.
-   */
   deleteWorkflow(id: string): void {
     const workflow = this.workflows.get(id)
     if (!workflow) {
@@ -143,24 +90,14 @@ export class WorkflowService {
       throw new Error('Cannot delete the default workflow')
     }
     this.workflows.delete(id)
-    log.info('Deleted workflow:', id)
   }
 
-  // ============================================
-  // Step Management
-  // ============================================
-
-  /**
-   * Add a step to a workflow.
-   * @param agents Can be either string[] (agent type IDs) or StepAgent[] (full agent configs)
-   */
   addStep(workflowId: string, name: string, agents: string[] | StepAgent[]): WorkflowStep {
     const workflow = this.workflows.get(workflowId)
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`)
     }
 
-    // Convert string[] to StepAgent[] if needed
     const stepAgents: StepAgent[] = agents.map((agent, index) => {
       if (typeof agent === 'string') {
         return { id: generateId(`agent-${index}`), typeId: agent }
@@ -174,13 +111,9 @@ export class WorkflowService {
       agents: stepAgents
     }
     workflow.steps.push(step)
-    log.info('Added step to workflow:', { workflowId, stepId: step.id })
     return step
   }
 
-  /**
-   * Update a step in a workflow.
-   */
   updateStep(workflowId: string, stepId: string, updates: Partial<WorkflowStep>): WorkflowStep {
     const workflow = this.workflows.get(workflowId)
     if (!workflow) {
@@ -195,13 +128,9 @@ export class WorkflowService {
     const step = workflow.steps[stepIndex]
     const updated = { ...step, ...updates, id: step.id }
     workflow.steps[stepIndex] = updated
-    log.info('Updated step:', { workflowId, stepId })
     return updated
   }
 
-  /**
-   * Remove a step from a workflow.
-   */
   removeStep(workflowId: string, stepId: string): void {
     const workflow = this.workflows.get(workflowId)
     if (!workflow) {
@@ -212,14 +141,9 @@ export class WorkflowService {
     if (index === -1) {
       throw new Error(`Step not found: ${stepId}`)
     }
-
     workflow.steps.splice(index, 1)
-    log.info('Removed step:', { workflowId, stepId })
   }
 
-  /**
-   * Reorder steps in a workflow.
-   */
   reorderSteps(workflowId: string, stepIds: string[]): void {
     const workflow = this.workflows.get(workflowId)
     if (!workflow) {
@@ -233,19 +157,9 @@ export class WorkflowService {
     if (reordered.length !== workflow.steps.length) {
       throw new Error('Invalid step order - missing or extra steps')
     }
-
     workflow.steps = reordered
-    log.info('Reordered steps:', workflowId)
   }
 
-  // ============================================
-  // Rules Generation
-  // ============================================
-
-  /**
-   * Generate markdown rules for a workflow.
-   * This produces instructions the super minion can follow.
-   */
   generateRulesMarkdown(workflow: WorkflowConfig): string {
     const lines: string[] = []
 
@@ -281,10 +195,9 @@ export class WorkflowService {
       } else {
         const stepAgent = step.agents[0]
         const agentType = this.getSubagentType(stepAgent.typeId)
+        const description = stepAgent.customPrompt || agentType?.description || ''
         lines.push(`**Agent**: ${agentType?.name || stepAgent.typeId}`)
         lines.push('')
-        // Use custom prompt if available, otherwise use default description
-        const description = stepAgent.customPrompt || agentType?.description || ''
         lines.push(description)
       }
 

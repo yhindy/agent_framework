@@ -2,17 +2,11 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import {
   ChevronUpIcon,
   ChevronDownIcon,
-  SearchIcon,
-  HammerIcon,
-  ClipboardIcon,
-  BugIcon,
   XIcon,
   PlusIcon,
-  CheckCircleIcon,
-  CheckIcon,
-  EditIcon,
-  RefreshIcon
+  EditIcon
 } from '../icons'
+import { getAgentIcon, getAgentColorClass } from './agentIcons'
 import type { WorkflowStep, SubagentType, StepAgent } from '../../../../main/services/types/WorkflowTypes'
 import './WorkflowPanel.css'
 
@@ -20,54 +14,6 @@ export interface WorkflowPipelineProps {
   steps: WorkflowStep[]
   subagentTypes: SubagentType[]
   onStepsChange: (steps: WorkflowStep[]) => void
-}
-
-// Get icon for agent type
-function getAgentIcon(agentId: string) {
-  switch (agentId) {
-    case 'explore':
-      return <SearchIcon size="sm" />
-    case 'plan':
-      return <ClipboardIcon size="sm" />
-    case 'review':
-      return <CheckCircleIcon size="sm" />
-    case 'implement':
-      return <HammerIcon size="sm" />
-    case 'test':
-      return <CheckIcon size="sm" />
-    case 'debug':
-      return <BugIcon size="sm" />
-    case 'document':
-      return <EditIcon size="sm" />
-    case 'simplify':
-      return <RefreshIcon size="sm" />
-    default:
-      return <HammerIcon size="sm" />
-  }
-}
-
-// Get color class for agent type
-function getAgentColorClass(agentId: string): string {
-  switch (agentId) {
-    case 'explore':
-      return 'agent-explore'
-    case 'plan':
-      return 'agent-plan'
-    case 'review':
-      return 'agent-review'
-    case 'implement':
-      return 'agent-implement'
-    case 'test':
-      return 'agent-test'
-    case 'debug':
-      return 'agent-debug'
-    case 'document':
-      return 'agent-document'
-    case 'simplify':
-      return 'agent-simplify'
-    default:
-      return 'agent-implement'
-  }
 }
 
 interface StepCardProps {

@@ -1,58 +1,12 @@
-// =============================================================================
-// FLOATING ADD BUTTON (FAB)
-// Floating action button that expands to show step type options
-// =============================================================================
-
 import { useState, useCallback, useEffect, useRef } from 'react'
-import {
-  PlusIcon,
-  SearchIcon,
-  HammerIcon,
-  ClipboardIcon,
-  BugIcon
-} from '../icons'
+import { PlusIcon } from '../icons'
+import { getAgentIcon, getAgentColorClass } from './agentIcons'
 import type { SubagentType } from '../../../../main/services/types/WorkflowTypes'
 import './FloatingAddButton.css'
 
 export interface FloatingAddButtonProps {
   subagentTypes: SubagentType[]
   onAddStep: (typeId: string) => void
-}
-
-// Get icon component for subagent type
-function getSubagentIcon(subagentTypeId: string) {
-  switch (subagentTypeId) {
-    case 'explore':
-      return <SearchIcon size="md" />
-    case 'implement':
-    case 'general-purpose':
-      return <HammerIcon size="md" />
-    case 'plan':
-      return <ClipboardIcon size="md" />
-    case 'debug':
-    case 'debugger':
-      return <BugIcon size="md" />
-    default:
-      return <HammerIcon size="md" />
-  }
-}
-
-// Map subagent type IDs to their display type for color styling
-function getStepTypeDataAttr(subagentTypeId: string): string {
-  switch (subagentTypeId) {
-    case 'explore':
-      return 'explore'
-    case 'implement':
-    case 'general-purpose':
-      return 'implement'
-    case 'plan':
-      return 'plan'
-    case 'debug':
-    case 'debugger':
-      return 'debug'
-    default:
-      return 'implement'
-  }
 }
 
 export function FloatingAddButton({
@@ -119,14 +73,13 @@ export function FloatingAddButton({
             {subagentTypes.map((type) => (
               <button
                 key={type.id}
-                className="fab-step-option"
-                data-type={getStepTypeDataAttr(type.id)}
+                className={`fab-step-option ${getAgentColorClass(type.id)}`}
                 onClick={() => handleStepClick(type.id)}
                 role="menuitem"
                 title={type.description}
               >
                 <div className="fab-step-icon">
-                  {getSubagentIcon(type.id)}
+                  {getAgentIcon(type.id, 'md')}
                 </div>
                 <span className="fab-step-name">{type.name}</span>
               </button>

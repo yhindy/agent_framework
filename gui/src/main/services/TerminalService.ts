@@ -143,18 +143,6 @@ export class TerminalService {
     try {
       const workflow = this.workflowService.getActiveWorkflow(projectPath)
       const subagentTypes = this.workflowService.getSubagentTypes()
-
-      // Debug: log workflow steps to verify custom prompts
-      log.info('Generating super minion prompt with workflow:', {
-        workflowId: workflow.id,
-        workflowName: workflow.name,
-        steps: workflow.steps.map(s => ({
-          name: s.name,
-          agents: s.agents.map(a => ({ typeId: a.typeId, customPrompt: a.customPrompt }))
-        }))
-      })
-
-      // Build numbered step list
       const phases: string[] = []
 
       for (let i = 0; i < workflow.steps.length; i++) {
@@ -353,51 +341,35 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            // Add system prompt file for super minions (dynamic rules)
+            // Add system prompt file for super minions
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
             if (isSuperMinion) {
               const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
-
-              // Lock workflow while super minion is running
-              if (this.workflowService) {
-                // Workflow locking removed in simplification
-              }
             }
           } else if (mode === 'dev') {
             args.push('--permission-mode', 'acceptEdits')
           }
 
           // Always skip permissions for teleport to bypass interactive prompts
-          // This handles: "Open Claude Code in X?" and "Trust this folder?" prompts
           args.push('--dangerously-skip-permissions')
 
-          // Add chrome flag (default true)
           if (chrome !== false) {
             args.push('--chrome')
           }
         } else if (isResume) {
-          // Resume existing session - use stored session ID (not freshly generated)
-          // This is critical for teleported sessions where claudeSessionId differs from generated UUID
+          // Resume existing session
           args = ['--resume', agentInfo!.claudeSessionId!]
 
-          // Preserve model
           if (model) args.push('--model', model)
 
-          // Preserve permission mode
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            // Preserve system prompt file for super minions (dynamic rules)
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
             if (isSuperMinion) {
               const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
-
-              // Lock workflow while super minion is running
-              if (this.workflowService) {
-                // Workflow locking removed in simplification
-              }
             }
           } else if (mode === 'dev') {
             args.push('--permission-mode', 'acceptEdits')
@@ -473,35 +445,14 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }
     }
 
-    // Debug logging for spawn issues
-    log.debug('Spawning PTY', {
-      shell,
-      shellExists,
-      shellIsExecutable,
-      cwd: worktreePath,
-      cwdExists,
-      cwdIsDirectory,
-      agentId,
-      projectPath,
-      envVarCount: Object.keys(spawnEnv).length,
-      platform: process.platform
-    })
+    log.debug('Spawning PTY', { shell, cwd: worktreePath, agentId })
 
-    // Pre-validation warnings (don't throw - let spawn handle actual errors)
     if (!cwdExists || !cwdIsDirectory) {
-      log.warn('Working directory may not exist or is not a directory', {
-        worktreePath,
-        cwdExists,
-        cwdIsDirectory
-      })
+      log.warn('Working directory may not exist or is not a directory', { worktreePath, cwdExists, cwdIsDirectory })
     }
 
     if (!shellExists || !shellIsExecutable) {
-      log.warn('Shell may not exist or is not executable', {
-        shell,
-        shellExists,
-        shellIsExecutable
-      })
+      log.warn('Shell may not exist or is not executable', { shell, shellExists, shellIsExecutable })
     }
 
     let terminal: pty.IPty
@@ -779,13 +730,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
       }
 
-      // Unlock workflow if this was a super minion
-      const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-      if (isSuperMinion && this.workflowService && projectPath) {
-        // Workflow unlocking removed in simplification
-        log.debug('Unlocked workflow on exit for super minion', { agentId, projectPath })
-      }
-
       // Mark session as inactive on exit
       if (tool === 'claude' && worktreePath) {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
@@ -813,34 +757,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // Use Claude's plan permission mode - shows plan before executing
       args.push('--permission-mode', 'plan')
 
-      // For super minions, load the rules file as system prompt (dynamic rules)
       const isSuperMinion = agentInfo?.isSuperMinion === true
       if (isSuperMinion && projectPath && worktreePath) {
         const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
         args.push('--system-prompt-file', rulesPath)
-
-        // Lock workflow while super minion is running
-        if (this.workflowService) {
-          // Workflow locking removed in simplification
-        }
       }
 
       if (prompt) {
-        // For super minions, generate workflow-aware prompt
-        let planPrompt: string
-
-        if (isSuperMinion && projectPath) {
-          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
-        } else {
-          planPrompt = `Create a plan for: ${prompt}`
-        }
-
+        const planPrompt = (isSuperMinion && projectPath)
+          ? this.generateWorkflowPrompt(projectPath, prompt)
+          : `Create a plan for: ${prompt}`
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }
     } else if (mode === 'dev') {
-      // Use acceptEdits mode - auto-approves file changes for faster development
       args.push('--permission-mode', 'acceptEdits')
-
       if (prompt) {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
@@ -1036,19 +966,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         clearInterval(session.statePollingInterval)
       }
 
-      // Unlock workflow if this was a super minion
-      if (this.workflowService && session.projectPath) {
-        // Check if agent is a super minion and unlock the workflow
-        this.readAgentInfo(session.worktreePath).then((agentInfo) => {
-          if ((agentInfo as any)?.isSuperMinion) {
-            // Workflow unlocking removed in simplification
-            log.debug('Unlocked workflow for super minion', { agentId, projectPath: session.projectPath })
-          }
-        }).catch(err => {
-          log.warn('Failed to check agent info for workflow unlock', err)
-        })
-      }
-
       session.pty.kill()
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')
@@ -1112,25 +1029,11 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     // Determine worktree path (shared logic with startAgent)
     const worktreePath = this.getWorktreePath(projectPath, agentId)
 
-    // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
-    // Debug logging to understand spawn failures
-    log.debug('Starting plain terminal', {
-      fullTerminalId,
-      shell,
-      shellExists: existsSync(shell),
-      cwd: worktreePath,
-      cwdExists: existsSync(worktreePath),
-      platform: process.platform,
-      SHELL: process.env.SHELL,
-      hasProcessEnv: !!process.env,
-      envKeys: Object.keys(process.env).length
-    })
+    log.debug('Starting plain terminal', { fullTerminalId, shell, cwd: worktreePath })
 
-    // Create a clean environment object for node-pty
-    // node-pty/posix_spawn can fail if env has non-string values or special properties
-    // Filter to only include own string properties
+    // Create clean environment for node-pty (filter to own string properties)
     const spawnEnv: Record<string, string> = {}
     for (const key in process.env) {
       if (process.env.hasOwnProperty(key) && typeof process.env[key] === 'string') {
@@ -1151,18 +1054,10 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         env: spawnEnv
       })
     } catch (error) {
-      log.error('Failed to spawn plain terminal', {
-        error,
-        shell,
-        cwd: worktreePath,
-        platform: process.platform,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined
-      })
+      log.error('Failed to spawn plain terminal', { shell, cwd: worktreePath, error })
       throw new Error(`Failed to spawn terminal shell "${shell}": ${error instanceof Error ? error.message : String(error)}`)
     }
 
-    // Create IdleDetector for plain terminals (uses combined shell + Claude patterns)
     const idleDetector = new IdleDetector(
       {
         workingPatterns: SHELL_WORKING_PATTERNS,
