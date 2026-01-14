@@ -152,16 +152,26 @@ export class TerminalService {
         const isParallel = step.agents.length > 1
 
         if (isParallel) {
-          // Multiple agents run in parallel
-          const agentNames = step.agents.map(agent => {
+          // Multiple agents run in parallel - show each with custom prompt if available
+          const agentDescriptions = step.agents.map(agent => {
             const type = subagentTypes.find(t => t.id === agent.typeId)
-            return type?.name || agent.typeId
-          }).join(' + ')
-          phases.push(`${i + 1}. **${step.name}** (PARALLEL: ${agentNames})`)
+            const name = type?.name || agent.typeId
+            if (agent.customPrompt) {
+              return `${name}: "${agent.customPrompt}"`
+            }
+            return name
+          }).join(', ')
+          phases.push(`${i + 1}. **${step.name}** (PARALLEL: ${agentDescriptions})`)
         } else {
-          // Single agent
-          const type = subagentTypes.find(t => t.id === step.agents[0].typeId)
-          phases.push(`${i + 1}. **${step.name}** using ${type?.name || step.agents[0].typeId} agent`)
+          // Single agent - show custom prompt if available
+          const agent = step.agents[0]
+          const type = subagentTypes.find(t => t.id === agent.typeId)
+          const agentName = type?.name || agent.typeId
+          if (agent.customPrompt) {
+            phases.push(`${i + 1}. **${step.name}** using ${agentName}: "${agent.customPrompt}"`)
+          } else {
+            phases.push(`${i + 1}. **${step.name}** using ${agentName} agent`)
+          }
         }
       }
 
