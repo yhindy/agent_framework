@@ -444,7 +444,7 @@ The framework supports two configuration formats:
 ### Agent Archive
 When an agent is deleted, its metadata is preserved in an archive for historical reference.
 
-- **Storage Location**: `minions/archive/` directory in the project
+- **Storage Location**: `.minions/archive/` directory in the project
 - **Archive Format**: JSON files named `{agentId}.json`
 - **Preserved Data** (ArchivedAgent interface):
   - `id`, `branchName`, `prompt`, `status`, `tool`, `model`

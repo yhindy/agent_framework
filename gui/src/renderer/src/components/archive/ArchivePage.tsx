@@ -5,26 +5,48 @@ import { ClockIcon, RefreshIcon } from '../icons'
 import { useSnackbar } from '../../contexts/SnackbarContext'
 import './ArchivePage.css'
 
+// Extended type to include project info
+interface ArchiveWithProject extends ArchivedAgent {
+  projectPath: string
+  projectName: string
+}
+
 export function ArchivePage(): JSX.Element {
-  const [archives, setArchives] = useState<ArchivedAgent[]>([])
+  const [archives, setArchives] = useState<ArchiveWithProject[]>([])
   const [loading, setLoading] = useState(true)
   const [restoring, setRestoring] = useState<string | null>(null)
-  const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null)
   const navigate = useNavigate()
   const { addSnackbar } = useSnackbar()
 
   const loadArchives = async () => {
     setLoading(true)
     try {
-      // Get current project first
-      const project = await window.electronAPI.getCurrentProject()
-      if (project) {
-        setCurrentProjectPath(project.path)
-        const result = await window.electronAPI.listArchivedAgents(project.path)
-        setArchives(result)
-      } else {
-        setArchives([])
+      // Get all active (open) projects and fetch archives from each
+      const activeProjects = await window.electronAPI.getActiveProjects()
+      const allArchives: ArchiveWithProject[] = []
+
+      for (const project of activeProjects) {
+        try {
+          const projectArchives = await window.electronAPI.listArchivedAgents(project.path)
+          // Add project info to each archive
+          for (const archive of projectArchives) {
+            allArchives.push({
+              ...archive,
+              projectPath: project.path,
+              projectName: project.name || project.path.split('/').pop() || 'Unknown'
+            })
+          }
+        } catch (error) {
+          console.warn(`Failed to load archives for ${project.path}:`, error)
+        }
       }
+
+      // Sort by archivedAt descending
+      allArchives.sort((a, b) =>
+        new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime()
+      )
+
+      setArchives(allArchives)
     } catch (error) {
       console.error('Failed to load archives:', error)
       addSnackbar({ title: 'Error', messages: ['Failed to load archives'] })
@@ -37,16 +59,11 @@ export function ArchivePage(): JSX.Element {
     loadArchives()
   }, [])
 
-  const handleRestore = async (archive: ArchivedAgent) => {
-    if (!currentProjectPath) {
-      addSnackbar({ title: 'Error', messages: ['Cannot restore: no project selected'] })
-      return
-    }
-
+  const handleRestore = async (archive: ArchiveWithProject) => {
     setRestoring(archive.archiveId)
     try {
       const agent = await window.electronAPI.restoreArchivedAgent(
-        currentProjectPath,
+        archive.projectPath,
         archive.archiveId
       )
       addSnackbar({ title: 'Success', messages: [`Agent restored as ${agent.agentId}`] })
@@ -152,6 +169,7 @@ export function ArchivePage(): JSX.Element {
             >
               <div className="archive-item-main">
                 <div className="archive-item-header">
+                  <span className="archive-item-project">{archive.projectName}</span>
                   <span className="archive-item-branch">{archive.branch}</span>
                   <span
                     className="archive-status-badge"

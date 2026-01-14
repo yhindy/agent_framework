@@ -142,7 +142,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -185,7 +185,7 @@ branch refs/heads/main
 
       // Verify writeFileSync was called with correct path
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringMatching(/\/test\/project\/minions\/archive\/test-project-abc123-\d+\.json$/),
+        expect.stringMatching(/\/test\/project\/\.minions\/archive\/test-project-abc123-\d+\.json$/),
         expect.any(String)
       )
     })
@@ -196,7 +196,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return false // Archive dir doesn't exist
+        if (path === `${projectPath}/.minions/archive`) return false // Archive dir doesn't exist
         return false
       })
 
@@ -219,7 +219,7 @@ branch refs/heads/main
 
       // Verify mkdirSync was called to create archive directory
       expect(fs.mkdirSync).toHaveBeenCalledWith(
-        `${projectPath}/minions/archive`,
+        `${projectPath}/.minions/archive`,
         { recursive: true }
       )
     })
@@ -280,7 +280,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -329,7 +329,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -371,7 +371,7 @@ branch refs/heads/main
   describe('listArchivedAgents', () => {
     it('should return empty array when no archives exist', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -384,7 +384,7 @@ branch refs/heads/main
 
     it('should return empty array when archive directory does not exist', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return false
+        if (path === `${projectPath}/.minions/archive`) return false
         return false
       })
 
@@ -426,7 +426,7 @@ branch refs/heads/main
       }
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -436,10 +436,10 @@ branch refs/heads/main
       ] as any)
 
       vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/agent-1-1700000000000.json`) {
+        if (path === `${projectPath}/.minions/archive/agent-1-1700000000000.json`) {
           return JSON.stringify(archive1)
         }
-        if (path === `${projectPath}/minions/archive/agent-2-1700000001000.json`) {
+        if (path === `${projectPath}/.minions/archive/agent-2-1700000001000.json`) {
           return JSON.stringify(archive2)
         }
         throw new Error(`File not found: ${path}`)
@@ -499,7 +499,7 @@ branch refs/heads/main
       }
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -542,7 +542,7 @@ branch refs/heads/main
       }
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -576,7 +576,7 @@ branch refs/heads/main
 
     it('should filter out non-json files', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -597,7 +597,7 @@ branch refs/heads/main
   describe('getArchivedAgent', () => {
     it('should return null for non-existent archive', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/nonexistent.json`) return false
+        if (path === `${projectPath}/.minions/archive/nonexistent.json`) return false
         return false
       })
 
@@ -628,12 +628,12 @@ branch refs/heads/main
       }
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/${archiveId}.json`) return true
+        if (path === `${projectPath}/.minions/archive/${archiveId}.json`) return true
         return false
       })
 
       vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/${archiveId}.json`) {
+        if (path === `${projectPath}/.minions/archive/${archiveId}.json`) {
           return JSON.stringify(expectedArchive)
         }
         throw new Error(`File not found: ${path}`)
@@ -652,12 +652,12 @@ branch refs/heads/main
       const archiveId = 'corrupted-archive'
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/${archiveId}.json`) return true
+        if (path === `${projectPath}/.minions/archive/${archiveId}.json`) return true
         return false
       })
 
       vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
-        if (path === `${projectPath}/minions/archive/${archiveId}.json`) {
+        if (path === `${projectPath}/.minions/archive/${archiveId}.json`) {
           return '{ corrupted json'
         }
         throw new Error(`File not found: ${path}`)
@@ -713,7 +713,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -750,7 +750,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 
@@ -791,7 +791,7 @@ branch refs/heads/main
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
-        if (path === `${projectPath}/minions/archive`) return true
+        if (path === `${projectPath}/.minions/archive`) return true
         return false
       })
 

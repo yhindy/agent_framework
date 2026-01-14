@@ -55,7 +55,7 @@ describe('AgentService - restoreArchivedAgent', () => {
   describe('restoreArchivedAgent', () => {
     it('should create new assignment with archived agent configuration', async () => {
       // Mock getArchivedAgent to return test data
-      const archivePath = `${mockProjectPath}/minions/archive/${mockArchiveId}.json`
+      const archivePath = `${mockProjectPath}/.minions/archive/${mockArchiveId}.json`
       vi.mocked(existsSync).mockImplementation((path) => path === archivePath)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockArchivedAgent))
 
@@ -93,7 +93,7 @@ describe('AgentService - restoreArchivedAgent', () => {
     })
 
     it('should generate new branch name with -restored suffix', async () => {
-      const archivePath = `${mockProjectPath}/minions/archive/${mockArchiveId}.json`
+      const archivePath = `${mockProjectPath}/.minions/archive/${mockArchiveId}.json`
       vi.mocked(existsSync).mockImplementation((path) => path === archivePath)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockArchivedAgent))
 
@@ -115,7 +115,7 @@ describe('AgentService - restoreArchivedAgent', () => {
 
     it('should handle archived agent without model field', async () => {
       const archivedAgentNoModel = { ...mockArchivedAgent, model: undefined }
-      const archivePath = `${mockProjectPath}/minions/archive/${mockArchiveId}.json`
+      const archivePath = `${mockProjectPath}/.minions/archive/${mockArchiveId}.json`
       vi.mocked(existsSync).mockImplementation((path) => path === archivePath)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(archivedAgentNoModel))
 
@@ -129,7 +129,7 @@ describe('AgentService - restoreArchivedAgent', () => {
 
     it('should handle archived agent without prompt', async () => {
       const archivedAgentNoPrompt = { ...mockArchivedAgent, prompt: undefined }
-      const archivePath = `${mockProjectPath}/minions/archive/${mockArchiveId}.json`
+      const archivePath = `${mockProjectPath}/.minions/archive/${mockArchiveId}.json`
       vi.mocked(existsSync).mockImplementation((path) => path === archivePath)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(archivedAgentNoPrompt))
 
@@ -143,7 +143,7 @@ describe('AgentService - restoreArchivedAgent', () => {
 
     it('should preserve tool type when restoring', async () => {
       const cursorAgent = { ...mockArchivedAgent, tool: 'cursor-cli' }
-      const archivePath = `${mockProjectPath}/minions/archive/${mockArchiveId}.json`
+      const archivePath = `${mockProjectPath}/.minions/archive/${mockArchiveId}.json`
       vi.mocked(existsSync).mockImplementation((path) => path === archivePath)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(cursorAgent))
 

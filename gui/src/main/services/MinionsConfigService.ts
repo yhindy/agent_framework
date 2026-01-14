@@ -196,10 +196,12 @@ export class MinionsConfigService {
     const minionsDir = join(projectPath, '.minions')
     const agentsDir = join(minionsDir, 'agents')
     const cacheDir = join(minionsDir, 'cache')
+    const archiveDir = join(minionsDir, 'archive')
 
     mkdirSync(minionsDir, { recursive: true })
     mkdirSync(agentsDir, { recursive: true })
     mkdirSync(cacheDir, { recursive: true })
+    mkdirSync(archiveDir, { recursive: true })
   }
 
   /**
