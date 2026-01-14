@@ -2,9 +2,10 @@
   "appId": "com.minion-laboratory.app",
   "productName": "Minion Laboratory",
   "electronVersion": "28.2.3",
-  "icon": "icon.png",
+  "publish": null,
   "directories": {
-    "output": "dist"
+    "output": "dist",
+    "buildResources": "resources"
   },
   "files": [
     "out/**/*"
@@ -18,17 +19,14 @@
   ],
   "mac": {
     "category": "public.app-category.developer-tools",
-    "target": ["dmg"],
-    "icon": "icon.icns"
+    "target": ["dmg"]
   },
   "win": {
-    "target": ["nsis"],
-    "icon": "icon.ico"
+    "target": ["nsis"]
   },
   "linux": {
     "target": ["AppImage"],
-    "category": "Development",
-    "icon": "icon.png"
+    "category": "Development"
   }
 }
 
