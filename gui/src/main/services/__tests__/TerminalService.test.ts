@@ -19,7 +19,9 @@ vi.mock('node-pty', () => ({
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   existsSync: vi.fn(),
-  statSync: vi.fn()
+  statSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn()
 }))
 
 // Mock child_process
@@ -602,6 +604,7 @@ describe('Super Minion System Prompt', () => {
   let mockMainWindow: any
   let mockPty: any
   let mockAgentService: any
+  let mockWorkflowService: any
 
   // Common test data
   const TEST_PROJECT_PATH = '/path/to/project'
@@ -611,11 +614,22 @@ describe('Super Minion System Prompt', () => {
   const SUPER_MINION_AGENT_INFO = { isSuperMinion: true }
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
-  const ACCEPTANCE_CRITERIA_KEYWORDS = [
-    'ACCEPTANCE CRITERIA',
-    'AskUserQuestion',
-    'PHASE 1',
-    'WAIT for explicit'
+  // Mock workflow configuration (new simplified model)
+  const MOCK_WORKFLOW = {
+    id: 'test-workflow',
+    name: 'Test Workflow',
+    steps: [
+      { id: 'step-1', name: 'Design Phase', agents: ['planner'] },
+      { id: 'step-2', name: 'Implementation', agents: ['dev'] },
+      { id: 'step-3', name: 'Test & Review', agents: ['tester', 'reviewer'] }
+    ]
+  }
+
+  const MOCK_SUBAGENT_TYPES = [
+    { id: 'planner', name: 'Planner', description: 'Plans the work' },
+    { id: 'dev', name: 'Developer', description: 'Implements code' },
+    { id: 'tester', name: 'Tester', description: 'Tests the code' },
+    { id: 'reviewer', name: 'Reviewer', description: 'Reviews the code' }
   ]
 
   // Helper to get the command written to PTY
@@ -660,11 +674,17 @@ describe('Super Minion System Prompt', () => {
       getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
     }
 
-    vi.mocked(fs.existsSync).mockReturnValue(true)
+    mockWorkflowService = {
+      getActiveWorkflow: vi.fn().mockReturnValue(MOCK_WORKFLOW),
+      getSubagentTypes: vi.fn().mockReturnValue(MOCK_SUBAGENT_TYPES),
+      generateRulesMarkdown: vi.fn().mockReturnValue('# Workflow Rules\n\nThis is the workflow rules markdown.')
+    }
+
     setupAgentInfo(SUPER_MINION_AGENT_INFO)
 
     terminalService = new TerminalService(mockMainWindow)
     terminalService.setAgentService(mockAgentService)
+    terminalService.setWorkflowService(mockWorkflowService)
   })
 
   afterEach(() => {
@@ -676,16 +696,21 @@ describe('Super Minion System Prompt', () => {
 
     const command = getWrittenCommand()
     expect(command).toContain('--system-prompt-file')
-    expect(command).toContain(SUPER_MINION_RULES_PATH)
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalled()
   })
 
-  it('should include acceptance criteria instructions in planning prompt for super minion', async () => {
+  it('should include workflow-aware prompt for super minion', async () => {
     await startAgent()
 
-    const command = getWrittenCommand()
-    ACCEPTANCE_CRITERIA_KEYWORDS.forEach(keyword => {
-      expect(command).toContain(keyword)
-    })
+    // Verify generateRulesMarkdown was called with the workflow
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalledWith(MOCK_WORKFLOW)
+
+    // Check that the rules file was written
+    expect(fs.writeFileSync).toHaveBeenCalled()
+    const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      call => typeof call[0] === 'string' && call[0].includes('dynamic-rules.md')
+    )
+    expect(writeCall).toBeDefined()
   })
 
   it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
@@ -695,27 +720,52 @@ describe('Super Minion System Prompt', () => {
 
     const command = getWrittenCommand()
     expect(command).not.toContain('--system-prompt-file')
-    expect(command).not.toContain('super-minion-rules.md')
   })
 
-  it('should NOT include acceptance criteria instructions for regular planning mode', async () => {
+  it('should NOT include workflow-aware prompt for regular planning mode', async () => {
     setupAgentInfo(REGULAR_AGENT_INFO)
 
     await startAgent(TEST_PROMPT, 'agent-2')
 
     const command = getWrittenCommand()
-    expect(command).not.toContain('5-PHASE WORKFLOW')
-    expect(command).not.toContain('ACCEPTANCE CRITERIA')
+    expect(command).toContain('Create a plan for: Create feature X')
+    expect(command).not.toContain('**Super Minion**')
+    expect(command).not.toContain('## Your Mission')
   })
 
-  it('should include 5-phase workflow with mandatory design and review phases', async () => {
+  it('should include workflow in rules file', async () => {
     await startAgent('Build feature Y')
 
+    // Verify generateRulesMarkdown was called
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalled()
+
+    // The command should include --system-prompt-file pointing to the rules
     const command = getWrittenCommand()
-    expect(command).toContain('PHASE 2 - ENGINEERING DESIGN')
-    expect(command).toContain('PHASE 3 - DESIGN REVIEW')
-    expect(command).toContain('MANDATORY')
-    expect(command).toContain('NEVER skip')
+    expect(command).toContain('--system-prompt-file')
+    expect(command).toContain('dynamic-rules.md')
+  })
+
+  it('should write rules to dynamic-rules.md file', async () => {
+    await startAgent()
+
+    // Check the rules file was created with the generated markdown
+    const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      call => typeof call[0] === 'string' && call[0].includes('dynamic-rules.md')
+    )
+    expect(writeCall).toBeDefined()
+    // The content should be from generateRulesMarkdown
+    expect(writeCall?.[1]).toContain('# Workflow Rules')
+  })
+
+  it('should use fallback prompt if workflow service fails', async () => {
+    mockWorkflowService.getActiveWorkflow.mockImplementation(() => {
+      throw new Error('Workflow not found')
+    })
+
+    await startAgent('Test prompt')
+
+    const command = getWrittenCommand()
+    expect(command).toContain('Create a plan for: Test prompt')
   })
 })
 

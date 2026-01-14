@@ -1,0 +1,184 @@
+/* Floating Add Button */
+
+.floating-add-button {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  z-index: var(--z-toast);
+}
+
+.fab-trigger {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  border: none;
+  color: var(--text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  transition: all var(--transition-base);
+}
+
+.fab-trigger:hover {
+  transform: scale(1.08);
+  box-shadow: var(--shadow-xl), 0 0 32px var(--accent-primary-glow);
+}
+
+.fab-trigger:focus {
+  outline: none;
+  box-shadow: var(--shadow-xl), 0 0 0 3px var(--accent-primary-dim);
+}
+
+.fab-trigger.open {
+  transform: rotate(45deg);
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.fab-trigger.open:hover {
+  transform: rotate(45deg) scale(1.05);
+}
+
+.fab-trigger svg {
+  width: 24px;
+  height: 24px;
+  transition: transform var(--transition-base);
+}
+
+.fab-popover {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  right: 0;
+  width: 280px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-4);
+  transform-origin: bottom right;
+  animation: popoverEnter var(--transition-base) ease-out;
+}
+
+@keyframes popoverEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.fab-popover-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  text-align: center;
+}
+
+.fab-step-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.fab-step-option {
+  background: var(--bg-overlay);
+  border: 2px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.fab-step-option:hover {
+  transform: scale(1.05);
+  border-color: currentColor;
+}
+
+.fab-step-option:focus {
+  outline: none;
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+/* Agent type colors */
+.fab-step-option.agent-explore { color: var(--color-info); }
+.fab-step-option.agent-explore:hover { background: var(--color-info-dim); }
+
+.fab-step-option.agent-plan { color: var(--color-warning); }
+.fab-step-option.agent-plan:hover { background: var(--color-warning-dim); }
+
+.fab-step-option.agent-implement { color: var(--color-success); }
+.fab-step-option.agent-implement:hover { background: var(--color-success-dim); }
+
+.fab-step-option.agent-debug { color: var(--color-error); }
+.fab-step-option.agent-debug:hover { background: var(--color-error-dim); }
+
+.fab-step-option.agent-review { color: var(--color-info); }
+.fab-step-option.agent-review:hover { background: var(--color-info-dim); }
+
+.fab-step-option.agent-test { color: var(--color-success); }
+.fab-step-option.agent-test:hover { background: var(--color-success-dim); }
+
+.fab-step-option.agent-document { color: var(--text-muted); }
+.fab-step-option.agent-document:hover { background: var(--bg-muted); }
+
+.fab-step-option.agent-simplify { color: var(--color-info); }
+.fab-step-option.agent-simplify:hover { background: var(--color-info-dim); }
+
+.fab-step-icon {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fab-step-name {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-trigger {
+    transition: opacity var(--transition-base);
+  }
+
+  .fab-trigger.open {
+    transform: none;
+  }
+
+  .fab-trigger.open:hover {
+    transform: none;
+  }
+
+  .fab-popover {
+    animation: fadeInOnly var(--transition-base) ease-out;
+  }
+
+  @keyframes fadeInOnly {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .fab-step-option:hover {
+    transform: none;
+  }
+}

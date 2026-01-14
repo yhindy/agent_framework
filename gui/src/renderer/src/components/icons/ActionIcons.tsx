@@ -85,3 +85,44 @@ export function PlusCircleIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Workflow icon - Connected nodes representing workflow steps */
+export function WorkflowIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="workflow-icon">
+      {/* Top node */}
+      <circle cx="12" cy="5" r="2.5" stroke="currentColor" />
+      {/* Connection line from top to middle */}
+      <line x1="12" y1="7.5" x2="12" y2="9.5" stroke="currentColor" strokeLinecap="round" />
+      {/* Middle node */}
+      <circle cx="12" cy="12" r="2.5" stroke="currentColor" />
+      {/* Connection line from middle splitting to bottom nodes */}
+      <path d="M12 14.5L12 16L7 16L7 17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 16L17 16L17 17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Bottom left node */}
+      <circle cx="7" cy="19.5" r="2" stroke="currentColor" />
+      {/* Bottom right node */}
+      <circle cx="17" cy="19.5" r="2" stroke="currentColor" />
+    </BaseIcon>
+  )
+}
+
+/** Edit icon - Pencil for editing */
+export function EditIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="edit-icon">
+      <path
+        d="M16.474 5.408l2.118 2.117m-.756-3.982L12.109 9.27a2.118 2.118 0 00-.58 1.082L11 13l2.648-.53c.41-.082.786-.283 1.082-.579l5.727-5.727a1.853 1.853 0 10-2.621-2.621z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 15v3a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseIcon>
+  )
+}

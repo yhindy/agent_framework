@@ -57,7 +57,9 @@ export {
   FolderIcon,
   SatelliteIcon,
   RefreshIcon,
-  PlusCircleIcon
+  PlusCircleIcon,
+  WorkflowIcon,
+  EditIcon
 } from './ActionIcons'
 
 // Archive icons

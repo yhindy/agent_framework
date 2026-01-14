@@ -1,199 +1,58 @@
-# Super Minion Workflow: Default Super Minion Workflow
+# Workflow: Standard Workflow
 
-> Standard workflow matching original super-minion-rules with 5 phases
+> Standard workflow with 5 phases: explore, design, review, implement, validate
 
-Generated at: 2026-01-14T05:03:01.116Z
+## Steps
 
-## Workflow Overview
+Execute steps in order. Wait for each step to complete before starting the next.
 
-Execute the following phases in order. Each phase must complete before moving to the next.
+### Step 1: Explore Codebase
 
-### Phase 1: Explore Codebase
+**Agent**: Explorer
 
-**Execution Type**: Sequential
-**Subagent Type**: Explore
+Quick codebase reconnaissance - searches files, reads code
 
-**Instructions**:
+### Step 2: Engineering Design
 
-```
-You are an Explorer agent. Your task is to thoroughly investigate the codebase to understand context before implementation begins.
+**Agent**: Planner
 
-Focus on:
-- Finding relevant files and patterns
-- Understanding existing architecture
-- Identifying dependencies and constraints
+Architecture and design planning - creates technical specifications
 
-Report your findings clearly and concisely.
-```
+### Step 3: Design Review
 
+**Execution**: Parallel (2 agents)
 
-### Phase 2: Engineering Design
+Run these agents simultaneously:
 
-**Execution Type**: Sequential
-**Subagent Type**: Planner
+- **Reviewer**: Review the engineering design for technical correctness and best practices
+- **Reviewer**: Review the design against acceptance criteria and requirements
 
-**Instructions**:
+### Step 4: Implementation
 
-```
-You are a Planner agent. Create a detailed engineering design for the feature.
+**Agent**: Implementer
 
-Your design should include:
-- Architecture overview
-- Data models and interfaces
-- Component breakdown
-- Implementation approach
-- Testing strategy
+Full implementation following TDD - writes tests first, then code
 
-Write the design to a markdown file.
-```
+### Step 5: Validation
 
+**Execution**: Parallel (4 agents)
 
-### Phase 3: Parallel Execution Group
+Run these agents simultaneously:
 
-**Execution Type**: Parallel (2 concurrent tasks)
-
-The following steps should be executed **simultaneously**:
-
-#### 3a. Senior Engineer Review
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-#### 3b. Criteria Validation
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-**Synchronization**: Wait for ALL parallel tasks to complete before proceeding to the next phase.
-
-### Phase 4: Implementation
-
-**Execution Type**: Sequential
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-
-### Phase 5: Parallel Execution Group
-
-**Execution Type**: Parallel (4 concurrent tasks)
-
-The following steps should be executed **simultaneously**:
-
-#### 5a. Code Simplification
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-#### 5b. Test Execution
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-#### 5c. Acceptance Criteria Check
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-#### 5d. Documentation Update
-
-**Subagent Type**: Implementer
-
-**Instructions**:
-
-```
-You are an Implementer agent. Follow Test-Driven Development:
-
-1. Write failing tests first that define expected behavior
-2. Implement minimal code to make tests pass
-3. Refactor while keeping tests green
-
-Ensure your implementation is clean, well-documented, and follows existing patterns.
-```
-
-**Synchronization**: Wait for ALL parallel tasks to complete before proceeding to the next phase.
+- **Simplifier**: Code simplification - refactors, removes duplication, improves clarity
+- **Tester**: Test execution and validation - runs tests, checks coverage
+- **Reviewer**: Final code review before merge
+- **Documenter**: Documentation updates - writes READMEs, API docs, code comments
 
 ---
 
-## Subagent Type Reference
+## Available Agents
 
-### Explore (explore)
-- **Description**: Quick codebase reconnaissance - searches files, reads code, understands structure
-- **Capabilities**: read-only
-
-### Implementer (general-purpose)
-- **Description**: Full implementation following TDD - writes tests first, then code
-- **Capabilities**: file-edit, test-execution
-
-### Planner (plan)
-- **Description**: Architecture and design planning - creates technical specifications
-- **Capabilities**: read-only
-
-### Debugger (debugger)
-- **Description**: Debug unexpected behavior - traces bugs, adds logging, fixes issues
-- **Capabilities**: file-edit, test-execution
+- **Explorer** (`explore`): Quick codebase reconnaissance - searches files, reads code
+- **Planner** (`plan`): Architecture and design planning - creates technical specifications
+- **Reviewer** (`review`): Code review and validation - checks quality, patterns, and requirements
+- **Implementer** (`implement`): Full implementation following TDD - writes tests first, then code
+- **Tester** (`test`): Test execution and validation - runs tests, checks coverage
+- **Debugger** (`debug`): Debug unexpected behavior - traces bugs, adds logging, fixes issues
+- **Documenter** (`document`): Documentation updates - writes READMEs, API docs, code comments
+- **Simplifier** (`simplify`): Code simplification - refactors, removes duplication, improves clarity

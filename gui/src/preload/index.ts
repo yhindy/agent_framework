@@ -198,6 +198,21 @@ const api = {
     return () => ipcRenderer.removeListener('agent:resumeFailed', subscription)
   },
 
+  // Workflow APIs
+  getWorkflowConfig: () => ipcRenderer.invoke('workflow:getAllWorkflows').then((workflows: any[]) => ({ workflows })),
+  getSubagentTypes: () => ipcRenderer.invoke('workflow:getSubagentTypes'),
+  getActiveWorkflow: (projectPath: string) => ipcRenderer.invoke('workflow:getActiveWorkflow', projectPath),
+  getAllWorkflows: () => ipcRenderer.invoke('workflow:getAllWorkflows'),
+  createWorkflow: (name: string, description?: string) => ipcRenderer.invoke('workflow:createWorkflow', name, description),
+  updateWorkflow: (workflowId: string, updates: any) => ipcRenderer.invoke('workflow:updateWorkflow', workflowId, updates),
+  deleteWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:deleteWorkflow', workflowId),
+  addStep: (workflowId: string, name: string, agents: string[]) => ipcRenderer.invoke('workflow:addStep', workflowId, name, agents),
+  updateStep: (workflowId: string, stepId: string, updates: any) => ipcRenderer.invoke('workflow:updateStep', workflowId, stepId, updates),
+  removeStep: (workflowId: string, stepId: string) => ipcRenderer.invoke('workflow:removeStep', workflowId, stepId),
+  generateRules: (workflowId: string) => ipcRenderer.invoke('workflow:generateRules', workflowId),
+  getWorkflowTemplates: () => ipcRenderer.invoke('workflow:getAllWorkflows'),
+  saveWorkflowAsTemplate: (workflow: any, _name: string) => ipcRenderer.invoke('workflow:createWorkflow', workflow.name, workflow.description),
+
   // Setup Wizard APIs
   checkWizard: (projectPath: string) => ipcRenderer.invoke('wizard:check', projectPath),
   startWizard: (projectPath: string) => ipcRenderer.invoke('wizard:start', projectPath),

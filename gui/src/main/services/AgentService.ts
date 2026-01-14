@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
+// WorkflowService not directly used in AgentService with simplified model
 import { createLogger } from './logger'
 
 const log = createLogger('AgentService')
@@ -975,6 +976,11 @@ export class AgentService {
       children: [],
       pendingPlans: []
     } as any)
+
+    // Workflow saving removed in simplification - workflows are managed in-memory
+    if (assignment.workflow) {
+      log.debug(`Super minion ${result.agentId} using workflow: ${assignment.workflow.name}`)
+    }
 
     // Return the updated info
     return {

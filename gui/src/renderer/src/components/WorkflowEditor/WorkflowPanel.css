@@ -1,0 +1,589 @@
+/* =============================================================================
+   WORKFLOW PANEL - Simplified Design
+   ============================================================================= */
+
+/* Backdrop overlay */
+.workflow-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: calc(var(--z-modal) - 1);
+  opacity: 0;
+  transition: opacity var(--transition-slow);
+  pointer-events: none;
+}
+
+.workflow-backdrop.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Main panel */
+.workflow-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+  z-index: var(--z-modal);
+  transform: translateX(100%);
+  transition: transform var(--transition-slow);
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-panel.open {
+  transform: translateX(0);
+}
+
+/* Panel header */
+.workflow-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+}
+
+.workflow-close-btn {
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+}
+
+.workflow-close-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.workflow-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+/* Panel content */
+.workflow-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+/* =============================================================================
+   SIMPLIFIED PIPELINE
+   ============================================================================= */
+
+.simple-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pipeline-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.pipeline-connector-line {
+  width: 2px;
+  height: 16px;
+  background: var(--border-default);
+  margin-left: 24px;
+}
+
+/* Step card */
+.simple-step-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  transition: all var(--transition-fast);
+}
+
+.simple-step-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.simple-step-card.parallel {
+  border-left: 3px solid var(--color-warning);
+}
+
+/* Step header */
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.step-number {
+  width: 24px;
+  height: 24px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.step-name {
+  flex: 1;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.step-name:hover {
+  color: var(--accent-primary);
+}
+
+.step-name-input {
+  flex: 1;
+  background: var(--bg-base);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.step-name-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+.parallel-badge {
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+  border-radius: var(--radius-sm);
+}
+
+.step-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.step-action-btn {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-disabled);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.step-action-btn:hover:not(:disabled) {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.step-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.step-action-btn.delete:hover {
+  background: rgba(255, 82, 82, 0.1);
+  color: var(--color-error);
+}
+
+/* Step agents */
+.step-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.agent-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.agent-chip.agent-explore {
+  background: rgba(68, 138, 255, 0.1);
+  color: var(--color-info);
+  border-color: rgba(68, 138, 255, 0.2);
+}
+
+.agent-chip.agent-implement {
+  background: rgba(0, 200, 83, 0.1);
+  color: var(--color-success);
+  border-color: rgba(0, 200, 83, 0.2);
+}
+
+.agent-chip.agent-plan {
+  background: rgba(255, 171, 0, 0.1);
+  color: var(--color-warning);
+  border-color: rgba(255, 171, 0, 0.2);
+}
+
+.agent-chip.agent-debug {
+  background: rgba(255, 82, 82, 0.1);
+  color: var(--color-error);
+  border-color: rgba(255, 82, 82, 0.2);
+}
+
+.agent-chip.agent-review {
+  background: rgba(156, 39, 176, 0.1);
+  color: #9c27b0;
+  border-color: rgba(156, 39, 176, 0.2);
+}
+
+.agent-chip.agent-test {
+  background: rgba(0, 188, 212, 0.1);
+  color: #00bcd4;
+  border-color: rgba(0, 188, 212, 0.2);
+}
+
+.agent-chip.agent-document {
+  background: rgba(121, 85, 72, 0.1);
+  color: #795548;
+  border-color: rgba(121, 85, 72, 0.2);
+}
+
+.agent-chip.agent-simplify {
+  background: rgba(96, 125, 139, 0.1);
+  color: #607d8b;
+  border-color: rgba(96, 125, 139, 0.2);
+}
+
+/* Agent item wrapper - scoped to workflow panel to avoid conflicts with global sidebar */
+.workflow-panel .agent-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.agent-edit-btn,
+.agent-remove-btn {
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: var(--space-1);
+  transition: opacity var(--transition-fast);
+}
+
+.agent-edit-btn:hover,
+.agent-remove-btn:hover {
+  opacity: 1;
+}
+
+/* Custom prompt display */
+.agent-custom-prompt {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-custom-prompt:hover {
+  background: var(--bg-overlay);
+}
+
+/* Prompt editor */
+.prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg-muted);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-1);
+}
+
+.prompt-input {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.prompt-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.prompt-cancel-btn,
+.prompt-save-btn {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.prompt-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.prompt-cancel-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.prompt-save-btn {
+  background: var(--accent-primary);
+  border: none;
+  color: white;
+}
+
+.prompt-save-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Add agent */
+.add-agent-wrapper {
+  position: relative;
+}
+
+.add-agent-btn {
+  width: 28px;
+  height: 28px;
+  background: var(--bg-muted);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.add-agent-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  border-style: solid;
+}
+
+.agent-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.agent-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.agent-option:hover {
+  background: var(--bg-muted);
+}
+
+.agent-option.disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+/* Add step section */
+.add-step-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.add-step-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-muted);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-step-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  border-style: solid;
+}
+
+.add-step-dropdown {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.add-step-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cancel-add-btn {
+  padding: var(--space-2);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-align: center;
+}
+
+.cancel-add-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Empty state */
+.workflow-empty {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+
+.workflow-empty p {
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.add-first-step-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-first-step-btn:hover {
+  border-color: currentColor;
+}
+
+.add-first-step-btn.agent-explore {
+  color: var(--color-info);
+}
+
+.add-first-step-btn.agent-plan {
+  color: var(--color-warning);
+}
+
+.add-first-step-btn.agent-review {
+  color: #9c27b0;
+}
+
+.add-first-step-btn.agent-implement {
+  color: var(--color-success);
+}
+
+.add-first-step-btn.agent-test {
+  color: #00bcd4;
+}
+
+.add-first-step-btn.agent-debug {
+  color: var(--color-error);
+}
+
+.add-first-step-btn.agent-document {
+  color: #795548;
+}
+
+.add-first-step-btn.agent-simplify {
+  color: #607d8b;
+}

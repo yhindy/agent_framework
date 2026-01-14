@@ -6,6 +6,7 @@ import {
   CLAUDE_MODEL_DISPLAY_NAMES,
   CURSOR_CLI_MODEL_DISPLAY_NAMES
 } from '../../../shared/types/settings'
+import WorkflowSettings from './WorkflowSettings'
 import './SettingsPage.css'
 
 interface SettingSelectProps<T extends string> {
@@ -319,6 +320,9 @@ function SettingsPage(): JSX.Element {
             </div>
           </div>
         </section>
+
+        {/* Workflow Templates Section */}
+        <WorkflowSettings />
 
         {/* Feedback Section */}
         <section className="settings-section">

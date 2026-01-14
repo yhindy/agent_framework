@@ -6,7 +6,8 @@ import TestEnvTerminal from './TestEnvTerminal'
 import TaskStatusCard from './TaskStatusCard'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
-import { CrownIcon, TerminalIcon, StopIcon, PlayIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from './icons'
+import { CrownIcon, TerminalIcon, StopIcon, PlayIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, WorkflowIcon } from './icons'
+import { WorkflowPanel } from './WorkflowEditor/WorkflowPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
@@ -30,6 +31,9 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
 
   // Task sidebar collapse state
   const [isTaskSidebarCollapsed, setIsTaskSidebarCollapsed] = useState(false)
+
+  // Workflow editor panel state
+  const [isWorkflowEditorOpen, setIsWorkflowEditorOpen] = useState(false)
 
   // Load task sidebar collapsed state from localStorage
   useEffect(() => {
@@ -295,10 +299,20 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   // Derive status for super agent (use status field if available, otherwise derive from state)
   const agentStatus = agent.status || (isRunning ? 'working' : 'idle')
 
-  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
+  // Build header actions - consistent order: Workflow, PR Status/Make PR, Cursor, Cleanup
   // This logic is IDENTICAL to AgentView for consistency
   const headerActions = (
     <>
+      {/* Workflow Button - only for Super Minions */}
+      <button
+        onClick={() => setIsWorkflowEditorOpen(true)}
+        className="workflow-config-btn"
+        title="Configure workflow"
+      >
+        <WorkflowIcon size="sm" />
+        Workflow
+      </button>
+
       {/* PR Status Badge or Make PR Button - logic matches AgentView exactly */}
       {agent?.prStatus && agent.prUrl ? (
         <button
@@ -539,6 +553,14 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
             </div>
           </div>
         </div>
+      )}
+
+      {agent.project && (
+        <WorkflowPanel
+          isOpen={isWorkflowEditorOpen}
+          onClose={() => setIsWorkflowEditorOpen(false)}
+          projectPath={agent.project}
+        />
       )}
 
     </div>

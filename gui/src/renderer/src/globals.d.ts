@@ -108,6 +108,21 @@ declare global {
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
       openFeedback: () => Promise<void>
 
+      // Workflow APIs
+      getWorkflowConfig: () => Promise<{ workflows: import('../../main/services/types/WorkflowTypes').WorkflowConfig[] }>
+      getSubagentTypes: () => Promise<import('../../main/services/types/WorkflowTypes').SubagentType[]>
+      getActiveWorkflow: (projectPath: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
+      getAllWorkflows: () => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig[]>
+      createWorkflow: (name: string, description?: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
+      updateWorkflow: (workflowId: string, updates: Partial<import('../../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
+      deleteWorkflow: (workflowId: string) => Promise<void>
+      addStep: (workflowId: string, name: string, agents: string[]) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowStep>
+      updateStep: (workflowId: string, stepId: string, updates: Partial<import('../../main/services/types/WorkflowTypes').WorkflowStep>) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowStep>
+      removeStep: (workflowId: string, stepId: string) => Promise<void>
+      generateRules: (workflowId: string) => Promise<string>
+      getWorkflowTemplates: () => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig[]>
+      saveWorkflowAsTemplate: (workflow: import('../../main/services/types/WorkflowTypes').WorkflowConfig, name: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
+
       // Setup Wizard APIs
       checkWizard: (projectPath: string) => Promise<{ needsWizard: boolean; hasLegacy: boolean }>
       startWizard: (projectPath: string) => Promise<any>

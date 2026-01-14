@@ -77,6 +77,16 @@ declare const api: {
         agentId: string;
         reason: string;
     }) => void) => () => Electron.IpcRenderer;
+    // Workflow APIs
+    getWorkflowConfig: () => Promise<{ workflows: import('../main/services/types/WorkflowTypes').WorkflowConfig[] }>;
+    getSubagentTypes: () => Promise<import('../main/services/types/WorkflowTypes').SubagentType[]>;
+    getAllWorkflows: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig[]>;
+    getActiveWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    createWorkflow: (name: string, description?: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    updateWorkflow: (workflowId: string, updates: Partial<import('../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    deleteWorkflow: (workflowId: string) => Promise<void>;
+    getWorkflowTemplates: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig[]>;
+    saveWorkflowAsTemplate: (workflow: import('../main/services/types/WorkflowTypes').WorkflowConfig, name: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
     // Setup Wizard APIs
     checkWizard: (projectPath: string) => Promise<{
         needsWizard: boolean;
@@ -90,7 +100,7 @@ declare const api: {
     // Archive APIs
     listArchivedAgents: (projectPath?: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent[]>;
     getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent | null>;
-    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').AgentInfo>;
+    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').AgentInfo>
 };
 export type ElectronAPI = typeof api;
 export {};

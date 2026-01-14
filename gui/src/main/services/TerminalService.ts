@@ -1,12 +1,13 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
-import { existsSync, statSync } from 'fs'
+import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
 import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import { NotificationService } from './NotificationService'
+import { WorkflowService } from './WorkflowService'
 import {
   IdleDetector,
   CLAUDE_WORKING_PATTERNS,
@@ -53,6 +54,7 @@ export class TerminalService {
   private agentService?: AgentService
   private claudeSessionInfoService?: ClaudeSessionInfoService
   private notificationService?: NotificationService
+  private workflowService: WorkflowService | null = null
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
@@ -76,11 +78,128 @@ export class TerminalService {
     this.claudeSessionInfoService = claudeSessionInfoService
   }
 
+  setWorkflowService(service: WorkflowService): void {
+    this.workflowService = service
+  }
+
   private generateSessionId(agentId: string, worktreePath: string): string {
     // Create deterministic UUID from agentId + path
     // This ensures same agent always gets same session ID
     const input = `${agentId}:${worktreePath}`
     return uuidv5(input, this.AGENT_SESSION_NAMESPACE)
+  }
+
+  /**
+   * Get the rules path for a super minion.
+   * Uses dynamic rules from WorkflowService if available, falling back to static rules.
+   * Dynamic rules are written to the worktree's minions directory.
+   */
+  private getSuperMinionRulesPath(projectPath: string, worktreePath: string, agentId: string): string {
+    // Try to generate dynamic rules from workflow config
+    if (this.workflowService) {
+      try {
+        const activeWorkflow = this.workflowService.getActiveWorkflow(projectPath)
+        const rulesContent = this.workflowService.generateRulesMarkdown(activeWorkflow)
+
+        // Write rules to worktree's minions directory
+        const minionsDir = join(worktreePath, 'minions')
+        if (!existsSync(minionsDir)) {
+          mkdirSync(minionsDir, { recursive: true })
+        }
+
+        const rulesPath = join(minionsDir, 'dynamic-rules.md')
+        writeFileSync(rulesPath, rulesContent, 'utf-8')
+
+        log.info('Generated dynamic rules for super minion', {
+          agentId,
+          workflowId: activeWorkflow.id,
+          workflowName: activeWorkflow.name,
+          rulesPath
+        })
+
+        return rulesPath
+      } catch (error) {
+        log.warn('Failed to generate dynamic rules, falling back to static', error)
+      }
+    }
+
+    // Fall back to static rules
+    if (this.agentService) {
+      return this.agentService.getSuperMinionRulesPath()
+    }
+
+    throw new Error('Cannot get super minion rules: no AgentService or WorkflowService available')
+  }
+
+  /**
+   * Generate a concise prompt for a super minion based on its workflow.
+   * Preserves the original super minion format but with dynamic workflow phases.
+   */
+  private generateWorkflowPrompt(projectPath: string, userGoal: string): string {
+    if (!this.workflowService) {
+      return `Create a plan for: ${userGoal}`
+    }
+
+    try {
+      const workflow = this.workflowService.getActiveWorkflow(projectPath)
+      const subagentTypes = this.workflowService.getSubagentTypes()
+      const phases: string[] = []
+
+      for (let i = 0; i < workflow.steps.length; i++) {
+        const step = workflow.steps[i]
+        const isParallel = step.agents.length > 1
+
+        if (isParallel) {
+          // Multiple agents run in parallel - show each with custom prompt if available
+          const agentDescriptions = step.agents.map(agent => {
+            const type = subagentTypes.find(t => t.id === agent.typeId)
+            const name = type?.name || agent.typeId
+            if (agent.customPrompt) {
+              return `${name}: "${agent.customPrompt}"`
+            }
+            return name
+          }).join(', ')
+          phases.push(`${i + 1}. **${step.name}** (PARALLEL: ${agentDescriptions})`)
+        } else {
+          // Single agent - show custom prompt if available
+          const agent = step.agents[0]
+          const type = subagentTypes.find(t => t.id === agent.typeId)
+          const agentName = type?.name || agent.typeId
+          if (agent.customPrompt) {
+            phases.push(`${i + 1}. **${step.name}** using ${agentName}: "${agent.customPrompt}"`)
+          } else {
+            phases.push(`${i + 1}. **${step.name}** using ${agentName} agent`)
+          }
+        }
+      }
+
+      const phaseSummary = phases.join('\n')
+      const phaseCount = phases.length
+
+      return `You are a **Super Minion** - an autonomous orchestrator that delivers complex features using Claude Code's Task tool to spawn subagents. You follow a structured ${phaseCount}-phase workflow to ensure quality and alignment with requirements.
+
+## Your Mission
+
+${phaseSummary}
+
+## Core Rules
+
+1. **Delegate to subagents** - Do NOT modify files directly; use Task tool to spawn workers
+2. **Agree on criteria first** - Get explicit human approval BEFORE any other work
+3. **Use AskUserQuestion** for human input when needed
+4. **Maximize parallelism** - Spawn multiple agents in one message when tasks are independent
+
+**CRITICAL: You MUST execute phases in order (1→2→...→${phaseCount}). NEVER skip phases.**
+
+## Your Goal
+
+${userGoal}
+
+Follow the detailed workflow phases defined in your system prompt. Use the Task tool to spawn subagents for each phase.`
+    } catch (error) {
+      log.warn('Failed to generate workflow prompt, using fallback', error)
+      return `Create a plan for: ${userGoal}`
+    }
   }
 
   /**
@@ -224,8 +343,8 @@ export class TerminalService {
 
             // Add system prompt file for super minions
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion && this.agentService) {
-              const rulesPath = this.agentService.getSuperMinionRulesPath()
+            if (isSuperMinion) {
+              const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
             }
           } else if (mode === 'dev') {
@@ -233,29 +352,23 @@ export class TerminalService {
           }
 
           // Always skip permissions for teleport to bypass interactive prompts
-          // This handles: "Open Claude Code in X?" and "Trust this folder?" prompts
           args.push('--dangerously-skip-permissions')
 
-          // Add chrome flag (default true)
           if (chrome !== false) {
             args.push('--chrome')
           }
         } else if (isResume) {
-          // Resume existing session - use stored session ID (not freshly generated)
-          // This is critical for teleported sessions where claudeSessionId differs from generated UUID
+          // Resume existing session
           args = ['--resume', agentInfo!.claudeSessionId!]
 
-          // Preserve model
           if (model) args.push('--model', model)
 
-          // Preserve permission mode
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            // Preserve system prompt file for super minions
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion && this.agentService) {
-              const rulesPath = this.agentService.getSuperMinionRulesPath()
+            if (isSuperMinion) {
+              const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
             }
           } else if (mode === 'dev') {
@@ -273,17 +386,17 @@ export class TerminalService {
           }
         } else {
           // Create new session with specific ID
-          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo)
+          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo, projectPath, worktreePath)
           args.push('--session-id', sessionId)
         }
         break
       case 'codex':
         command = 'codex'
-        args = this.getCodexArgs(mode, prompt)
+        args = this.getCodexArgs(mode, prompt, agentInfo, projectPath)
         break
       case 'cursor-cli':
         command = 'cursor'
-        args = this.getCursorArgs(mode, agentId, prompt, model)
+        args = this.getCursorArgs(mode, agentId, prompt, model, agentInfo, projectPath)
         break
       case 'cursor':
         // For regular cursor, we don't spawn a terminal
@@ -332,35 +445,14 @@ export class TerminalService {
       }
     }
 
-    // Debug logging for spawn issues
-    log.debug('Spawning PTY', {
-      shell,
-      shellExists,
-      shellIsExecutable,
-      cwd: worktreePath,
-      cwdExists,
-      cwdIsDirectory,
-      agentId,
-      projectPath,
-      envVarCount: Object.keys(spawnEnv).length,
-      platform: process.platform
-    })
+    log.debug('Spawning PTY', { shell, cwd: worktreePath, agentId })
 
-    // Pre-validation warnings (don't throw - let spawn handle actual errors)
     if (!cwdExists || !cwdIsDirectory) {
-      log.warn('Working directory may not exist or is not a directory', {
-        worktreePath,
-        cwdExists,
-        cwdIsDirectory
-      })
+      log.warn('Working directory may not exist or is not a directory', { worktreePath, cwdExists, cwdIsDirectory })
     }
 
     if (!shellExists || !shellIsExecutable) {
-      log.warn('Shell may not exist or is not executable', {
-        shell,
-        shellExists,
-        shellIsExecutable
-      })
+      log.warn('Shell may not exist or is not executable', { shell, shellExists, shellIsExecutable })
     }
 
     let terminal: pty.IPty
@@ -648,7 +740,7 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any): string[] {
+  private getClaudeArgs(mode: string, agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any, projectPath?: string, worktreePath?: string): string[] {
     const args: string[] = []
 
     // Add model if specified
@@ -665,53 +757,20 @@ export class TerminalService {
       // Use Claude's plan permission mode - shows plan before executing
       args.push('--permission-mode', 'plan')
 
-      // For super minions, load the rules file as system prompt
       const isSuperMinion = agentInfo?.isSuperMinion === true
-      if (isSuperMinion && this.agentService) {
-        // Use absolute path to the bundled rules file
-        const rulesPath = this.agentService.getSuperMinionRulesPath()
+      if (isSuperMinion && projectPath && worktreePath) {
+        const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
         args.push('--system-prompt-file', rulesPath)
       }
 
       if (prompt) {
-        let planPrompt: string
-        if (isSuperMinion) {
-          planPrompt = `You are a Super Minion. Follow the 5-PHASE WORKFLOW exactly:
-
-PHASE 1 - ACCEPTANCE CRITERIA (do this first):
-1. Explore the codebase to understand context
-2. Propose numbered acceptance criteria for this task
-3. Use AskUserQuestion to ask the human to approve the criteria
-4. WAIT for explicit "Yes, proceed" before moving to Phase 2
-
-PHASE 2 - ENGINEERING DESIGN (MANDATORY - do NOT skip):
-1. Spawn a Plan agent to create .engineering-design.md
-2. The design must map each criterion to implementation details
-
-PHASE 3 - DESIGN REVIEW (MANDATORY - do NOT skip):
-1. Spawn two review agents IN PARALLEL: senior engineer + criteria validator
-2. Only proceed to Phase 4 after both reviewers approve
-
-PHASE 4 - IMPLEMENTATION:
-1. Spawn implementation agents based on the approved design
-2. Use parallel agents for independent components
-
-PHASE 5 - VERIFICATION:
-1. Spawn FOUR agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker + documentation writer
-2. Only declare completion when all four pass
-
-Task: ${prompt}
-
-CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or review phases. NEVER jump straight to implementation after acceptance criteria.`
-        } else {
-          planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
-        }
+        const planPrompt = (isSuperMinion && projectPath)
+          ? this.generateWorkflowPrompt(projectPath, prompt)
+          : `Create a plan for: ${prompt}`
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }
     } else if (mode === 'dev') {
-      // Use acceptEdits mode - auto-approves file changes for faster development
       args.push('--permission-mode', 'acceptEdits')
-
       if (prompt) {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
@@ -725,7 +784,14 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     return args
   }
 
-  private getCursorArgs(mode: string, _agentId: string, prompt?: string, model?: string): string[] {
+  private getCursorArgs(
+    mode: string,
+    _agentId: string,
+    prompt?: string,
+    model?: string,
+    agentInfo?: any,
+    projectPath?: string
+  ): string[] {
     // Use 'cursor agent' subcommand
     const args: string[] = ['agent']
 
@@ -737,7 +803,16 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     // Add prompt if provided
     if (prompt) {
       if (mode === 'planning') {
-        const planPrompt = `Create a plan for: ${prompt}`
+        // For super minions, generate workflow-aware prompt
+        const isSuperMinion = agentInfo?.isSuperMinion === true
+        let planPrompt: string
+
+        if (isSuperMinion && projectPath) {
+          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
+        } else {
+          planPrompt = `Create a plan for: ${prompt}`
+        }
+
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
@@ -747,7 +822,12 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     return args
   }
 
-  private getCodexArgs(mode: string, prompt?: string): string[] {
+  private getCodexArgs(
+    mode: string,
+    prompt?: string,
+    agentInfo?: any,
+    projectPath?: string
+  ): string[] {
     const args: string[] = []
 
     // Hardcode model to gpt-5.2-codex as per requirements
@@ -756,7 +836,16 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     // Add prompt if provided
     if (prompt) {
       if (mode === 'planning') {
-        const planPrompt = `Create a plan for: ${prompt}`
+        // For super minions, generate workflow-aware prompt
+        const isSuperMinion = agentInfo?.isSuperMinion === true
+        let planPrompt: string
+
+        if (isSuperMinion && projectPath) {
+          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
+        } else {
+          planPrompt = `Create a plan for: ${prompt}`
+        }
+
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
@@ -940,25 +1029,11 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     // Determine worktree path (shared logic with startAgent)
     const worktreePath = this.getWorktreePath(projectPath, agentId)
 
-    // Spawn PTY with a plain shell
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
-    // Debug logging to understand spawn failures
-    log.debug('Starting plain terminal', {
-      fullTerminalId,
-      shell,
-      shellExists: existsSync(shell),
-      cwd: worktreePath,
-      cwdExists: existsSync(worktreePath),
-      platform: process.platform,
-      SHELL: process.env.SHELL,
-      hasProcessEnv: !!process.env,
-      envKeys: Object.keys(process.env).length
-    })
+    log.debug('Starting plain terminal', { fullTerminalId, shell, cwd: worktreePath })
 
-    // Create a clean environment object for node-pty
-    // node-pty/posix_spawn can fail if env has non-string values or special properties
-    // Filter to only include own string properties
+    // Create clean environment for node-pty (filter to own string properties)
     const spawnEnv: Record<string, string> = {}
     for (const key in process.env) {
       if (process.env.hasOwnProperty(key) && typeof process.env[key] === 'string') {
@@ -979,18 +1054,10 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
         env: spawnEnv
       })
     } catch (error) {
-      log.error('Failed to spawn plain terminal', {
-        error,
-        shell,
-        cwd: worktreePath,
-        platform: process.platform,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined
-      })
+      log.error('Failed to spawn plain terminal', { shell, cwd: worktreePath, error })
       throw new Error(`Failed to spawn terminal shell "${shell}": ${error instanceof Error ? error.message : String(error)}`)
     }
 
-    // Create IdleDetector for plain terminals (uses combined shell + Claude patterns)
     const idleDetector = new IdleDetector(
       {
         workingPatterns: SHELL_WORKING_PATTERNS,

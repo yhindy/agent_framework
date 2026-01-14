@@ -13,7 +13,9 @@ import { PRPollingService } from './services/PRPollingService'
 import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 import { TeleportService } from './services/TeleportService'
 import { TeleportMetadataService } from './services/TeleportMetadataService'
+import { WorkflowService } from './services/WorkflowService'
 import { createLogger } from './services/logger'
+import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowTypes'
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 
@@ -35,6 +37,7 @@ let services: {
   claudeSessionInfo: ClaudeSessionInfoService
   teleport: TeleportService
   teleportMetadata: TeleportMetadataService
+  workflow: WorkflowService
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
 } | null = null
@@ -115,6 +118,8 @@ function initializeServices(): void {
   terminalService.setAgentService(agentService)
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
 
+  // WorkflowService will be set after services object is created (below)
+
   // Set service references in AgentService
   agentService.setClaudeSessionInfoService(claudeSessionInfoService)
 
@@ -133,9 +138,13 @@ function initializeServices(): void {
     claudeSessionInfo: claudeSessionInfoService,
     teleport: new TeleportService(),
     teleportMetadata: new TeleportMetadataService(),
+    workflow: new WorkflowService(),
     setupWizard: setupWizardService,
     minionsConfig: minionsConfigService
   }
+
+  // Wire up WorkflowService to TerminalService for dynamic rules generation
+  terminalService.setWorkflowService(services.workflow)
 
   // Migrate existing assignments from config.json to .agent-info files
   const activeProjects = services.project.getActiveProjects()
@@ -652,6 +661,19 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
+    // Set the active workflow for this project if provided
+    if (assignment.workflow) {
+      log.info('Creating super minion with workflow:', {
+        projectPath,
+        workflowId: assignment.workflow.id,
+        hasSteps: !!assignment.workflow.steps,
+        stepCount: assignment.workflow.steps?.length
+      })
+      services!.workflow.setActiveWorkflow(projectPath, assignment.workflow)
+    } else {
+      log.warn('Creating super minion WITHOUT workflow - will use default')
+    }
+
     const result = await services!.agent.createSuperAssignment(projectPath, assignment)
 
     // Trigger updates
@@ -1091,6 +1113,49 @@ function setupIPC(): void {
       }
     }
     return null
+  })
+
+  // Workflow Config APIs (Simplified)
+  ipcMain.handle('workflow:getSubagentTypes', async () => {
+    return services!.workflow.getSubagentTypes()
+  })
+
+  ipcMain.handle('workflow:getActiveWorkflow', async (_event, projectPath: string) => {
+    return services!.workflow.getActiveWorkflow(projectPath)
+  })
+
+  ipcMain.handle('workflow:getAllWorkflows', async () => {
+    return services!.workflow.getAllWorkflows()
+  })
+
+  ipcMain.handle('workflow:createWorkflow', async (_event, name: string, description?: string) => {
+    return services!.workflow.createWorkflow(name, description)
+  })
+
+  ipcMain.handle('workflow:updateWorkflow', async (_event, workflowId: string, updates: Partial<WorkflowConfig>) => {
+    return services!.workflow.updateWorkflow(workflowId, updates)
+  })
+
+  ipcMain.handle('workflow:deleteWorkflow', async (_event, workflowId: string) => {
+    return services!.workflow.deleteWorkflow(workflowId)
+  })
+
+  ipcMain.handle('workflow:addStep', async (_event, workflowId: string, name: string, agents: string[]) => {
+    return services!.workflow.addStep(workflowId, name, agents)
+  })
+
+  ipcMain.handle('workflow:updateStep', async (_event, workflowId: string, stepId: string, updates: Partial<WorkflowStep>) => {
+    return services!.workflow.updateStep(workflowId, stepId, updates)
+  })
+
+  ipcMain.handle('workflow:removeStep', async (_event, workflowId: string, stepId: string) => {
+    return services!.workflow.removeStep(workflowId, stepId)
+  })
+
+  ipcMain.handle('workflow:generateRules', async (_event, workflowId: string) => {
+    const workflow = services!.workflow.getWorkflow(workflowId)
+    if (!workflow) throw new Error(`Workflow not found: ${workflowId}`)
+    return services!.workflow.generateRulesMarkdown(workflow)
   })
 
   // Setup Wizard handlers
