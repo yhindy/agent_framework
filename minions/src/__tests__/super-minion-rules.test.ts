@@ -156,4 +156,38 @@ describe('Super Minion Rules', () => {
       expect(rulesContent).toContain('final verification')
     })
   })
+
+  describe('nested Super Minion spawning', () => {
+    it('should contain Spawning Super Minion Subagents section', () => {
+      expect(rulesContent).toContain('## Spawning Super Minion Subagents')
+    })
+
+    it('should document human approval mode', () => {
+      expect(rulesContent).toContain('APPROVAL_AUTHORITY: human')
+    })
+
+    it('should document parent approval mode', () => {
+      expect(rulesContent).toContain('APPROVAL_AUTHORITY: parent')
+    })
+
+    it('should document pre-approved mode', () => {
+      expect(rulesContent).toContain('APPROVAL_AUTHORITY: pre-approved')
+    })
+
+    it('should document CRITERIA_PROPOSAL return format', () => {
+      expect(rulesContent).toContain('CRITERIA_PROPOSAL')
+    })
+
+    it('should document nesting limits', () => {
+      expect(rulesContent).toContain('Maximum depth')
+    })
+
+    it('should document super-minion-config XML tag', () => {
+      expect(rulesContent).toContain('<super-minion-config>')
+    })
+
+    it('should document exploration context pass-through', () => {
+      expect(rulesContent).toContain('exploration_summary')
+    })
+  })
 })
