@@ -7,6 +7,7 @@ on:
 
 jobs:
   test:
+    name: Run tests on release tag
     runs-on: macos-latest
     timeout-minutes: 15
 
@@ -32,13 +33,11 @@ jobs:
       - name: Run unit tests
         run: npm test -w gui
 
-  build-and-release:
+  build:
+    name: Build macOS app (no release)
     needs: test
     runs-on: macos-latest
     timeout-minutes: 20
-
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout code
@@ -67,16 +66,15 @@ jobs:
           hdiutil verify "$DMG_FILE"
           echo "DMG verification passed"
 
-      - name: Get tag name
-        id: tag
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: gui/dist/*.dmg
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # TODO: Re-enable release once app issues are resolved:
+      # - App notarization (currently shows "damaged" warning on macOS)
+      # - Black screen on launch
+      # To re-enable, uncomment below and add 'permissions: contents: write' to this job
+      #
+      # - name: Create GitHub Release
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     files: gui/dist/*.dmg
+      #     generate_release_notes: true
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
