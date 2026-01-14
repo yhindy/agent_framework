@@ -147,7 +147,8 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
             modalControls.closeCurrentModal()
           }
         },
-        description: 'Close dialog or help overlay'
+        description: 'Close dialog or help overlay',
+        enabled: () => showHelpOverlay || !!modalControls?.isModalOpen
       },
       {
         key: '/',

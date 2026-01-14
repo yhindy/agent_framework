@@ -50,8 +50,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
     (event: KeyboardEvent) => {
       if (!enabled) return
 
-      // Skip if focused on input element (except for Escape which should always close modals)
-      if (disableWhenInputFocused && isInputElement(document.activeElement) && event.key !== 'Escape') {
+      // Skip if focused on input element
+      if (disableWhenInputFocused && isInputElement(document.activeElement)) {
         return
       }
 
