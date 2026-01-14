@@ -1,5 +1,7 @@
 # Agent Framework
 .agent-info
+.minions-base-info
+.minions/
 *.bak
 .engineering-design.md
 
