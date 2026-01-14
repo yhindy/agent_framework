@@ -13,7 +13,7 @@ import {
   EditIcon,
   RefreshIcon
 } from '../icons'
-import type { WorkflowStep, SubagentType } from '../../../../main/services/types/WorkflowTypes'
+import type { WorkflowStep, SubagentType, StepAgent } from '../../../../main/services/types/WorkflowTypes'
 import './WorkflowPanel.css'
 
 export interface WorkflowPipelineProps {
@@ -78,7 +78,7 @@ interface StepCardProps {
   onMoveUp: () => void
   onMoveDown: () => void
   onDelete: () => void
-  onUpdateAgents: (agents: string[]) => void
+  onUpdateAgents: (agents: StepAgent[]) => void
   onUpdateName: (name: string) => void
 }
 
@@ -96,6 +96,8 @@ function StepCard({
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(step.name)
   const [showAddAgent, setShowAddAgent] = useState(false)
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
+  const [editPromptValue, setEditPromptValue] = useState('')
   const addAgentRef = useRef<HTMLDivElement>(null)
 
   const isParallel = step.agents.length > 1
@@ -121,20 +123,40 @@ function StepCard({
     setIsEditing(false)
   }
 
-  const handleAddAgent = (agentId: string) => {
-    if (!step.agents.includes(agentId)) {
-      onUpdateAgents([...step.agents, agentId])
+  const handleAddAgent = (typeId: string) => {
+    const newAgent: StepAgent = {
+      id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      typeId
     }
+    onUpdateAgents([...step.agents, newAgent])
     setShowAddAgent(false)
   }
 
   const handleRemoveAgent = (agentId: string) => {
     if (step.agents.length > 1) {
-      onUpdateAgents(step.agents.filter(a => a !== agentId))
+      onUpdateAgents(step.agents.filter(a => a.id !== agentId))
     }
   }
 
-  const getAgentType = (id: string) => subagentTypes.find(t => t.id === id)
+  const handleEditPrompt = (agent: StepAgent) => {
+    setEditingPromptId(agent.id)
+    setEditPromptValue(agent.customPrompt || '')
+  }
+
+  const handleSavePrompt = () => {
+    if (editingPromptId) {
+      const updatedAgents = step.agents.map(a =>
+        a.id === editingPromptId
+          ? { ...a, customPrompt: editPromptValue.trim() || undefined }
+          : a
+      )
+      onUpdateAgents(updatedAgents)
+      setEditingPromptId(null)
+      setEditPromptValue('')
+    }
+  }
+
+  const getAgentType = (typeId: string) => subagentTypes.find(t => t.id === typeId)
 
   return (
     <div className={`simple-step-card ${isParallel ? 'parallel' : ''}`}>
@@ -193,20 +215,56 @@ function StepCard({
       </div>
 
       <div className="step-agents">
-        {step.agents.map((agentId) => {
-          const agent = getAgentType(agentId)
+        {step.agents.map((stepAgent) => {
+          const agentType = getAgentType(stepAgent.typeId)
+          const isEditingThisPrompt = editingPromptId === stepAgent.id
+
           return (
-            <div key={agentId} className={`agent-chip ${getAgentColorClass(agentId)}`}>
-              {getAgentIcon(agentId)}
-              <span>{agent?.name || agentId}</span>
-              {step.agents.length > 1 && (
+            <div key={stepAgent.id} className="agent-item">
+              <div className={`agent-chip ${getAgentColorClass(stepAgent.typeId)}`}>
+                {getAgentIcon(stepAgent.typeId)}
+                <span>{agentType?.name || stepAgent.typeId}</span>
                 <button
-                  className="agent-remove-btn"
-                  onClick={() => handleRemoveAgent(agentId)}
-                  title="Remove agent"
+                  className="agent-edit-btn"
+                  onClick={() => handleEditPrompt(stepAgent)}
+                  title={stepAgent.customPrompt ? 'Edit custom prompt' : 'Add custom prompt'}
                 >
-                  <XIcon size="sm" />
+                  <EditIcon size="sm" />
                 </button>
+                {step.agents.length > 1 && (
+                  <button
+                    className="agent-remove-btn"
+                    onClick={() => handleRemoveAgent(stepAgent.id)}
+                    title="Remove agent"
+                  >
+                    <XIcon size="sm" />
+                  </button>
+                )}
+              </div>
+              {stepAgent.customPrompt && !isEditingThisPrompt && (
+                <div className="agent-custom-prompt" onClick={() => handleEditPrompt(stepAgent)}>
+                  {stepAgent.customPrompt}
+                </div>
+              )}
+              {isEditingThisPrompt && (
+                <div className="prompt-editor">
+                  <textarea
+                    className="prompt-input"
+                    value={editPromptValue}
+                    onChange={(e) => setEditPromptValue(e.target.value)}
+                    placeholder="Custom instructions for this agent..."
+                    rows={2}
+                    autoFocus
+                  />
+                  <div className="prompt-actions">
+                    <button className="prompt-cancel-btn" onClick={() => setEditingPromptId(null)}>
+                      Cancel
+                    </button>
+                    <button className="prompt-save-btn" onClick={handleSavePrompt}>
+                      Save
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )
@@ -223,21 +281,16 @@ function StepCard({
 
           {showAddAgent && (
             <div className="agent-dropdown" onClick={(e) => e.stopPropagation()}>
-              {subagentTypes
-                .filter(t => !step.agents.includes(t.id))
-                .map(agent => (
-                  <button
-                    key={agent.id}
-                    className={`agent-option ${getAgentColorClass(agent.id)}`}
-                    onClick={() => handleAddAgent(agent.id)}
-                  >
-                    {getAgentIcon(agent.id)}
-                    <span>{agent.name}</span>
-                  </button>
-                ))}
-              {step.agents.length === subagentTypes.length && (
-                <span className="agent-option disabled">All agents added</span>
-              )}
+              {subagentTypes.map(agentType => (
+                <button
+                  key={agentType.id}
+                  className={`agent-option ${getAgentColorClass(agentType.id)}`}
+                  onClick={() => handleAddAgent(agentType.id)}
+                >
+                  {getAgentIcon(agentType.id)}
+                  <span>{agentType.name}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -291,7 +344,7 @@ export function WorkflowPipeline({
     onStepsChange(newSteps)
   }, [steps, onStepsChange])
 
-  const handleUpdateAgents = useCallback((index: number, agents: string[]) => {
+  const handleUpdateAgents = useCallback((index: number, agents: StepAgent[]) => {
     const newSteps = [...steps]
     newSteps[index] = { ...newSteps[index], agents }
     onStepsChange(newSteps)
@@ -303,12 +356,16 @@ export function WorkflowPipeline({
     onStepsChange(newSteps)
   }, [steps, onStepsChange])
 
-  const handleAddStep = useCallback((agentId: string) => {
-    const agent = subagentTypes.find(t => t.id === agentId)
+  const handleAddStep = useCallback((typeId: string) => {
+    const agentType = subagentTypes.find(t => t.id === typeId)
+    const newAgent: StepAgent = {
+      id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      typeId
+    }
     const newStep: WorkflowStep = {
       id: `step-${Date.now()}`,
-      name: agent?.name || 'New Step',
-      agents: [agentId]
+      name: agentType?.name || 'New Step',
+      agents: [newAgent]
     }
     onStepsChange([...steps, newStep])
     setShowAddStep(false)

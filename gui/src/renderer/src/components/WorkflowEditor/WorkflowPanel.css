@@ -284,6 +284,14 @@
   border-color: rgba(96, 125, 139, 0.2);
 }
 
+/* Agent item wrapper */
+.agent-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.agent-edit-btn,
 .agent-remove-btn {
   width: 16px;
   height: 16px;
@@ -300,8 +308,93 @@
   transition: opacity var(--transition-fast);
 }
 
+.agent-edit-btn:hover,
 .agent-remove-btn:hover {
   opacity: 1;
+}
+
+/* Custom prompt display */
+.agent-custom-prompt {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-custom-prompt:hover {
+  background: var(--bg-overlay);
+}
+
+/* Prompt editor */
+.prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg-muted);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-1);
+}
+
+.prompt-input {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.prompt-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.prompt-cancel-btn,
+.prompt-save-btn {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.prompt-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.prompt-cancel-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.prompt-save-btn {
+  background: var(--accent-primary);
+  border: none;
+  color: white;
+}
+
+.prompt-save-btn:hover {
+  background: var(--accent-hover);
 }
 
 /* Add agent */

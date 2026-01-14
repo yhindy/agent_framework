@@ -3,8 +3,10 @@ import {
   SubagentType,
   WorkflowConfig,
   WorkflowStep,
+  StepAgent,
   DEFAULT_SUBAGENT_TYPES,
-  DEFAULT_WORKFLOW
+  DEFAULT_WORKFLOW,
+  DEBUG_WORKFLOW
 } from './types/WorkflowTypes'
 
 const log = createLogger('WorkflowService')
@@ -27,9 +29,10 @@ export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
 
   constructor() {
-    // Initialize with default workflow
+    // Initialize with default workflows
     this.workflows.set(DEFAULT_WORKFLOW.id, DEFAULT_WORKFLOW)
-    log.info('WorkflowService initialized with default workflow')
+    this.workflows.set(DEBUG_WORKFLOW.id, DEBUG_WORKFLOW)
+    log.info('WorkflowService initialized with default and debug workflows')
   }
 
   // ============================================
@@ -131,17 +134,26 @@ export class WorkflowService {
 
   /**
    * Add a step to a workflow.
+   * @param agents Can be either string[] (agent type IDs) or StepAgent[] (full agent configs)
    */
-  addStep(workflowId: string, name: string, agents: string[]): WorkflowStep {
+  addStep(workflowId: string, name: string, agents: string[] | StepAgent[]): WorkflowStep {
     const workflow = this.workflows.get(workflowId)
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`)
     }
 
+    // Convert string[] to StepAgent[] if needed
+    const stepAgents: StepAgent[] = agents.map((agent, index) => {
+      if (typeof agent === 'string') {
+        return { id: generateId(`agent-${index}`), typeId: agent }
+      }
+      return agent
+    })
+
     const step: WorkflowStep = {
       id: generateId('step'),
       name,
-      agents
+      agents: stepAgents
     }
     workflow.steps.push(step)
     log.info('Added step to workflow:', { workflowId, stepId: step.id })
@@ -243,16 +255,19 @@ export class WorkflowService {
         lines.push('')
         lines.push('Run these agents simultaneously:')
         lines.push('')
-        for (const agentId of step.agents) {
-          const agent = this.getSubagentType(agentId)
-          lines.push(`- **${agent?.name || agentId}**: ${agent?.description || ''}`)
+        for (const stepAgent of step.agents) {
+          const agentType = this.getSubagentType(stepAgent.typeId)
+          const description = stepAgent.customPrompt || agentType?.description || ''
+          lines.push(`- **${agentType?.name || stepAgent.typeId}**: ${description}`)
         }
       } else {
-        const agentId = step.agents[0]
-        const agent = this.getSubagentType(agentId)
-        lines.push(`**Agent**: ${agent?.name || agentId}`)
+        const stepAgent = step.agents[0]
+        const agentType = this.getSubagentType(stepAgent.typeId)
+        lines.push(`**Agent**: ${agentType?.name || stepAgent.typeId}`)
         lines.push('')
-        lines.push(`${agent?.description || ''}`)
+        // Use custom prompt if available, otherwise use default description
+        const description = stepAgent.customPrompt || agentType?.description || ''
+        lines.push(description)
       }
 
       lines.push('')

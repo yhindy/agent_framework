@@ -15,13 +15,23 @@ export interface SubagentType {
 }
 
 /**
+ * An agent instance within a step.
+ * Can have a custom prompt to override the default behavior.
+ */
+export interface StepAgent {
+  id: string           // Unique instance ID (e.g., 'agent-1234')
+  typeId: string       // Reference to SubagentType.id (e.g., 'review')
+  customPrompt?: string // Optional custom instructions for this specific agent
+}
+
+/**
  * A single step in a workflow.
  * If a step has multiple agents, they run in parallel automatically.
  */
 export interface WorkflowStep {
-  id: string        // Unique identifier
-  name: string      // Display name (e.g., "Planning", "Implementation")
-  agents: string[]  // Array of SubagentType.ids - multiple = parallel execution
+  id: string          // Unique identifier
+  name: string        // Display name (e.g., "Planning", "Implementation")
+  agents: StepAgent[] // Array of agent instances - multiple = parallel execution
 }
 
 /**
@@ -82,6 +92,13 @@ export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
 ]
 
 /**
+ * Helper to create a simple agent (no custom prompt).
+ */
+export function createAgent(typeId: string): StepAgent {
+  return { id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, typeId }
+}
+
+/**
  * Default workflow matching the original super-minion 5-phase workflow.
  */
 export const DEFAULT_WORKFLOW: WorkflowConfig = {
@@ -89,13 +106,67 @@ export const DEFAULT_WORKFLOW: WorkflowConfig = {
   name: 'Standard Workflow',
   description: 'Standard workflow with 5 phases: explore, design, review, implement, validate',
   steps: [
-    { id: 'step-1', name: 'Explore Codebase', agents: ['explore'] },
-    { id: 'step-2', name: 'Engineering Design', agents: ['plan'] },
-    { id: 'step-3', name: 'Design Review', agents: ['review', 'review'] },
-    { id: 'step-4', name: 'Implementation', agents: ['implement'] },
-    { id: 'step-5', name: 'Validation', agents: ['simplify', 'test', 'review', 'document'] }
+    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'explore' }] },
+    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'plan' }] },
+    {
+      id: 'step-3',
+      name: 'Design Review',
+      agents: [
+        { id: 'a3', typeId: 'review', customPrompt: 'Review the engineering design for technical correctness and best practices' },
+        { id: 'a4', typeId: 'review', customPrompt: 'Review the design against acceptance criteria and requirements' }
+      ]
+    },
+    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'implement' }] },
+    {
+      id: 'step-5',
+      name: 'Validation',
+      agents: [
+        { id: 'a6', typeId: 'simplify' },
+        { id: 'a7', typeId: 'test' },
+        { id: 'a8', typeId: 'review', customPrompt: 'Final code review before merge' },
+        { id: 'a9', typeId: 'document' }
+      ]
+    }
   ],
   isDefault: true
+}
+
+/**
+ * Debugging workflow for investigating and fixing bugs.
+ */
+export const DEBUG_WORKFLOW: WorkflowConfig = {
+  id: 'debug-workflow',
+  name: 'Debug Workflow',
+  description: 'Systematic debugging: reproduce, investigate, fix, verify',
+  steps: [
+    {
+      id: 'dbg-1',
+      name: 'Reproduce & Understand',
+      agents: [
+        { id: 'd1', typeId: 'explore', customPrompt: 'Find the code related to the bug and understand the current behavior' },
+        { id: 'd2', typeId: 'debug', customPrompt: 'Reproduce the bug and document the steps to trigger it' }
+      ]
+    },
+    {
+      id: 'dbg-2',
+      name: 'Root Cause Analysis',
+      agents: [{ id: 'd3', typeId: 'debug', customPrompt: 'Identify the root cause of the bug using logging, breakpoints, and code analysis' }]
+    },
+    {
+      id: 'dbg-3',
+      name: 'Fix Implementation',
+      agents: [{ id: 'd4', typeId: 'implement', customPrompt: 'Implement the fix with minimal changes. Write a regression test first.' }]
+    },
+    {
+      id: 'dbg-4',
+      name: 'Verification',
+      agents: [
+        { id: 'd5', typeId: 'test', customPrompt: 'Run all tests and verify the fix works' },
+        { id: 'd6', typeId: 'review', customPrompt: 'Review the fix for correctness and potential side effects' }
+      ]
+    }
+  ],
+  isDefault: false
 }
 
 // Legacy type aliases for backward compatibility during migration

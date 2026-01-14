@@ -42,10 +42,11 @@ describe('WorkflowService', () => {
   })
 
   describe('getAllWorkflows', () => {
-    it('should return all workflows including default', () => {
+    it('should return all workflows including default and debug', () => {
       const workflows = service.getAllWorkflows()
-      expect(workflows).toHaveLength(1)
-      expect(workflows[0].id).toBe('default')
+      expect(workflows).toHaveLength(2)
+      expect(workflows.map(w => w.id)).toContain('default')
+      expect(workflows.map(w => w.id)).toContain('debug-workflow')
     })
   })
 
@@ -61,7 +62,7 @@ describe('WorkflowService', () => {
     it('should add new workflow to the list', () => {
       service.createWorkflow('New Workflow')
       const workflows = service.getAllWorkflows()
-      expect(workflows).toHaveLength(2)
+      expect(workflows).toHaveLength(3) // default + debug + new
     })
   })
 
@@ -86,10 +87,10 @@ describe('WorkflowService', () => {
   describe('deleteWorkflow', () => {
     it('should delete a custom workflow', () => {
       const created = service.createWorkflow('To Delete')
-      expect(service.getAllWorkflows()).toHaveLength(2)
+      expect(service.getAllWorkflows()).toHaveLength(3) // default + debug + new
 
       service.deleteWorkflow(created.id)
-      expect(service.getAllWorkflows()).toHaveLength(1)
+      expect(service.getAllWorkflows()).toHaveLength(2) // default + debug
     })
 
     it('should throw error for non-existent workflow', () => {
@@ -104,15 +105,30 @@ describe('WorkflowService', () => {
   })
 
   describe('addStep', () => {
-    it('should add a step to a workflow', () => {
+    it('should add a step to a workflow with string agent IDs', () => {
       const workflow = service.createWorkflow('Test')
       const step = service.addStep(workflow.id, 'Planning', ['explore', 'plan'])
 
       expect(step.name).toBe('Planning')
-      expect(step.agents).toEqual(['explore', 'plan'])
+      expect(step.agents).toHaveLength(2)
+      expect(step.agents[0].typeId).toBe('explore')
+      expect(step.agents[1].typeId).toBe('plan')
 
       const updated = service.getWorkflow(workflow.id)
       expect(updated?.steps).toHaveLength(1)
+    })
+
+    it('should add a step with StepAgent objects', () => {
+      const workflow = service.createWorkflow('Test')
+      const step = service.addStep(workflow.id, 'Review', [
+        { id: 'a1', typeId: 'review', customPrompt: 'Check code quality' },
+        { id: 'a2', typeId: 'review', customPrompt: 'Check requirements' }
+      ])
+
+      expect(step.name).toBe('Review')
+      expect(step.agents).toHaveLength(2)
+      expect(step.agents[0].customPrompt).toBe('Check code quality')
+      expect(step.agents[1].customPrompt).toBe('Check requirements')
     })
 
     it('should throw error for non-existent workflow', () => {
@@ -128,11 +144,16 @@ describe('WorkflowService', () => {
 
       const updated = service.updateStep(workflow.id, step.id, {
         name: 'Updated',
-        agents: ['explore', 'implement']
+        agents: [
+          { id: 'a1', typeId: 'explore' },
+          { id: 'a2', typeId: 'implement' }
+        ]
       })
 
       expect(updated.name).toBe('Updated')
-      expect(updated.agents).toEqual(['explore', 'implement'])
+      expect(updated.agents).toHaveLength(2)
+      expect(updated.agents[0].typeId).toBe('explore')
+      expect(updated.agents[1].typeId).toBe('implement')
     })
 
     it('should throw error for non-existent step', () => {
@@ -210,6 +231,18 @@ describe('WorkflowService', () => {
 
       expect(markdown).toContain('Explorer')
       expect(markdown).toContain('## Available Agents')
+    })
+
+    it('should use custom prompts when available', () => {
+      const workflow = service.createWorkflow('Test')
+      service.addStep(workflow.id, 'Review', [
+        { id: 'a1', typeId: 'review', customPrompt: 'Focus on security issues' }
+      ])
+
+      const updated = service.getWorkflow(workflow.id)!
+      const markdown = service.generateRulesMarkdown(updated)
+
+      expect(markdown).toContain('Focus on security issues')
     })
   })
 })
