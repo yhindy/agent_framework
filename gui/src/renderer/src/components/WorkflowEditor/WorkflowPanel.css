@@ -521,6 +521,134 @@
   color: var(--text-primary);
 }
 
+/* =============================================================================
+   PANEL FOOTER
+   ============================================================================= */
+
+.workflow-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.workflow-unsaved-indicator {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workflow-unsaved-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--color-warning);
+  border-radius: var(--radius-full);
+}
+
+.workflow-footer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.workflow-cancel-btn {
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.workflow-cancel-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.workflow-save-btn {
+  background: var(--accent-primary);
+  border: none;
+  color: var(--text-inverse);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.workflow-save-btn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.workflow-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   LOADING AND ERROR STATES
+   ============================================================================= */
+
+.workflow-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.workflow-loading svg {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.workflow-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.workflow-error p {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.workflow-error button {
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.workflow-error button:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+/* =============================================================================
+   EMPTY STATE
+   ============================================================================= */
+
 /* Empty state */
 .workflow-empty {
   text-align: center;

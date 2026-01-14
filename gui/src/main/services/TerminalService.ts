@@ -153,15 +153,15 @@ export class TerminalService {
 
         if (isParallel) {
           // Multiple agents run in parallel
-          const agentNames = step.agents.map(id => {
-            const type = subagentTypes.find(t => t.id === id)
-            return type?.name || id
+          const agentNames = step.agents.map(agent => {
+            const type = subagentTypes.find(t => t.id === agent.typeId)
+            return type?.name || agent.typeId
           }).join(' + ')
           phases.push(`${i + 1}. **${step.name}** (PARALLEL: ${agentNames})`)
         } else {
           // Single agent
-          const type = subagentTypes.find(t => t.id === step.agents[0])
-          phases.push(`${i + 1}. **${step.name}** using ${type?.name || step.agents[0]} agent`)
+          const type = subagentTypes.find(t => t.id === step.agents[0].typeId)
+          phases.push(`${i + 1}. **${step.name}** using ${type?.name || step.agents[0].typeId} agent`)
         }
       }
 

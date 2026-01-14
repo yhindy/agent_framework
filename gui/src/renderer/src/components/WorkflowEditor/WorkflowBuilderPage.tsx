@@ -46,7 +46,10 @@ export function WorkflowBuilderPage({
       const newStep: WorkflowStep = {
         id: `step-${Date.now()}`,
         name: subagentType.name,
-        agents: [subagentType.id]
+        agents: [{
+          id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          typeId: subagentType.id
+        }]
       }
 
       setSteps((prev) => [...prev, newStep])
