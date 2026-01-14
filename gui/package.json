@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-rebuild -f -w node-pty",
