@@ -385,6 +385,21 @@ Renderer Process (React)
 5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
 6. **Teardown** - Clean up worktree when done
 
+### Agent Archive
+When an agent is deleted, its metadata is preserved in an archive for historical reference.
+
+- **Storage Location**: `minions/archive/` directory in the project
+- **Archive Format**: JSON files named `{agentId}.json`
+- **Preserved Data** (ArchivedAgent interface):
+  - `id`, `branchName`, `prompt`, `status`, `tool`, `model`
+  - `createdAt`, `archivedAt` timestamps
+  - `prUrl` (if a PR was created)
+  - `historyContext` (conversation/session context)
+- **IPC Handlers**:
+  - `archive:list` - Returns all archived agents for current project
+  - `archive:get` - Returns a specific archived agent by ID
+- **Behavior**: The git worktree is still deleted during teardown, but the archive preserves agent metadata for future reference and audit trails.
+
 ### Tool Selection
 
 The GUI allows selecting from three agent tools when creating an assignment:
@@ -469,7 +484,8 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
+| `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
 | `gui/src/main/services/TerminalService.ts` | PTY management |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |

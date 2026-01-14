@@ -91,6 +91,55 @@ export function isSuperMinion(agent: AgentInfo): agent is SuperAgentInfo {
   return (agent as any).isSuperMinion === true
 }
 
+/**
+ * Represents an archived agent record preserved after teardown.
+ * Contains essential metadata for historical tracking.
+ */
+export interface ArchivedAgent {
+  // Archive metadata
+  archiveId: string              // Unique: `${agentId}-${timestamp}`
+  archivedAt: string             // ISO timestamp
+  archiveVersion: number         // Schema version (start at 1)
+
+  // Original agent identification
+  agentId: string
+  assignmentId: string
+
+  // Task information
+  branch: string
+  feature: string
+  prompt?: string
+
+  // Tool and configuration
+  tool: string
+  model?: string
+  mode: string
+
+  // Timeline
+  createdAt: string
+  completedAt: string
+
+  // Final status
+  finalStatus: string
+
+  // PR information (if applicable)
+  prUrl?: string
+  prStatus?: string
+
+  // Session metrics (optional)
+  totalCostUsd?: number
+  tokenUsage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+  }
+
+  // Parent relationship (for super minions)
+  parentAgentId?: string
+  isSuperMinion?: boolean
+}
+
 // @deprecated - Legacy Assignment interface for backward compatibility during migration
 // New code should use AgentInfo instead
 export interface Assignment {
