@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ArchivePage } from '../ArchivePage'
-import { SnackbarProvider } from '../../SnackbarProvider'
+import { SnackbarProvider } from '../../../contexts/SnackbarContext'
 import type { ArchivedAgent } from '../../../../../main/services/types/ProjectConfig'
 
 // Mock window.electronAPI

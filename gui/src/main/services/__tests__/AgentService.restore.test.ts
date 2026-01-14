@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { AgentService } from '../AgentService'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync } from 'fs'
 
 // Mock fs module
 vi.mock('fs', () => ({

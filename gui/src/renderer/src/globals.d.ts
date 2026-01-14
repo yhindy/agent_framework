@@ -107,6 +107,11 @@ declare global {
       getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
       openFeedback: () => Promise<void>
+
+      // Archive APIs
+      listArchivedAgents: (projectPath?: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent[]>
+      getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent | null>
+      restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').AgentInfo>
     }
   }
 }

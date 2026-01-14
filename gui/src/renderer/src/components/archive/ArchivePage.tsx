@@ -11,7 +11,7 @@ export function ArchivePage(): JSX.Element {
   const [restoring, setRestoring] = useState<string | null>(null)
   const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { showSnackbar } = useSnackbar()
+  const { addSnackbar } = useSnackbar()
 
   const loadArchives = async () => {
     setLoading(true)
@@ -27,7 +27,7 @@ export function ArchivePage(): JSX.Element {
       }
     } catch (error) {
       console.error('Failed to load archives:', error)
-      showSnackbar('Failed to load archives', 'error')
+      addSnackbar({ title: 'Error', messages: ['Failed to load archives'] })
     } finally {
       setLoading(false)
     }
@@ -39,7 +39,7 @@ export function ArchivePage(): JSX.Element {
 
   const handleRestore = async (archive: ArchivedAgent) => {
     if (!currentProjectPath) {
-      showSnackbar('Cannot restore: no project selected', 'error')
+      addSnackbar({ title: 'Error', messages: ['Cannot restore: no project selected'] })
       return
     }
 
@@ -49,11 +49,11 @@ export function ArchivePage(): JSX.Element {
         currentProjectPath,
         archive.archiveId
       )
-      showSnackbar(`Agent restored as ${agent.agentId}`, 'success')
+      addSnackbar({ title: 'Success', messages: [`Agent restored as ${agent.agentId}`] })
       navigate(`/workspace/agent/${agent.agentId}`)
     } catch (error) {
       console.error('Failed to restore agent:', error)
-      showSnackbar(`Failed to restore agent: ${error}`, 'error')
+      addSnackbar({ title: 'Error', messages: [`Failed to restore agent: ${error}`] })
     } finally {
       setRestoring(null)
     }

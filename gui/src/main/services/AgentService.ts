@@ -1805,7 +1805,7 @@ export class AgentService {
       prompt: archived.prompt || `Restored from archive: ${archived.feature}`,
       tool: archived.tool,
       model: archived.model,
-      mode: archived.mode
+      mode: archived.mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
     })
 
     log.info(`Restored agent from archive ${archiveId} as ${assignment.agentId}`)
