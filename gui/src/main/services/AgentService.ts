@@ -1780,4 +1780,37 @@ export class AgentService {
     }
   }
 
+  /**
+   * Restore an archived agent by creating a new agent with the same configuration
+   * @param projectPath - Path to the project
+   * @param archiveId - ID of the archived agent to restore
+   * @returns Newly created agent
+   */
+  async restoreArchivedAgent(projectPath: string, archiveId: string): Promise<AgentInfo> {
+    // Load archived agent metadata
+    const archived = await this.getArchivedAgent(projectPath, archiveId)
+    if (!archived) {
+      throw new Error(`Archive not found: ${archiveId}`)
+    }
+
+    // Generate new branch name with -restored suffix to avoid conflicts
+    const timestamp = Date.now()
+    const originalBranch = archived.branch.replace(/^feature\//, '')
+    const newBranch = `${originalBranch}-restored-${timestamp}`
+
+    // Create new assignment with archived agent's configuration
+    const assignment = await this.createAssignment(projectPath, {
+      feature: archived.feature,
+      branch: newBranch,
+      prompt: archived.prompt || `Restored from archive: ${archived.feature}`,
+      tool: archived.tool,
+      model: archived.model,
+      mode: archived.mode
+    })
+
+    log.info(`Restored agent from archive ${archiveId} as ${assignment.agentId}`)
+
+    return assignment
+  }
+
 }

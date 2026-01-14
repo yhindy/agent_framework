@@ -202,7 +202,9 @@ const api = {
   listArchivedAgents: (projectPath?: string) =>
     ipcRenderer.invoke('archive:list', projectPath),
   getArchivedAgent: (projectPath: string, archiveId: string) =>
-    ipcRenderer.invoke('archive:get', projectPath, archiveId)
+    ipcRenderer.invoke('archive:get', projectPath, archiveId),
+  restoreArchivedAgent: (projectPath: string, archiveId: string) =>
+    ipcRenderer.invoke('archive:restore', projectPath, archiveId)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

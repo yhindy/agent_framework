@@ -85,6 +85,7 @@ declare const api: {
     // Archive APIs
     listArchivedAgents: (projectPath?: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent[]>;
     getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent | null>;
+    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').AgentInfo>;
 };
 export type ElectronAPI = typeof api;
 export {};
