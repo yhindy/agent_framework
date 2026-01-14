@@ -1,10 +1,10 @@
 import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 import { createLogger } from './logger'
 
@@ -1059,6 +1059,13 @@ export class AgentService {
     const teardownScript = join(this.getMinionsPath(), 'bin', 'teardown.sh')
     const configPath = this.getProjectConfigPath(projectPath)
 
+    // Archive agent metadata before teardown (fail gracefully)
+    try {
+      await this.archiveAgent(projectPath, agentId)
+    } catch (archiveError) {
+      log.warn(`Failed to archive agent ${agentId}:`, archiveError)
+    }
+
     try {
       const args = [agentId, '--config', configPath]
       if (force) args.push('--force')
@@ -1768,6 +1775,125 @@ export class AgentService {
     return {
       agentInfo,
       shouldStartClaude: isNewAgent && agentInfo.prompt !== undefined
+    }
+  }
+
+  // Archive helper methods
+  private getArchiveDirectory(projectPath: string): string {
+    return join(projectPath, 'minions', 'archive')
+  }
+
+  private ensureArchiveDirectory(projectPath: string): string {
+    const archiveDir = this.getArchiveDirectory(projectPath)
+    if (!existsSync(archiveDir)) {
+      mkdirSync(archiveDir, { recursive: true })
+    }
+    return archiveDir
+  }
+
+  async archiveAgent(projectPath: string, agentId: string): Promise<ArchivedAgent> {
+    // 1. Find agent's worktree path
+    const agents = await this.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
+
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found for archiving`)
+    }
+
+    // 2. Read agent info
+    const agentInfo = this.readAgentInfo(agent.worktreePath)
+    if (!agentInfo) {
+      throw new Error(`Could not read agent info for ${agentId}`)
+    }
+
+    // 3. Create archive record
+    const timestamp = Date.now()
+    const archiveId = `${agentId}-${timestamp}`
+
+    const archived: ArchivedAgent = {
+      archiveId,
+      archivedAt: new Date().toISOString(),
+      archiveVersion: 1,
+
+      agentId: agentInfo.agentId,
+      assignmentId: agentInfo.id,
+
+      branch: agentInfo.branch,
+      feature: agentInfo.feature,
+      prompt: agentInfo.prompt,
+
+      tool: agentInfo.tool,
+      model: agentInfo.model,
+      mode: agentInfo.mode,
+
+      createdAt: agentInfo.createdAt,
+      completedAt: new Date().toISOString(),
+
+      finalStatus: agentInfo.status,
+
+      prUrl: agentInfo.prUrl,
+      prStatus: agentInfo.prStatus,
+
+      totalCostUsd: agentInfo.totalCostUsd,
+      tokenUsage: agentInfo.tokenUsage,
+
+      parentAgentId: agentInfo.parentAgentId,
+      isSuperMinion: (agentInfo as any).isSuperMinion
+    }
+
+    // 4. Ensure archive directory exists and write archive file
+    const archiveDir = this.ensureArchiveDirectory(projectPath)
+    const archivePath = join(archiveDir, `${archiveId}.json`)
+    writeFileSync(archivePath, JSON.stringify(archived, null, 2))
+
+    log.info(`Archived agent ${agentId} to ${archivePath}`)
+
+    return archived
+  }
+
+  async listArchivedAgents(projectPath: string): Promise<ArchivedAgent[]> {
+    const archiveDir = this.getArchiveDirectory(projectPath)
+
+    if (!existsSync(archiveDir)) {
+      return []
+    }
+
+    try {
+      const files = readdirSync(archiveDir).filter(f => f.endsWith('.json'))
+      const archives: ArchivedAgent[] = []
+
+      for (const file of files) {
+        try {
+          const content = readFileSync(join(archiveDir, file), 'utf-8')
+          archives.push(JSON.parse(content))
+        } catch (error) {
+          log.warn(`Failed to read archive file ${file}:`, error)
+        }
+      }
+
+      // Sort by archivedAt descending (most recent first)
+      return archives.sort((a, b) =>
+        new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime()
+      )
+    } catch (error) {
+      log.warn('Failed to list archived agents:', error)
+      return []
+    }
+  }
+
+  async getArchivedAgent(projectPath: string, archiveId: string): Promise<ArchivedAgent | null> {
+    const archivePath = join(this.getArchiveDirectory(projectPath), `${archiveId}.json`)
+
+    if (!existsSync(archivePath)) {
+      return null
+    }
+
+    try {
+      const content = readFileSync(archivePath, 'utf-8')
+      return JSON.parse(content)
+    } catch (error) {
+      log.error(`Failed to read archive ${archiveId}:`, error)
+      return null
     }
   }
 

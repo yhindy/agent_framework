@@ -949,6 +949,18 @@ function setupIPC(): void {
     mainWindow?.webContents.send('agents:updated')
   })
 
+  // Archive handlers
+  ipcMain.handle('archive:list', async (_event, projectPath?: string) => {
+    const path = projectPath || services!.project.getCurrentProject()?.path
+    if (!path) return []
+    return services!.agent.listArchivedAgents(path)
+  })
+
+  ipcMain.handle('archive:get', async (_event, projectPath: string, archiveId: string) => {
+    if (!projectPath) return null
+    return services!.agent.getArchivedAgent(projectPath, archiveId)
+  })
+
   // Test Environment handlers
   ipcMain.handle('testEnv:getConfig', async (_event, agentId?: string) => {
     let projectPath: string | null = null

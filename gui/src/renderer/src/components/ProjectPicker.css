@@ -1,84 +1,185 @@
+/* ================================================
+   PROJECT PICKER - Open Project Modal
+   ================================================
+   Design Philosophy:
+   - Generous whitespace creates breathing room
+   - Left-aligned content with dramatic typography
+   - Bold accent colors for primary actions
+   - Subtle elevation and hover states for cards
+   ================================================ */
+
 .project-picker {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 400px; /* Ensure some height in modal */
-  background: #1e1e1e;
+  flex-direction: column;
+  min-height: 480px;
+  background: var(--bg-surface);
+  padding: var(--space-7) var(--space-6);
 }
 
 .project-picker-container {
-  max-width: 600px;
-  width: 90%;
-  text-align: center;
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
 }
 
+/* ------------------------------------------------
+   HEADER SECTION
+   Dramatic typography with intentional asymmetry
+   ------------------------------------------------ */
+
 .project-picker h1 {
-  font-size: 32px;
-  margin-bottom: 8px;
-  color: #ffffff;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-black);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-tight);
+  margin: 0 0 var(--space-2) 0;
+  color: var(--text-primary);
+  /* Subtle gradient text effect */
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .subtitle {
-  font-size: 16px;
-  color: #858585;
-  margin-bottom: 32px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-muted);
+  letter-spacing: var(--letter-spacing-wide);
+  margin: 0 0 var(--space-6) 0;
 }
+
+/* ------------------------------------------------
+   ERROR STATE
+   Clear visibility without being alarming
+   ------------------------------------------------ */
 
 .error {
-  background: #5a1d1d;
-  color: #f48771;
-  padding: 12px;
-  border-radius: 4px;
-  margin-bottom: 16px;
+  background: var(--color-error-dim);
+  color: var(--color-error);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
+  border-left: 3px solid var(--color-error);
 }
+
+/* ------------------------------------------------
+   PRIMARY ACTION BUTTON
+   Bold, unmissable CTA with generous hit area
+   ------------------------------------------------ */
 
 .select-button {
-  padding: 12px 24px;
-  font-size: 16px;
-  margin-bottom: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-button);
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-md), 0 0 0 0 var(--accent-primary-glow);
 }
 
+.select-button:hover {
+  background: var(--accent-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.select-button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------
+   RECENT PROJECTS SECTION
+   Visual separation with intentional spacing
+   ------------------------------------------------ */
+
 .recent-projects {
-  margin-top: 48px;
+  margin-top: var(--space-7);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .recent-projects h2 {
-  font-size: 18px;
-  color: #d4d4d4;
-  margin-bottom: 16px;
-  text-align: left;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  margin: 0 0 var(--space-4) 0;
 }
+
+/* ------------------------------------------------
+   PROJECT LIST
+   Cards with elevation and clear hover feedback
+   ------------------------------------------------ */
 
 .project-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .project-item {
-  background: #2d2d2d;
-  padding: 16px;
-  border-radius: 4px;
+  background: var(--bg-elevated);
+  padding: var(--space-4) var(--space-4);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  text-align: left;
-  transition: background 0.2s;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.project-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
 .project-item:hover {
-  background: #3e3e42;
+  background: var(--bg-overlay);
+  border-color: var(--border-default);
+  transform: translateX(4px);
+}
+
+.project-item:hover::before {
+  opacity: 1;
+}
+
+.project-item:active {
+  transform: translateX(2px);
 }
 
 .project-name {
-  font-size: 16px;
-  color: #ffffff;
-  margin-bottom: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+  line-height: var(--line-height-tight);
 }
 
 .project-path {
-  font-size: 12px;
-  color: #858585;
-  font-family: 'Courier New', Courier, monospace;
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Consolas', 'Liberation Mono', Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Disabled state for project items during setup */

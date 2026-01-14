@@ -56,7 +56,7 @@ This document provides essential context for AI assistants working with the Agen
 
 ## Project Overview
 
-**Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase. Users can text articles, links, reminders, and other content to save for later.
+**Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase.
 
 ### Core Features
 - GUI (Agent Orchestrator): Electron desktop app for managing agents visually
@@ -441,6 +441,21 @@ The framework supports two configuration formats:
 5. **Signals** - Agent outputs `===SIGNAL:XXX===` for orchestrator events
 6. **Teardown** - Clean up worktree when done
 
+### Agent Archive
+When an agent is deleted, its metadata is preserved in an archive for historical reference.
+
+- **Storage Location**: `minions/archive/` directory in the project
+- **Archive Format**: JSON files named `{agentId}.json`
+- **Preserved Data** (ArchivedAgent interface):
+  - `id`, `branchName`, `prompt`, `status`, `tool`, `model`
+  - `createdAt`, `archivedAt` timestamps
+  - `prUrl` (if a PR was created)
+  - `historyContext` (conversation/session context)
+- **IPC Handlers**:
+  - `archive:list` - Returns all archived agents for current project
+  - `archive:get` - Returns a specific archived agent by ID
+- **Behavior**: The git worktree is still deleted during teardown, but the archive preserves agent metadata for future reference and audit trails.
+
 ### Tool Selection
 
 The GUI allows selecting from three agent tools when creating an assignment:
@@ -544,7 +559,8 @@ For projects with the old `minions/` folder structure:
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
+| `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
 | `gui/src/main/services/TerminalService.ts` | PTY management |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |

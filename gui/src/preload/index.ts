@@ -206,7 +206,13 @@ const api = {
   quickSetup: (projectPath: string) => ipcRenderer.invoke('wizard:quickSetup', projectPath),
 
   // Migration APIs
-  migrateProject: (projectPath: string) => ipcRenderer.invoke('project:migrate', projectPath)
+  migrateProject: (projectPath: string) => ipcRenderer.invoke('project:migrate', projectPath),
+
+  // Archive APIs
+  listArchivedAgents: (projectPath?: string) =>
+    ipcRenderer.invoke('archive:list', projectPath),
+  getArchivedAgent: (projectPath: string, archiveId: string) =>
+    ipcRenderer.invoke('archive:get', projectPath, archiveId)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

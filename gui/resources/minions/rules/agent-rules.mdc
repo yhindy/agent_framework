@@ -20,7 +20,7 @@ This document defines rules and processes for AI agents working on this codebase
 
 1. **Read Your Assignment**
    ```bash
-   cat docs/agents/assignments/agent-X-*.md
+   cat minions/assignments/agent-X-*.md
    ```
    Understand requirements and file boundaries.
 

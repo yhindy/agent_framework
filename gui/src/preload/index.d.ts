@@ -82,8 +82,7 @@ declare const api: {
         agentId: string;
         reason: string;
     }) => void) => () => Electron.IpcRenderer;
-    retryResumeAgent: (agentId: string) => Promise<any>;
-    startFreshSession: (agentId: string) => Promise<any>;
+    // Setup Wizard APIs
     checkWizard: (projectPath: string) => Promise<{
         needsWizard: boolean;
         hasLegacy: boolean;
@@ -93,6 +92,9 @@ declare const api: {
     finalizeWizard: (projectPath: string, config: import('../main/services/types/MinionsConfig').MinionsConfig) => Promise<void>;
     quickSetup: (projectPath: string) => Promise<void>;
     migrateProject: (projectPath: string) => Promise<import('../main/services/types/MinionsConfig').MinionsConfig>;
+    // Archive APIs
+    listArchivedAgents: (projectPath?: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent[]>;
+    getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent | null>;
 };
 export type ElectronAPI = typeof api;
 export {};
