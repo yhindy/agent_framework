@@ -1,6 +1,7 @@
 {
   "appId": "com.minion-laboratory.app",
   "productName": "Minion Laboratory",
+  "electronVersion": "28.2.3",
   "icon": "icon.png",
   "directories": {
     "output": "dist"
