@@ -663,7 +663,15 @@ function setupIPC(): void {
   ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
     // Set the active workflow for this project if provided
     if (assignment.workflow) {
+      log.info('Creating super minion with workflow:', {
+        projectPath,
+        workflowId: assignment.workflow.id,
+        hasSteps: !!assignment.workflow.steps,
+        stepCount: assignment.workflow.steps?.length
+      })
       services!.workflow.setActiveWorkflow(projectPath, assignment.workflow)
+    } else {
+      log.warn('Creating super minion WITHOUT workflow - will use default')
     }
 
     const result = await services!.agent.createSuperAssignment(projectPath, assignment)

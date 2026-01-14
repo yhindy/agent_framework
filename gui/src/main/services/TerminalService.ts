@@ -144,6 +144,16 @@ export class TerminalService {
       const workflow = this.workflowService.getActiveWorkflow(projectPath)
       const subagentTypes = this.workflowService.getSubagentTypes()
 
+      // Debug: log workflow steps to verify custom prompts
+      log.info('Generating super minion prompt with workflow:', {
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        steps: workflow.steps.map(s => ({
+          name: s.name,
+          agents: s.agents.map(a => ({ typeId: a.typeId, customPrompt: a.customPrompt }))
+        }))
+      })
+
       // Build numbered step list
       const phases: string[] = []
 

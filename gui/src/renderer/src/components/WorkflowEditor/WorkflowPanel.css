@@ -284,8 +284,8 @@
   border-color: rgba(96, 125, 139, 0.2);
 }
 
-/* Agent item wrapper */
-.agent-item {
+/* Agent item wrapper - scoped to workflow panel to avoid conflicts with global sidebar */
+.workflow-panel .agent-item {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

@@ -72,7 +72,15 @@ export class WorkflowService {
    */
   setActiveWorkflow(projectPath: string, workflow: WorkflowConfig): void {
     this.activeWorkflows.set(projectPath, workflow)
-    log.info('Set active workflow for project:', { projectPath, workflowId: workflow.id, workflowName: workflow.name })
+    log.info('Set active workflow for project:', {
+      projectPath,
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      steps: workflow.steps.map(s => ({
+        name: s.name,
+        agents: s.agents.map(a => ({ typeId: a.typeId, customPrompt: a.customPrompt }))
+      }))
+    })
   }
 
   /**

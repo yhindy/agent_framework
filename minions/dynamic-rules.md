@@ -24,8 +24,8 @@ Architecture and design planning - creates technical specifications
 
 Run these agents simultaneously:
 
-- **Reviewer**: Code review and validation - checks quality, patterns, and requirements
-- **Reviewer**: Code review and validation - checks quality, patterns, and requirements
+- **Reviewer**: Review the engineering design for technical correctness and best practices
+- **Reviewer**: Review the design against acceptance criteria and requirements
 
 ### Step 4: Implementation
 
@@ -41,7 +41,7 @@ Run these agents simultaneously:
 
 - **Simplifier**: Code simplification - refactors, removes duplication, improves clarity
 - **Tester**: Test execution and validation - runs tests, checks coverage
-- **Reviewer**: Code review and validation - checks quality, patterns, and requirements
+- **Reviewer**: Final code review before merge
 - **Documenter**: Documentation updates - writes READMEs, API docs, code comments
 
 ---
