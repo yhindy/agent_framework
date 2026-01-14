@@ -446,57 +446,24 @@
   display: none;
 }
 
-/* Pipeline item wrapper - with node indicator */
+/* Pipeline item wrapper */
 .pipeline-item {
   width: 100%;
+  max-width: 500px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
 }
 
-/* Circular node on the spine for each item */
-.pipeline-item::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  background: var(--bg-elevated);
-  border: 3px solid var(--accent-primary);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  transition: all var(--transition-fast);
-}
-
-/* Type-specific node colors */
-.pipeline-item:has(.type-explore)::before {
-  border-color: var(--color-info);
-}
-.pipeline-item:has(.type-implement)::before {
-  border-color: var(--color-success);
-}
-.pipeline-item:has(.type-plan)::before {
-  border-color: var(--color-warning);
-}
-.pipeline-item:has(.type-debug)::before {
-  border-color: var(--color-error);
-}
-.pipeline-item:has(.parallel-group)::before {
-  border-color: var(--color-warning);
-  background: var(--color-warning-dim);
-}
-
-/* Step number indicator - positioned on the spine */
+/* Step number indicator - clean badge on connector */
 .step-index {
   position: absolute;
   left: 50%;
-  top: -8px;
+  top: 4px;
   transform: translateX(-50%);
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: var(--bg-base);
   border: 2px solid var(--accent-primary);
   border-radius: 50%;
@@ -510,24 +477,26 @@
   transition: all var(--transition-fast);
 }
 
-/* Type-specific step index colors */
-.pipeline-item:has(.type-explore) .step-index {
+/* Type-specific step index colors (using data attributes for browser compatibility) */
+.pipeline-item[data-step-type="explore"] .step-index {
   border-color: var(--color-info);
   color: var(--color-info);
 }
-.pipeline-item:has(.type-implement) .step-index {
+.pipeline-item[data-step-type="implement"] .step-index,
+.pipeline-item[data-step-type="general-purpose"] .step-index {
   border-color: var(--color-success);
   color: var(--color-success);
 }
-.pipeline-item:has(.type-plan) .step-index {
+.pipeline-item[data-step-type="plan"] .step-index {
   border-color: var(--color-warning);
   color: var(--color-warning);
 }
-.pipeline-item:has(.type-debug) .step-index {
+.pipeline-item[data-step-type="debug"] .step-index,
+.pipeline-item[data-step-type="debugger"] .step-index {
   border-color: var(--color-error);
   color: var(--color-error);
 }
-.pipeline-item:has(.parallel-group) .step-index {
+.pipeline-item[data-step-type="parallel"] .step-index {
   border-color: var(--color-warning);
   color: var(--color-warning);
   background: var(--color-warning-dim);
@@ -899,6 +868,28 @@
   margin-left: auto;
 }
 
+/* Ungroup button */
+.parallel-ungroup-btn {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-left: var(--space-2);
+}
+
+.parallel-ungroup-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 .parallel-group-steps {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -956,7 +947,35 @@
 
 .parallel-step-card .step-name {
   font-size: var(--font-size-sm);
-  flex: none;
+  flex: 1;
+}
+
+/* Delete button for individual steps within parallel groups */
+.parallel-step-delete-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-disabled);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.parallel-step-card:hover .parallel-step-delete-btn {
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.parallel-step-delete-btn:hover {
+  background: rgba(255, 82, 82, 0.15);
+  color: var(--color-error);
 }
 
 /* =============================================================================
@@ -993,26 +1012,6 @@
     opacity: 0;
     transform: scale(0.8);
   }
-}
-
-/* Connector flow animation */
-.pipeline-connector::before {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(0, 217, 181, 0.5) 50%,
-    transparent 100%
-  );
-  animation: connectorFlow 2s linear infinite;
-}
-
-@keyframes connectorFlow {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
 }
 
 /* =============================================================================
@@ -1106,4 +1105,162 @@
 .cancel-selection-btn:focus {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+/* =============================================================================
+   STEP EDIT BUTTON
+   ============================================================================= */
+
+.step-edit-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.step-edit-btn:hover {
+  background: rgba(0, 217, 181, 0.1);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.step-edit-btn:active {
+  background: rgba(0, 217, 181, 0.2);
+}
+
+/* =============================================================================
+   STEP EDIT FORM - Inline editing panel
+   ============================================================================= */
+
+.workflow-step-card.expanded {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  box-shadow:
+    0 0 0 2px var(--accent-primary-dim),
+    0 8px 32px rgba(0, 217, 181, 0.15);
+}
+
+.step-edit-form {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.step-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.step-edit-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+}
+
+.step-edit-input,
+.step-edit-select {
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.step-edit-input:focus,
+.step-edit-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+.step-edit-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.step-edit-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8b8b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  padding-right: var(--space-8);
+}
+
+.step-edit-textarea {
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: all var(--transition-fast);
+}
+
+.step-edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+.step-edit-textarea::placeholder {
+  color: var(--text-disabled);
+}
+
+.step-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.step-edit-cancel-btn {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.step-edit-cancel-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.step-edit-save-btn {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.step-edit-save-btn:hover {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow);
 }

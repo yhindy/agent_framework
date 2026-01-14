@@ -106,3 +106,23 @@ export function WorkflowIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Edit icon - Pencil for editing */
+export function EditIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="edit-icon">
+      <path
+        d="M16.474 5.408l2.118 2.117m-.756-3.982L12.109 9.27a2.118 2.118 0 00-.58 1.082L11 13l2.648-.53c.41-.082.786-.283 1.082-.579l5.727-5.727a1.853 1.853 0 10-2.621-2.621z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 15v3a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseIcon>
+  )
+}
