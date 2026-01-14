@@ -73,9 +73,7 @@ export class WorkflowService {
     if (!workflow) {
       throw new Error(`Workflow not found: ${id}`)
     }
-    if (workflow.isDefault) {
-      throw new Error('Cannot modify the default workflow')
-    }
+    // Allow editing all workflows including default ones
     const updated = { ...workflow, ...updates, id: workflow.id }
     this.workflows.set(id, updated)
     return updated

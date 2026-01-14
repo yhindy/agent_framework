@@ -211,7 +211,27 @@ const api = {
   removeStep: (workflowId: string, stepId: string) => ipcRenderer.invoke('workflow:removeStep', workflowId, stepId),
   generateRules: (workflowId: string) => ipcRenderer.invoke('workflow:generateRules', workflowId),
   getWorkflowTemplates: () => ipcRenderer.invoke('workflow:getAllWorkflows'),
-  saveWorkflowAsTemplate: (workflow: any, _name: string) => ipcRenderer.invoke('workflow:createWorkflow', workflow.name, workflow.description),
+  saveWorkflowAsTemplate: async (workflow: any, _name: string) => {
+    // Check if this workflow ID actually exists in the service
+    const allWorkflows = await ipcRenderer.invoke('workflow:getAllWorkflows')
+    const existsInService = allWorkflows.some((w: any) => w.id === workflow.id)
+
+    if (existsInService) {
+      // Update existing workflow with all fields including steps
+      return ipcRenderer.invoke('workflow:updateWorkflow', workflow.id, {
+        name: workflow.name,
+        description: workflow.description,
+        steps: workflow.steps
+      })
+    } else {
+      // Create new workflow, then update with steps if any
+      const created = await ipcRenderer.invoke('workflow:createWorkflow', workflow.name, workflow.description)
+      if (workflow.steps && workflow.steps.length > 0) {
+        return ipcRenderer.invoke('workflow:updateWorkflow', created.id, { steps: workflow.steps })
+      }
+      return created
+    }
+  },
 
   // Setup Wizard APIs
   checkWizard: (projectPath: string) => ipcRenderer.invoke('wizard:check', projectPath),
