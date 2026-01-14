@@ -440,3 +440,170 @@ describe('SuperAgentView Task Sidebar Collapse', () => {
   })
 })
 
+describe('SuperAgentView PR Status Check on Load', () => {
+  const mockSuperAgentWithPR = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/test-project/master-coordination',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'pr_open',
+    prUrl: 'https://github.com/test/repo/pull/123',
+    prStatus: 'OPEN',
+    tool: 'claude',
+    mode: 'planning',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    children: [],
+    pendingPlans: [],
+    taskInvocations: []
+  }
+
+  const mockSuperAgentWithoutPR = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/test-project/master-coordination',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'active',
+    tool: 'claude',
+    mode: 'planning',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    children: [],
+    pendingPlans: [],
+    taskInvocations: []
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+    vi.mocked(window.electronAPI.checkPullRequestStatus).mockResolvedValue({ status: 'OPEN' })
+    vi.mocked(window.electronAPI.detectPullRequest).mockResolvedValue({ found: false })
+  })
+
+  it('checks PR status on load when agent has existing prUrl', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithPR)
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(window.electronAPI.checkPullRequestStatus).toHaveBeenCalledWith('super-1')
+    })
+
+    // Should refresh agent details after checking PR status
+    await waitFor(() => {
+      // First call is initial load, second call is after checkPullRequestStatus
+      expect(window.electronAPI.getSuperAgentDetails).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('does not check PR status when agent has no prUrl', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithoutPR)
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+    })
+
+    // Should not check PR status since there's no prUrl
+    expect(window.electronAPI.checkPullRequestStatus).not.toHaveBeenCalled()
+  })
+
+  it('handles PR status check error gracefully', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithPR)
+    vi.mocked(window.electronAPI.checkPullRequestStatus).mockRejectedValue(new Error('PR check failed'))
+
+    // Spy on console.error to verify error is logged
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(window.electronAPI.checkPullRequestStatus).toHaveBeenCalledWith('super-1')
+    })
+
+    // Component should still render properly despite the error
+    await waitFor(() => {
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+    })
+
+    // Error should be logged
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[SuperAgentView] Failed to check PR status:',
+        expect.any(Error)
+      )
+    })
+
+    consoleSpy.mockRestore()
+  })
+
+  it('displays updated PR status after check completes', async () => {
+    const initialAgent = { ...mockSuperAgentWithPR, prStatus: 'OPEN' }
+    const updatedAgent = { ...mockSuperAgentWithPR, prStatus: 'MERGED' }
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails)
+      .mockResolvedValueOnce(initialAgent)
+      .mockResolvedValueOnce(updatedAgent)
+    vi.mocked(window.electronAPI.checkPullRequestStatus).mockResolvedValue({ status: 'MERGED', mergedAt: new Date().toISOString() })
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    // Wait for PR status to be updated
+    await waitFor(() => {
+      expect(screen.getByText('PR: MERGED')).toBeInTheDocument()
+    })
+  })
+
+  it('tries detectPullRequest when no prUrl, not checkPullRequestStatus', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithoutPR)
+    vi.mocked(window.electronAPI.detectPullRequest).mockResolvedValue({ found: false })
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+    })
+
+    // Should call detectPullRequest (not checkPullRequestStatus) when no prUrl
+    expect(window.electronAPI.detectPullRequest).toHaveBeenCalledWith('super-1')
+    expect(window.electronAPI.checkPullRequestStatus).not.toHaveBeenCalled()
+  })
+})
+

@@ -102,6 +102,20 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         }
       }
 
+      // Check PR status if prUrl exists - refresh status when landing on page
+      if (details && details.prUrl) {
+        try {
+          await window.electronAPI.checkPullRequestStatus(details.id)
+          // Reload agent to get updated PR status
+          const refreshed = await window.electronAPI.getSuperAgentDetails(agentId!)
+          if (refreshed) {
+            setAgent(refreshed)
+          }
+        } catch (err) {
+          console.error('[SuperAgentView] Failed to check PR status:', err)
+        }
+      }
+
       // Restore UI state if available
       if (details?.uiState) {
         const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = details.uiState
