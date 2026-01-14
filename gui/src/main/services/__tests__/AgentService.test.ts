@@ -19,6 +19,7 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(),
   writeFileSync: vi.fn(),
   statSync: vi.fn(),
+  mkdirSync: vi.fn(),
 }))
 
 // Mock child_process
@@ -304,5 +305,311 @@ describe('AgentService Teleport Session Validation', () => {
   // Note: updateAgentBranchName tests are skipped for now as they require complex mocking
   // of child_process.exec for git worktree list. The method is simple enough that
   // integration tests will cover it adequately.
+})
+
+describe('AgentService Dual Config Location Support', () => {
+  let agentService: AgentService
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    agentService = new AgentService()
+  })
+
+  describe('getProjectConfigPath', () => {
+    it('should return minions.json path when it exists (new format)', () => {
+      const projectPath = '/path/to/project'
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newConfigPath)
+
+      // Access private method via reflection for testing
+      const configPath = (agentService as any).getProjectConfigPath(projectPath)
+
+      expect(configPath).toBe(newConfigPath)
+    })
+
+    it('should return legacy minions/config.json path when minions.json does not exist', () => {
+      const projectPath = '/path/to/project'
+      const legacyConfigPath = join(projectPath, 'minions', 'config.json')
+
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+
+      const configPath = (agentService as any).getProjectConfigPath(projectPath)
+
+      expect(configPath).toBe(legacyConfigPath)
+    })
+
+    it('should prefer minions.json over legacy config when both exist', () => {
+      const projectPath = '/path/to/project'
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      // Both files exist
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+
+      const configPath = (agentService as any).getProjectConfigPath(projectPath)
+
+      expect(configPath).toBe(newConfigPath)
+    })
+  })
+
+  describe('readAgentInfo with new location', () => {
+    it('should read from .minions/agents/{id}.json when it exists (new format)', () => {
+      const projectPath = '/path/to/project'
+      const worktreePath = '/path/to/myrepo-abc123'
+      const agentId = 'myrepo-abc123'
+      const newAgentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
+
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: agentId,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === newAgentInfoPath
+      })
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(agentInfo))
+
+      // Pass worktreePath, agentId, and projectPath for new format lookup
+      const result = agentService.readAgentInfo(worktreePath, agentId, projectPath)
+
+      expect(result).toEqual(agentInfo)
+      expect(fs.readFileSync).toHaveBeenCalledWith(newAgentInfoPath, 'utf-8')
+    })
+
+    it('should fall back to .agent-info in worktree when new location does not exist', () => {
+      const worktreePath = '/path/to/myrepo-abc123'
+      const agentId = 'myrepo-abc123'
+      const legacyAgentInfoPath = join(worktreePath, '.agent-info')
+
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: agentId,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === legacyAgentInfoPath
+      })
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(agentInfo))
+
+      // Call with just worktreePath (legacy behavior)
+      const result = agentService.readAgentInfo(worktreePath)
+
+      expect(result).toEqual(agentInfo)
+    })
+  })
+
+  describe('writeAgentInfo with new location', () => {
+    it('should write to .minions/agents/{id}.json for new format projects', () => {
+      const projectPath = '/path/to/project'
+      const agentId = 'myrepo-abc123'
+      const newConfigPath = join(projectPath, 'minions.json')
+      const newAgentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
+
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: agentId,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // minions.json exists (new format project)
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newConfigPath)
+
+      agentService.writeAgentInfo(projectPath, agentInfo, projectPath)
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        newAgentInfoPath,
+        JSON.stringify(agentInfo, null, 2)
+      )
+    })
+
+    it('should write to .agent-info in worktree for legacy projects', () => {
+      const worktreePath = '/path/to/myrepo-abc123'
+      const legacyAgentInfoPath = join(worktreePath, '.agent-info')
+
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: 'myrepo-abc123',
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // No minions.json (legacy project)
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+
+      agentService.writeAgentInfo(worktreePath, agentInfo)
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        legacyAgentInfoPath,
+        JSON.stringify(agentInfo, null, 2)
+      )
+    })
+  })
+
+  describe('base agent info with new location', () => {
+    it('should read from .minions/base-agent.json when it exists (new format)', () => {
+      const projectPath = '/path/to/project'
+      const newBaseInfoPath = join(projectPath, '.minions', 'base-agent.json')
+
+      const baseAgentInfo: AgentInfo = {
+        id: 'myrepo-base-123',
+        agentId: 'myrepo-base',
+        branch: 'main',
+        project: 'myrepo',
+        feature: 'Base Branch (main)',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        isBaseBranchAgent: true,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newBaseInfoPath)
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(baseAgentInfo))
+
+      const result = agentService.readBaseAgentInfo(projectPath)
+
+      expect(result).toEqual(baseAgentInfo)
+      expect(fs.readFileSync).toHaveBeenCalledWith(newBaseInfoPath, 'utf-8')
+    })
+
+    it('should fall back to .minions-base-info when new location does not exist', () => {
+      const projectPath = '/path/to/project'
+      const legacyBaseInfoPath = join(projectPath, '.minions-base-info')
+
+      const baseAgentInfo: AgentInfo = {
+        id: 'myrepo-base-123',
+        agentId: 'myrepo-base',
+        branch: 'main',
+        project: 'myrepo',
+        feature: 'Base Branch (main)',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        isBaseBranchAgent: true,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === legacyBaseInfoPath)
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(baseAgentInfo))
+
+      const result = agentService.readBaseAgentInfo(projectPath)
+
+      expect(result).toEqual(baseAgentInfo)
+      expect(fs.readFileSync).toHaveBeenCalledWith(legacyBaseInfoPath, 'utf-8')
+    })
+
+    it('should write to .minions/base-agent.json for new format projects', () => {
+      const projectPath = '/path/to/project'
+      const newConfigPath = join(projectPath, 'minions.json')
+      const newBaseInfoPath = join(projectPath, '.minions', 'base-agent.json')
+
+      const baseAgentInfo: AgentInfo = {
+        id: 'myrepo-base-123',
+        agentId: 'myrepo-base',
+        branch: 'main',
+        project: 'myrepo',
+        feature: 'Base Branch (main)',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        isBaseBranchAgent: true,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // minions.json exists (new format project)
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newConfigPath)
+
+      agentService.writeBaseAgentInfo(projectPath, baseAgentInfo)
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        newBaseInfoPath,
+        JSON.stringify(baseAgentInfo, null, 2)
+      )
+    })
+
+    it('should write to .minions-base-info for legacy projects', () => {
+      const projectPath = '/path/to/project'
+      const legacyBaseInfoPath = join(projectPath, '.minions-base-info')
+
+      const baseAgentInfo: AgentInfo = {
+        id: 'myrepo-base-123',
+        agentId: 'myrepo-base',
+        branch: 'main',
+        project: 'myrepo',
+        feature: 'Base Branch (main)',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        isBaseBranchAgent: true,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // No minions.json (legacy project)
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+
+      agentService.writeBaseAgentInfo(projectPath, baseAgentInfo)
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        legacyBaseInfoPath,
+        JSON.stringify(baseAgentInfo, null, 2)
+      )
+    })
+  })
+
+  describe('isNewFormatProject helper', () => {
+    it('should return true when minions.json exists', () => {
+      const projectPath = '/path/to/project'
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newConfigPath)
+
+      const result = agentService.isNewFormatProject(projectPath)
+
+      expect(result).toBe(true)
+    })
+
+    it('should return false when minions.json does not exist', () => {
+      const projectPath = '/path/to/project'
+
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+
+      const result = agentService.isNewFormatProject(projectPath)
+
+      expect(result).toBe(false)
+    })
+  })
 })
 

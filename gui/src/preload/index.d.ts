@@ -77,9 +77,20 @@ declare const api: {
         agentId: string;
         reason: string;
     }) => void) => () => Electron.IpcRenderer;
-    listArchivedAgents: (projectPath?: string) => Promise<any>;
-    getArchivedAgent: (projectPath: string, archiveId: string) => Promise<any>;
-    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<any>;
+    // Setup Wizard APIs
+    checkWizard: (projectPath: string) => Promise<{
+        needsWizard: boolean;
+        hasLegacy: boolean;
+    }>;
+    startWizard: (projectPath: string) => Promise<import('../main/services/types/MinionsConfig').WizardSession>;
+    cancelWizard: (sessionId: string) => Promise<void>;
+    finalizeWizard: (projectPath: string, config: import('../main/services/types/MinionsConfig').MinionsConfig) => Promise<void>;
+    quickSetup: (projectPath: string) => Promise<void>;
+    migrateProject: (projectPath: string) => Promise<import('../main/services/types/MinionsConfig').MinionsConfig>;
+    // Archive APIs
+    listArchivedAgents: (projectPath?: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent[]>;
+    getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent | null>;
+    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').AgentInfo>;
 };
 export type ElectronAPI = typeof api;
 export {};

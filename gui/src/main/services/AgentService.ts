@@ -350,7 +350,31 @@ export class AgentService {
   }
 
   // New helper functions for JSON .agent-info format
-  readAgentInfo(worktreePath: string): AgentInfo | null {
+  /**
+   * Read agent info from file system.
+   * For new format projects with minions.json, checks .minions/agents/{id}.json first.
+   * Falls back to .agent-info in worktree for legacy projects.
+   *
+   * @param worktreePath - Path to the worktree (or project root for base agents)
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
+   * @returns AgentInfo or null if not found
+   */
+  readAgentInfo(worktreePath: string, agentId?: string, projectPath?: string): AgentInfo | null {
+    // If agentId and projectPath provided, try new format first
+    if (agentId && projectPath) {
+      const newAgentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
+      if (existsSync(newAgentInfoPath)) {
+        try {
+          const content = readFileSync(newAgentInfoPath, 'utf-8')
+          return JSON.parse(content) as AgentInfo
+        } catch (error) {
+          console.error(`Error reading new format agent info at ${newAgentInfoPath}:`, error)
+          // Fall through to legacy locations
+        }
+      }
+    }
+
     // Check for base agent info first (.minions-base-info in project root)
     const baseInfoPath = join(worktreePath, '.minions-base-info')
     if (existsSync(baseInfoPath)) {
@@ -401,14 +425,91 @@ export class AgentService {
     }
   }
 
-  writeAgentInfo(worktreePath: string, info: AgentInfo): void {
-    // Base agents use .minions-base-info, regular agents use .agent-info
+  /**
+   * Write agent info to file system.
+   * For new format projects with minions.json, writes to .minions/agents/{id}.json.
+   * For legacy projects, writes to .agent-info in worktree.
+   *
+   * @param worktreePath - Path to the worktree (or project root for base agents)
+   * @param info - AgentInfo to write
+   * @param projectPath - Optional project path for new format detection
+   */
+  writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
+    // Base agents are handled separately via writeBaseAgentInfo
     if (info.isBaseBranchAgent) {
       const baseInfoPath = join(worktreePath, '.minions-base-info')
       writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+      return
+    }
+
+    // Check if this is a new format project
+    const effectiveProjectPath = projectPath || worktreePath
+    if (this.isNewFormatProject(effectiveProjectPath)) {
+      const agentsDir = join(effectiveProjectPath, '.minions', 'agents')
+      mkdirSync(agentsDir, { recursive: true })
+      const agentInfoPath = join(agentsDir, `${info.agentId}.json`)
+      writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
     } else {
+      // Legacy: write to .agent-info in worktree
       const agentInfoPath = join(worktreePath, '.agent-info')
       writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+    }
+  }
+
+  /**
+   * Read base agent info from file system.
+   * For new format projects, checks .minions/base-agent.json first.
+   * Falls back to .minions-base-info for legacy projects.
+   *
+   * @param projectPath - Path to the project root
+   * @returns AgentInfo or null if not found
+   */
+  readBaseAgentInfo(projectPath: string): AgentInfo | null {
+    // New format first: .minions/base-agent.json
+    const newBaseInfoPath = join(projectPath, '.minions', 'base-agent.json')
+    if (existsSync(newBaseInfoPath)) {
+      try {
+        const content = readFileSync(newBaseInfoPath, 'utf-8')
+        return JSON.parse(content) as AgentInfo
+      } catch (error) {
+        console.error(`Error reading new format base agent info at ${newBaseInfoPath}:`, error)
+        // Fall through to legacy location
+      }
+    }
+
+    // Legacy fallback: .minions-base-info
+    const legacyBaseInfoPath = join(projectPath, '.minions-base-info')
+    if (existsSync(legacyBaseInfoPath)) {
+      try {
+        const content = readFileSync(legacyBaseInfoPath, 'utf-8')
+        return JSON.parse(content) as AgentInfo
+      } catch (error) {
+        console.error(`Error reading legacy base agent info at ${legacyBaseInfoPath}:`, error)
+        return null
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Write base agent info to file system.
+   * For new format projects with minions.json, writes to .minions/base-agent.json.
+   * For legacy projects, writes to .minions-base-info.
+   *
+   * @param projectPath - Path to the project root
+   * @param info - AgentInfo to write
+   */
+  writeBaseAgentInfo(projectPath: string, info: AgentInfo): void {
+    if (this.isNewFormatProject(projectPath)) {
+      const minionsDir = join(projectPath, '.minions')
+      mkdirSync(minionsDir, { recursive: true })
+      const baseInfoPath = join(minionsDir, 'base-agent.json')
+      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+    } else {
+      // Legacy: write to .minions-base-info
+      const baseInfoPath = join(projectPath, '.minions-base-info')
+      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
     }
   }
 
@@ -481,7 +582,23 @@ export class AgentService {
   }
 
   private getProjectConfigPath(projectPath: string): string {
+    // New format first: minions.json at project root
+    const newConfigPath = join(projectPath, 'minions.json')
+    if (existsSync(newConfigPath)) {
+      return newConfigPath
+    }
+
+    // Legacy fallback: minions/config.json
     return join(projectPath, 'minions', 'config.json')
+  }
+
+  /**
+   * Check if this project uses the new minions.json format.
+   * @param projectPath - Path to the project root
+   * @returns true if minions.json exists at project root
+   */
+  isNewFormatProject(projectPath: string): boolean {
+    return existsSync(join(projectPath, 'minions.json'))
   }
 
   /**

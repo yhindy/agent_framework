@@ -14,6 +14,8 @@ import { ClaudeSessionInfoService } from './services/ClaudeSessionInfoService'
 import { TeleportService } from './services/TeleportService'
 import { TeleportMetadataService } from './services/TeleportMetadataService'
 import { createLogger } from './services/logger'
+import { SetupWizardService } from './services/SetupWizardService'
+import { MinionsConfigService } from './services/MinionsConfigService'
 
 const log = createLogger('Main')
 
@@ -33,6 +35,8 @@ let services: {
   claudeSessionInfo: ClaudeSessionInfoService
   teleport: TeleportService
   teleportMetadata: TeleportMetadataService
+  setupWizard: SetupWizardService
+  minionsConfig: MinionsConfigService
 } | null = null
 
 
@@ -105,6 +109,7 @@ function initializeServices(): void {
   const notificationService = new NotificationService(mainWindow, settingsService)
   const claudeSessionInfoService = new ClaudeSessionInfoService()
   const terminalService = new TerminalService(mainWindow, notificationService)
+  const minionsConfigService = new MinionsConfigService()
 
   // Set service references in TerminalService
   terminalService.setAgentService(agentService)
@@ -112,6 +117,9 @@ function initializeServices(): void {
 
   // Set service references in AgentService
   agentService.setClaudeSessionInfoService(claudeSessionInfoService)
+
+  // Create SetupWizardService (depends on other services)
+  const setupWizardService = new SetupWizardService(agentService, terminalService, minionsConfigService)
 
   services = {
     project: projectService,
@@ -124,7 +132,9 @@ function initializeServices(): void {
     prPolling: new PRPollingService(mainWindow, agentService),
     claudeSessionInfo: claudeSessionInfoService,
     teleport: new TeleportService(),
-    teleportMetadata: new TeleportMetadataService()
+    teleportMetadata: new TeleportMetadataService(),
+    setupWizard: setupWizardService,
+    minionsConfig: minionsConfigService
   }
 
   // Migrate existing assignments from config.json to .agent-info files
@@ -1072,6 +1082,35 @@ function setupIPC(): void {
       }
     }
     return null
+  })
+
+  // Setup Wizard handlers
+  ipcMain.handle('wizard:check', async (_event, projectPath: string) => {
+    return {
+      needsWizard: services!.setupWizard.needsWizard(projectPath),
+      hasLegacy: services!.setupWizard.hasLegacyStructure(projectPath)
+    }
+  })
+
+  ipcMain.handle('wizard:start', async (_event, projectPath: string) => {
+    return services!.setupWizard.startWizard(projectPath)
+  })
+
+  ipcMain.handle('wizard:cancel', async (_event, sessionId: string) => {
+    return services!.setupWizard.cancelWizard(sessionId)
+  })
+
+  ipcMain.handle('wizard:finalize', async (_event, projectPath: string, config: any) => {
+    return services!.setupWizard.finalizeSetup(projectPath, config)
+  })
+
+  ipcMain.handle('wizard:quickSetup', async (_event, projectPath: string) => {
+    return services!.setupWizard.quickSetup(projectPath)
+  })
+
+  // Migration handler
+  ipcMain.handle('project:migrate', async (_event, projectPath: string) => {
+    return services!.minionsConfig.migrateFromLegacy(projectPath)
   })
 }
 
