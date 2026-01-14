@@ -1,0 +1,1109 @@
+/* =============================================================================
+   WORKFLOW PANEL - Slide-out panel for workflow editing
+   ============================================================================= */
+
+/* Backdrop overlay */
+.workflow-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: calc(var(--z-modal) - 1);
+  opacity: 0;
+  transition: opacity var(--transition-slow);
+  pointer-events: none;
+}
+
+.workflow-backdrop.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Main panel */
+.workflow-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 480px;
+  height: 100vh;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  box-shadow: -8px 0 48px rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal);
+  transform: translateX(100%);
+  transition: transform var(--transition-slow) cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-panel.open {
+  transform: translateX(0);
+}
+
+/* =============================================================================
+   PANEL HEADER
+   ============================================================================= */
+
+.workflow-panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+}
+
+.workflow-close-btn {
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.workflow-close-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.workflow-header-content {
+  flex: 1;
+}
+
+.workflow-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-wider);
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.workflow-subtitle {
+  margin: var(--space-1) 0 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.workflow-help-btn {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.workflow-help-btn:hover {
+  border-color: var(--color-info);
+  color: var(--color-info);
+}
+
+/* =============================================================================
+   PANEL CONTENT
+   ============================================================================= */
+
+.workflow-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+/* Loading state */
+.workflow-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: var(--space-3);
+  color: var(--text-muted);
+}
+
+/* Error state */
+.workflow-error {
+  background: var(--color-error-dim);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.workflow-error p {
+  margin: 0 0 var(--space-3) 0;
+  color: var(--color-error);
+}
+
+.workflow-error button {
+  background: var(--color-error);
+  color: white;
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+/* Locked state */
+.workflow-locked {
+  background: var(--color-warning-dim);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.workflow-locked p {
+  margin: 0;
+  color: var(--color-warning);
+}
+
+.workflow-locked .locked-by {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* Empty state */
+.workflow-empty-state {
+  text-align: center;
+  padding: var(--space-8) var(--space-5);
+}
+
+.workflow-empty-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--space-5);
+  background: linear-gradient(135deg, var(--bg-overlay) 0%, var(--bg-muted) 100%);
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  opacity: 0.6;
+  color: var(--text-muted);
+}
+
+.workflow-empty-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.workflow-empty-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  max-width: 280px;
+  margin: 0 auto var(--space-5);
+  line-height: var(--line-height-relaxed);
+}
+
+.workflow-start-btn {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.workflow-start-btn:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-glow);
+}
+
+/* =============================================================================
+   PANEL FOOTER
+   ============================================================================= */
+
+.workflow-panel-footer {
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-default);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.workflow-unsaved-indicator {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workflow-unsaved-indicator::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: var(--color-warning);
+  border-radius: var(--radius-full);
+}
+
+.workflow-footer-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.workflow-cancel-btn {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.workflow-cancel-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.workflow-save-btn {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.workflow-save-btn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow);
+}
+
+.workflow-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   PIPELINE VISUALIZATION - Bold Spine Design
+   ============================================================================= */
+
+.workflow-pipeline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-6) var(--space-4);
+  position: relative;
+}
+
+/* The bold vertical spine running through the entire pipeline */
+.workflow-pipeline::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 48px; /* Start below START marker */
+  bottom: 48px; /* End above END marker */
+  width: 6px;
+  background: linear-gradient(
+    180deg,
+    var(--color-success) 0%,
+    var(--color-purple) 30%,
+    var(--color-teal) 70%,
+    var(--color-info) 100%
+  );
+  border-radius: 3px;
+  transform: translateX(-50%);
+  opacity: 0.25;
+  z-index: 0;
+}
+
+.workflow-pipeline-empty {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Pipeline markers (START/END) - Commanding terminal nodes */
+.pipeline-marker {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 2;
+}
+
+.pipeline-marker.start {
+  background: linear-gradient(135deg, var(--color-success) 0%, #2e7d32 100%);
+  color: white;
+  box-shadow:
+    0 0 0 4px var(--bg-base),
+    0 0 0 6px var(--color-success),
+    0 8px 24px rgba(0, 200, 83, 0.35);
+}
+
+/* Subtle pulse animation on START */
+.pipeline-marker.start::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--color-success);
+  animation: startPulse 2.5s ease-out infinite;
+  opacity: 0.6;
+}
+
+@keyframes startPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.pipeline-marker.end {
+  background: linear-gradient(135deg, var(--color-info) 0%, #1565c0 100%);
+  color: white;
+  box-shadow:
+    0 0 0 4px var(--bg-base),
+    0 0 0 6px var(--color-info),
+    0 8px 24px rgba(68, 138, 255, 0.35);
+}
+
+/* Pipeline connector lines - bolder with flow animation */
+.pipeline-connector {
+  width: 6px;
+  height: 28px;
+  background: linear-gradient(
+    180deg,
+    var(--color-purple) 0%,
+    var(--color-teal) 100%
+  );
+  margin: 0 auto;
+  position: relative;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Animated flow dot moving down the connector */
+.pipeline-connector::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  left: 0;
+  animation: flowDot 1.8s linear infinite;
+  box-shadow: 0 0 8px var(--accent-primary);
+}
+
+@keyframes flowDot {
+  0% {
+    top: -6px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* Remove the old arrow, use cleaner design */
+.pipeline-connector::after {
+  display: none;
+}
+
+/* Pipeline item wrapper - with node indicator */
+.pipeline-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+/* Circular node on the spine for each item */
+.pipeline-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-elevated);
+  border: 3px solid var(--accent-primary);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  transition: all var(--transition-fast);
+}
+
+/* Type-specific node colors */
+.pipeline-item:has(.type-explore)::before {
+  border-color: var(--color-info);
+}
+.pipeline-item:has(.type-implement)::before {
+  border-color: var(--color-success);
+}
+.pipeline-item:has(.type-plan)::before {
+  border-color: var(--color-warning);
+}
+.pipeline-item:has(.type-debug)::before {
+  border-color: var(--color-error);
+}
+.pipeline-item:has(.parallel-group)::before {
+  border-color: var(--color-warning);
+  background: var(--color-warning-dim);
+}
+
+/* Step number indicator - positioned on the spine */
+.step-index {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 24px;
+  background: var(--bg-base);
+  border: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  z-index: 3;
+  transition: all var(--transition-fast);
+}
+
+/* Type-specific step index colors */
+.pipeline-item:has(.type-explore) .step-index {
+  border-color: var(--color-info);
+  color: var(--color-info);
+}
+.pipeline-item:has(.type-implement) .step-index {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.pipeline-item:has(.type-plan) .step-index {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.pipeline-item:has(.type-debug) .step-index {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+.pipeline-item:has(.parallel-group) .step-index {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  background: var(--color-warning-dim);
+}
+
+/* =============================================================================
+   STEP CARDS
+   ============================================================================= */
+
+.workflow-step-card {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-left: 5px solid var(--color-teal);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Subtle glow effect on the left border */
+.workflow-step-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: inherit;
+  filter: blur(8px);
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.workflow-step-card:hover {
+  transform: translateX(4px) translateY(-2px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.workflow-step-card.selected {
+  border-color: var(--color-warning);
+  box-shadow:
+    0 0 0 2px var(--color-warning-dim),
+    0 8px 24px rgba(255, 171, 0, 0.2);
+}
+
+.workflow-step-card.disabled {
+  opacity: 0.5;
+  border-left-color: var(--text-disabled);
+}
+
+/* Type-specific styling with enhanced glow */
+.workflow-step-card.type-explore {
+  border-left-color: var(--color-info);
+}
+.workflow-step-card.type-explore:hover {
+  box-shadow:
+    0 8px 32px rgba(68, 138, 255, 0.2),
+    4px 0 16px rgba(68, 138, 255, 0.15);
+}
+
+.workflow-step-card.type-implement {
+  border-left-color: var(--color-success);
+}
+.workflow-step-card.type-implement:hover {
+  box-shadow:
+    0 8px 32px rgba(0, 200, 83, 0.2),
+    4px 0 16px rgba(0, 200, 83, 0.15);
+}
+
+.workflow-step-card.type-plan {
+  border-left-color: var(--color-warning);
+}
+.workflow-step-card.type-plan:hover {
+  box-shadow:
+    0 8px 32px rgba(255, 171, 0, 0.2),
+    4px 0 16px rgba(255, 171, 0, 0.15);
+}
+
+.workflow-step-card.type-debug {
+  border-left-color: var(--color-error);
+}
+.workflow-step-card.type-debug:hover {
+  box-shadow:
+    0 8px 32px rgba(255, 82, 82, 0.2),
+    4px 0 16px rgba(255, 82, 82, 0.15);
+}
+
+/* Step card header */
+.step-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.step-drag-handle {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0.4;
+  cursor: grab;
+  transition: opacity var(--transition-base);
+}
+
+.step-drag-handle:hover {
+  opacity: 1;
+}
+
+.step-drag-handle span {
+  width: 100%;
+  height: 2px;
+  background: var(--text-muted);
+  border-radius: 1px;
+}
+
+.step-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.step-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Type-specific icon backgrounds */
+.workflow-step-card.type-explore .step-icon {
+  background: linear-gradient(135deg, rgba(68, 138, 255, 0.15) 0%, rgba(68, 138, 255, 0.05) 100%);
+  color: var(--color-info);
+}
+
+.workflow-step-card.type-implement .step-icon {
+  background: linear-gradient(135deg, rgba(0, 200, 83, 0.15) 0%, rgba(0, 200, 83, 0.05) 100%);
+  color: var(--color-success);
+}
+
+.workflow-step-card.type-plan .step-icon {
+  background: linear-gradient(135deg, rgba(255, 171, 0, 0.15) 0%, rgba(255, 171, 0, 0.05) 100%);
+  color: var(--color-warning);
+}
+
+.workflow-step-card.type-debug .step-icon {
+  background: linear-gradient(135deg, rgba(255, 82, 82, 0.15) 0%, rgba(255, 82, 82, 0.05) 100%);
+  color: var(--color-error);
+}
+
+.step-name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.step-description {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: var(--space-2) 0 0 0;
+  line-height: var(--line-height-relaxed);
+}
+
+/* Reorder buttons */
+.step-reorder-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-reorder-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  width: 24px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  padding: 0;
+}
+
+.step-reorder-btn:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.step-reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Delete button */
+.step-delete-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-left: var(--space-2);
+}
+
+.step-delete-btn:hover {
+  background: rgba(255, 82, 82, 0.1);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.step-delete-btn:active {
+  background: rgba(255, 82, 82, 0.2);
+}
+
+/* Step metadata row */
+.step-metadata {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.step-type-badge {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.step-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.step-toggle-label {
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+}
+
+/* Toggle switch */
+.step-toggle-switch {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--transition-base);
+  border: none;
+  padding: 0;
+}
+
+.step-toggle-switch.enabled {
+  background: var(--accent-primary);
+}
+
+.step-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: var(--radius-full);
+  transition: transform var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.step-toggle-switch.enabled::after {
+  transform: translateX(16px);
+}
+
+.step-toggle-switch.small {
+  width: 28px;
+  height: 16px;
+}
+
+.step-toggle-switch.small::after {
+  width: 12px;
+  height: 12px;
+}
+
+.step-toggle-switch.small.enabled::after {
+  transform: translateX(12px);
+}
+
+/* =============================================================================
+   PARALLEL GROUPS
+   ============================================================================= */
+
+.parallel-group {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 2px dashed var(--color-warning);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  position: relative;
+}
+
+.parallel-group::before {
+  content: 'PARALLEL';
+  position: absolute;
+  top: -10px;
+  left: var(--space-4);
+  background: var(--bg-surface);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-wider);
+  color: var(--color-warning);
+  text-transform: uppercase;
+}
+
+.parallel-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.parallel-group-label {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  background: rgba(255, 171, 0, 0.1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 171, 0, 0.3);
+}
+
+.parallel-group-reorder {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.parallel-group-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.parallel-step-card {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--color-teal);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.parallel-step-card:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 2px 12px rgba(0, 217, 181, 0.1);
+}
+
+.parallel-step-card.selected {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-warning-dim);
+}
+
+.parallel-step-card.disabled {
+  opacity: 0.5;
+  border-left-color: var(--text-disabled);
+}
+
+.parallel-step-card.type-explore {
+  border-left-color: var(--color-info);
+}
+
+.parallel-step-card.type-implement {
+  border-left-color: var(--color-success);
+}
+
+.parallel-step-card.type-plan {
+  border-left-color: var(--color-warning);
+}
+
+.parallel-step-card.type-debug {
+  border-left-color: var(--color-error);
+}
+
+.parallel-step-card .step-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.parallel-step-card .step-name {
+  font-size: var(--font-size-sm);
+  flex: none;
+}
+
+/* =============================================================================
+   ANIMATIONS
+   ============================================================================= */
+
+/* Step enter animation */
+.workflow-step-card.entering {
+  animation: stepEnter var(--transition-spring);
+}
+
+@keyframes stepEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Step leave animation */
+.workflow-step-card.leaving {
+  animation: stepLeave var(--transition-fast);
+}
+
+@keyframes stepLeave {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* Connector flow animation */
+.pipeline-connector::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 217, 181, 0.5) 50%,
+    transparent 100%
+  );
+  animation: connectorFlow 2s linear infinite;
+}
+
+@keyframes connectorFlow {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* =============================================================================
+   SELECTION ACTION BAR
+   Floating toolbar that appears when 2+ steps are selected
+   ============================================================================= */
+
+.selection-action-bar {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-lg), 0 4px 24px rgba(0, 0, 0, 0.3);
+  z-index: var(--z-tooltip);
+  animation: actionBarEnter var(--transition-base) ease-out;
+}
+
+@keyframes actionBarEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.selection-count {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.selection-count strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.group-parallel-btn {
+  background: var(--color-warning);
+  color: var(--bg-base);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.group-parallel-btn:hover {
+  background: var(--color-warning-bright, #ffbf00);
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(255, 171, 0, 0.4);
+}
+
+.group-parallel-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-warning-dim);
+}
+
+.cancel-selection-btn {
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+}
+
+.cancel-selection-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.cancel-selection-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}

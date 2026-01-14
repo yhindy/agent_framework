@@ -85,3 +85,24 @@ export function PlusCircleIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Workflow icon - Connected nodes representing workflow steps */
+export function WorkflowIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="workflow-icon">
+      {/* Top node */}
+      <circle cx="12" cy="5" r="2.5" stroke="currentColor" />
+      {/* Connection line from top to middle */}
+      <line x1="12" y1="7.5" x2="12" y2="9.5" stroke="currentColor" strokeLinecap="round" />
+      {/* Middle node */}
+      <circle cx="12" cy="12" r="2.5" stroke="currentColor" />
+      {/* Connection line from middle splitting to bottom nodes */}
+      <path d="M12 14.5L12 16L7 16L7 17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 16L17 16L17 17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Bottom left node */}
+      <circle cx="7" cy="19.5" r="2" stroke="currentColor" />
+      {/* Bottom right node */}
+      <circle cx="17" cy="19.5" r="2" stroke="currentColor" />
+    </BaseIcon>
+  )
+}

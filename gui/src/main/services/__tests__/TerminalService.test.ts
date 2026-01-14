@@ -19,7 +19,9 @@ vi.mock('node-pty', () => ({
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   existsSync: vi.fn(),
-  statSync: vi.fn()
+  statSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn()
 }))
 
 // Mock child_process
@@ -602,6 +604,7 @@ describe('Super Minion System Prompt', () => {
   let mockMainWindow: any
   let mockPty: any
   let mockAgentService: any
+  let mockWorkflowService: any
 
   // Common test data
   const TEST_PROJECT_PATH = '/path/to/project'
@@ -611,11 +614,28 @@ describe('Super Minion System Prompt', () => {
   const SUPER_MINION_AGENT_INFO = { isSuperMinion: true }
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
-  const ACCEPTANCE_CRITERIA_KEYWORDS = [
-    'ACCEPTANCE CRITERIA',
-    'AskUserQuestion',
-    'PHASE 1',
-    'WAIT for explicit'
+  // Mock workflow configuration
+  const MOCK_WORKFLOW = {
+    id: 'test-workflow',
+    name: 'Test Workflow',
+    items: [
+      { type: 'step', name: 'Design Phase', subagentTypeId: 'planner' },
+      { type: 'step', name: 'Implementation', subagentTypeId: 'dev' },
+      {
+        type: 'parallel',
+        steps: [
+          { name: 'Test', subagentTypeId: 'tester' },
+          { name: 'Review', subagentTypeId: 'reviewer' }
+        ]
+      }
+    ]
+  }
+
+  const MOCK_SUBAGENT_TYPES = [
+    { id: 'planner', name: 'Planner' },
+    { id: 'dev', name: 'Developer' },
+    { id: 'tester', name: 'Tester' },
+    { id: 'reviewer', name: 'Reviewer' }
   ]
 
   // Helper to get the command written to PTY
@@ -660,11 +680,19 @@ describe('Super Minion System Prompt', () => {
       getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
     }
 
-    vi.mocked(fs.existsSync).mockReturnValue(true)
+    mockWorkflowService = {
+      getActiveWorkflow: vi.fn().mockReturnValue(MOCK_WORKFLOW),
+      getSubagentTypes: vi.fn().mockReturnValue(MOCK_SUBAGENT_TYPES),
+      generateRulesMarkdown: vi.fn().mockReturnValue('# Workflow Rules'),
+      lockWorkflow: vi.fn(),
+      unlockWorkflow: vi.fn()
+    }
+
     setupAgentInfo(SUPER_MINION_AGENT_INFO)
 
     terminalService = new TerminalService(mockMainWindow)
     terminalService.setAgentService(mockAgentService)
+    terminalService.setWorkflowService(mockWorkflowService)
   })
 
   afterEach(() => {
@@ -676,16 +704,17 @@ describe('Super Minion System Prompt', () => {
 
     const command = getWrittenCommand()
     expect(command).toContain('--system-prompt-file')
-    expect(command).toContain(SUPER_MINION_RULES_PATH)
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalled()
   })
 
-  it('should include acceptance criteria instructions in planning prompt for super minion', async () => {
+  it('should include workflow-aware prompt for super minion', async () => {
     await startAgent()
 
     const command = getWrittenCommand()
-    ACCEPTANCE_CRITERIA_KEYWORDS.forEach(keyword => {
-      expect(command).toContain(keyword)
-    })
+    expect(command).toContain('**Super Minion**')
+    expect(command).toContain('3-phase workflow')
+    expect(command).toContain('## Your Goal')
+    expect(command).toContain('Create feature X')
   })
 
   it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
@@ -695,27 +724,44 @@ describe('Super Minion System Prompt', () => {
 
     const command = getWrittenCommand()
     expect(command).not.toContain('--system-prompt-file')
-    expect(command).not.toContain('super-minion-rules.md')
   })
 
-  it('should NOT include acceptance criteria instructions for regular planning mode', async () => {
+  it('should NOT include workflow-aware prompt for regular planning mode', async () => {
     setupAgentInfo(REGULAR_AGENT_INFO)
 
     await startAgent(TEST_PROMPT, 'agent-2')
 
     const command = getWrittenCommand()
-    expect(command).not.toContain('5-PHASE WORKFLOW')
-    expect(command).not.toContain('ACCEPTANCE CRITERIA')
+    expect(command).toContain('Create a plan for: Create feature X')
+    expect(command).not.toContain('**Super Minion**')
+    expect(command).not.toContain('## Your Mission')
   })
 
-  it('should include 5-phase workflow with mandatory design and review phases', async () => {
+  it('should include workflow phases in prompt', async () => {
     await startAgent('Build feature Y')
 
     const command = getWrittenCommand()
-    expect(command).toContain('PHASE 2 - ENGINEERING DESIGN')
-    expect(command).toContain('PHASE 3 - DESIGN REVIEW')
-    expect(command).toContain('MANDATORY')
-    expect(command).toContain('NEVER skip')
+    // New format: "1. **Design Phase** using Planner agent"
+    expect(command).toContain('**Design Phase** using Planner agent')
+    expect(command).toContain('**Implementation** using Developer agent')
+    expect(command).toContain('**PARALLEL**: Test (Tester) + Review (Reviewer)')
+  })
+
+  it('should lock workflow when starting super minion', async () => {
+    await startAgent()
+
+    expect(mockWorkflowService.lockWorkflow).toHaveBeenCalledWith(TEST_PROJECT_PATH, TEST_AGENT_ID)
+  })
+
+  it('should use fallback prompt if workflow service fails', async () => {
+    mockWorkflowService.getActiveWorkflow.mockImplementation(() => {
+      throw new Error('Workflow not found')
+    })
+
+    await startAgent('Test prompt')
+
+    const command = getWrittenCommand()
+    expect(command).toContain('Create a plan for: Test prompt')
   })
 })
 

@@ -1,12 +1,13 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
-import { existsSync, statSync } from 'fs'
+import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
 import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import { NotificationService } from './NotificationService'
+import { WorkflowService } from './WorkflowService'
 import {
   IdleDetector,
   CLAUDE_WORKING_PATTERNS,
@@ -53,6 +54,7 @@ export class TerminalService {
   private agentService?: AgentService
   private claudeSessionInfoService?: ClaudeSessionInfoService
   private notificationService?: NotificationService
+  private workflowService: WorkflowService | null = null
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
@@ -76,11 +78,125 @@ export class TerminalService {
     this.claudeSessionInfoService = claudeSessionInfoService
   }
 
+  setWorkflowService(service: WorkflowService): void {
+    this.workflowService = service
+  }
+
   private generateSessionId(agentId: string, worktreePath: string): string {
     // Create deterministic UUID from agentId + path
     // This ensures same agent always gets same session ID
     const input = `${agentId}:${worktreePath}`
     return uuidv5(input, this.AGENT_SESSION_NAMESPACE)
+  }
+
+  /**
+   * Get the rules path for a super minion.
+   * Uses dynamic rules from WorkflowService if available, falling back to static rules.
+   * Dynamic rules are written to the worktree's minions directory.
+   */
+  private getSuperMinionRulesPath(projectPath: string, worktreePath: string, agentId: string): string {
+    // Try to generate dynamic rules from workflow config
+    if (this.workflowService) {
+      try {
+        const activeWorkflow = this.workflowService.getActiveWorkflow(projectPath)
+        const rulesContent = this.workflowService.generateRulesMarkdown(activeWorkflow)
+
+        // Write rules to worktree's minions directory
+        const minionsDir = join(worktreePath, 'minions')
+        if (!existsSync(minionsDir)) {
+          mkdirSync(minionsDir, { recursive: true })
+        }
+
+        const rulesPath = join(minionsDir, 'dynamic-rules.md')
+        writeFileSync(rulesPath, rulesContent, 'utf-8')
+
+        log.info('Generated dynamic rules for super minion', {
+          agentId,
+          workflowId: activeWorkflow.id,
+          workflowName: activeWorkflow.name,
+          rulesPath
+        })
+
+        return rulesPath
+      } catch (error) {
+        log.warn('Failed to generate dynamic rules, falling back to static', error)
+      }
+    }
+
+    // Fall back to static rules
+    if (this.agentService) {
+      return this.agentService.getSuperMinionRulesPath()
+    }
+
+    throw new Error('Cannot get super minion rules: no AgentService or WorkflowService available')
+  }
+
+  /**
+   * Generate a concise prompt for a super minion based on its workflow.
+   * Preserves the original super minion format but with dynamic workflow phases.
+   */
+  private generateWorkflowPrompt(projectPath: string, userGoal: string): string {
+    if (!this.workflowService) {
+      return `Create a plan for: ${userGoal}`
+    }
+
+    try {
+      const workflow = this.workflowService.getActiveWorkflow(projectPath)
+      const subagentTypes = this.workflowService.getSubagentTypes()
+
+      // Build numbered phase list with bold formatting (only enabled steps)
+      // Steps are enabled by default if `enabled` is not explicitly set to false
+      const phases: string[] = []
+      let phaseNum = 1
+
+      for (const item of workflow.items) {
+        if (item.type === 'step') {
+          // Skip explicitly disabled steps (enabled defaults to true)
+          if (item.enabled === false) continue
+          const type = subagentTypes.find(t => t.id === item.subagentTypeId)
+          phases.push(`${phaseNum}. **${item.name}** using ${type?.name || item.subagentTypeId} agent`)
+          phaseNum++
+        } else if (item.type === 'parallel') {
+          // Filter to only enabled steps within the parallel group (enabled defaults to true)
+          const enabledSteps = item.steps.filter(s => s.enabled !== false)
+          if (enabledSteps.length === 0) continue
+
+          const parallelSteps = enabledSteps.map(s => {
+            const type = subagentTypes.find(t => t.id === s.subagentTypeId)
+            return `${s.name} (${type?.name || s.subagentTypeId})`
+          }).join(' + ')
+          phases.push(`${phaseNum}. **PARALLEL**: ${parallelSteps}`)
+          phaseNum++
+        }
+      }
+
+      const phaseSummary = phases.join('\n')
+      const phaseCount = phases.length
+
+      return `You are a **Super Minion** - an autonomous orchestrator that delivers complex features using Claude Code's Task tool to spawn subagents. You follow a structured ${phaseCount}-phase workflow to ensure quality and alignment with requirements.
+
+## Your Mission
+
+${phaseSummary}
+
+## Core Rules
+
+1. **Delegate to subagents** - Do NOT modify files directly; use Task tool to spawn workers
+2. **Agree on criteria first** - Get explicit human approval BEFORE any other work
+3. **Use AskUserQuestion** for human input when needed
+4. **Maximize parallelism** - Spawn multiple agents in one message when tasks are independent
+
+**CRITICAL: You MUST execute phases in order (1→2→...→${phaseCount}). NEVER skip phases.**
+
+## Your Goal
+
+${userGoal}
+
+Follow the detailed workflow phases defined in your system prompt. Use the Task tool to spawn subagents for each phase.`
+    } catch (error) {
+      log.warn('Failed to generate workflow prompt, using fallback', error)
+      return `Create a plan for: ${userGoal}`
+    }
   }
 
   /**
@@ -222,11 +338,16 @@ export class TerminalService {
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            // Add system prompt file for super minions
+            // Add system prompt file for super minions (dynamic rules)
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion && this.agentService) {
-              const rulesPath = this.agentService.getSuperMinionRulesPath()
+            if (isSuperMinion) {
+              const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
+
+              // Lock workflow while super minion is running
+              if (this.workflowService) {
+                this.workflowService.lockWorkflow(projectPath, agentId)
+              }
             }
           } else if (mode === 'dev') {
             args.push('--permission-mode', 'acceptEdits')
@@ -252,11 +373,16 @@ export class TerminalService {
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            // Preserve system prompt file for super minions
+            // Preserve system prompt file for super minions (dynamic rules)
             const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion && this.agentService) {
-              const rulesPath = this.agentService.getSuperMinionRulesPath()
+            if (isSuperMinion) {
+              const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
+
+              // Lock workflow while super minion is running
+              if (this.workflowService) {
+                this.workflowService.lockWorkflow(projectPath, agentId)
+              }
             }
           } else if (mode === 'dev') {
             args.push('--permission-mode', 'acceptEdits')
@@ -273,17 +399,17 @@ export class TerminalService {
           }
         } else {
           // Create new session with specific ID
-          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo)
+          args = this.getClaudeArgs(mode, agentId, prompt, model, yolo, chrome, agentInfo, projectPath, worktreePath)
           args.push('--session-id', sessionId)
         }
         break
       case 'codex':
         command = 'codex'
-        args = this.getCodexArgs(mode, prompt)
+        args = this.getCodexArgs(mode, prompt, agentInfo, projectPath)
         break
       case 'cursor-cli':
         command = 'cursor'
-        args = this.getCursorArgs(mode, agentId, prompt, model)
+        args = this.getCursorArgs(mode, agentId, prompt, model, agentInfo, projectPath)
         break
       case 'cursor':
         // For regular cursor, we don't spawn a terminal
@@ -638,6 +764,13 @@ export class TerminalService {
         this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
       }
 
+      // Unlock workflow if this was a super minion
+      const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
+      if (isSuperMinion && this.workflowService && projectPath) {
+        this.workflowService.unlockWorkflow(projectPath, agentId)
+        log.debug('Unlocked workflow on exit for super minion', { agentId, projectPath })
+      }
+
       // Mark session as inactive on exit
       if (tool === 'claude' && worktreePath) {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
@@ -648,7 +781,7 @@ export class TerminalService {
     })
   }
 
-  private getClaudeArgs(mode: string, _agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any): string[] {
+  private getClaudeArgs(mode: string, agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any, projectPath?: string, worktreePath?: string): string[] {
     const args: string[] = []
 
     // Add model if specified
@@ -665,47 +798,28 @@ export class TerminalService {
       // Use Claude's plan permission mode - shows plan before executing
       args.push('--permission-mode', 'plan')
 
-      // For super minions, load the rules file as system prompt
+      // For super minions, load the rules file as system prompt (dynamic rules)
       const isSuperMinion = agentInfo?.isSuperMinion === true
-      if (isSuperMinion && this.agentService) {
-        // Use absolute path to the bundled rules file
-        const rulesPath = this.agentService.getSuperMinionRulesPath()
+      if (isSuperMinion && projectPath && worktreePath) {
+        const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
         args.push('--system-prompt-file', rulesPath)
+
+        // Lock workflow while super minion is running
+        if (this.workflowService) {
+          this.workflowService.lockWorkflow(projectPath, agentId)
+        }
       }
 
       if (prompt) {
+        // For super minions, generate workflow-aware prompt
         let planPrompt: string
-        if (isSuperMinion) {
-          planPrompt = `You are a Super Minion. Follow the 5-PHASE WORKFLOW exactly:
 
-PHASE 1 - ACCEPTANCE CRITERIA (do this first):
-1. Explore the codebase to understand context
-2. Propose numbered acceptance criteria for this task
-3. Use AskUserQuestion to ask the human to approve the criteria
-4. WAIT for explicit "Yes, proceed" before moving to Phase 2
-
-PHASE 2 - ENGINEERING DESIGN (MANDATORY - do NOT skip):
-1. Spawn a Plan agent to create .engineering-design.md
-2. The design must map each criterion to implementation details
-
-PHASE 3 - DESIGN REVIEW (MANDATORY - do NOT skip):
-1. Spawn two review agents IN PARALLEL: senior engineer + criteria validator
-2. Only proceed to Phase 4 after both reviewers approve
-
-PHASE 4 - IMPLEMENTATION:
-1. Spawn implementation agents based on the approved design
-2. Use parallel agents for independent components
-
-PHASE 5 - VERIFICATION:
-1. Spawn FOUR agents IN PARALLEL: code simplifier + test runner + acceptance criteria checker + documentation writer
-2. Only declare completion when all four pass
-
-Task: ${prompt}
-
-CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or review phases. NEVER jump straight to implementation after acceptance criteria.`
+        if (isSuperMinion && projectPath) {
+          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
         } else {
-          planPrompt = `Create a plan for: ${prompt}\n\nPlease add to your plan a section on automated testing.`
+          planPrompt = `Create a plan for: ${prompt}`
         }
+
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }
     } else if (mode === 'dev') {
@@ -725,7 +839,14 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     return args
   }
 
-  private getCursorArgs(mode: string, _agentId: string, prompt?: string, model?: string): string[] {
+  private getCursorArgs(
+    mode: string,
+    _agentId: string,
+    prompt?: string,
+    model?: string,
+    agentInfo?: any,
+    projectPath?: string
+  ): string[] {
     // Use 'cursor agent' subcommand
     const args: string[] = ['agent']
 
@@ -737,7 +858,16 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     // Add prompt if provided
     if (prompt) {
       if (mode === 'planning') {
-        const planPrompt = `Create a plan for: ${prompt}`
+        // For super minions, generate workflow-aware prompt
+        const isSuperMinion = agentInfo?.isSuperMinion === true
+        let planPrompt: string
+
+        if (isSuperMinion && projectPath) {
+          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
+        } else {
+          planPrompt = `Create a plan for: ${prompt}`
+        }
+
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
@@ -747,7 +877,12 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     return args
   }
 
-  private getCodexArgs(mode: string, prompt?: string): string[] {
+  private getCodexArgs(
+    mode: string,
+    prompt?: string,
+    agentInfo?: any,
+    projectPath?: string
+  ): string[] {
     const args: string[] = []
 
     // Hardcode model to gpt-5.2-codex as per requirements
@@ -756,7 +891,16 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
     // Add prompt if provided
     if (prompt) {
       if (mode === 'planning') {
-        const planPrompt = `Create a plan for: ${prompt}`
+        // For super minions, generate workflow-aware prompt
+        const isSuperMinion = agentInfo?.isSuperMinion === true
+        let planPrompt: string
+
+        if (isSuperMinion && projectPath) {
+          planPrompt = this.generateWorkflowPrompt(projectPath, prompt)
+        } else {
+          planPrompt = `Create a plan for: ${prompt}`
+        }
+
         args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
         args.push(`"${prompt.replace(/"/g, '\\"')}"`)
@@ -875,6 +1019,19 @@ CRITICAL: Execute phases in order (1→2→3→4→5). NEVER skip the design or 
       // Clean up JSONL state polling (Claude sessions)
       if (session.statePollingInterval) {
         clearInterval(session.statePollingInterval)
+      }
+
+      // Unlock workflow if this was a super minion
+      if (this.workflowService && session.projectPath) {
+        // Check if agent is a super minion and unlock the workflow
+        this.readAgentInfo(session.worktreePath).then((agentInfo) => {
+          if ((agentInfo as any)?.isSuperMinion) {
+            this.workflowService!.unlockWorkflow(session.projectPath!, agentId)
+            log.debug('Unlocked workflow for super minion', { agentId, projectPath: session.projectPath })
+          }
+        }).catch(err => {
+          log.warn('Failed to check agent info for workflow unlock', err)
+        })
       }
 
       session.pty.kill()

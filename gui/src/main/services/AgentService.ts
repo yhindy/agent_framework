@@ -6,6 +6,8 @@ import { app } from 'electron'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
+import { WorkflowService } from './WorkflowService'
+import type { ProjectWorkflowConfig } from './types/WorkflowTypes'
 import { createLogger } from './logger'
 
 const log = createLogger('AgentService')
@@ -45,6 +47,7 @@ interface AgentSession {
 export class AgentService {
   private sessions: Map<string, AgentSession>
   private claudeSessionInfoService?: ClaudeSessionInfoService
+  private workflowService?: WorkflowService
   private prDetectionCache: Map<string, {
     timestamp: number
     found: boolean
@@ -60,6 +63,10 @@ export class AgentService {
 
   setClaudeSessionInfoService(service: ClaudeSessionInfoService): void {
     this.claudeSessionInfoService = service
+  }
+
+  setWorkflowService(service: WorkflowService): void {
+    this.workflowService = service
   }
 
   /**
@@ -858,6 +865,20 @@ export class AgentService {
       children: [],
       pendingPlans: []
     } as any)
+
+    // Save the workflow configuration if provided
+    if (assignment.workflow && this.workflowService) {
+      try {
+        const projectWorkflowConfig: ProjectWorkflowConfig = {
+          activeWorkflowId: assignment.workflow.id,
+          customWorkflows: [assignment.workflow]
+        }
+        this.workflowService.saveProjectWorkflow(projectPath, projectWorkflowConfig)
+        log.debug(`Saved workflow ${assignment.workflow.id} for super minion ${result.agentId}`)
+      } catch (error) {
+        log.error('Failed to save workflow for super minion', error)
+      }
+    }
 
     // Return the updated info
     return {

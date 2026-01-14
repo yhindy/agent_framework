@@ -84,6 +84,24 @@ declare const api: {
     }) => void) => () => Electron.IpcRenderer;
     retryResumeAgent: (agentId: string) => Promise<any>;
     startFreshSession: (agentId: string) => Promise<any>;
+    getWorkflowConfig: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowSystemConfig>;
+    getSubagentTypes: () => Promise<import('../main/services/types/WorkflowTypes').SubagentType[]>;
+    getProjectWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').ProjectWorkflowConfig>;
+    saveProjectWorkflow: (projectPath: string, config: import('../main/services/types/WorkflowTypes').ProjectWorkflowConfig) => Promise<void>;
+    getActiveWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    setActiveWorkflow: (projectPath: string, workflowId: string) => Promise<void>;
+    createWorkflow: (projectPath: string, workflow: Partial<import('../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    updateWorkflow: (projectPath: string, workflowId: string, updates: Partial<import('../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    deleteWorkflow: (projectPath: string, workflowId: string) => Promise<void>;
+    getWorkflowTemplates: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig[]>;
+    saveWorkflowAsTemplate: (workflow: import('../main/services/types/WorkflowTypes').WorkflowConfig, name: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    lockWorkflow: (projectPath: string, agentId: string) => Promise<boolean>;
+    unlockWorkflow: (projectPath: string, agentId: string) => Promise<boolean>;
+    isWorkflowLocked: (projectPath: string) => Promise<{
+        locked: boolean;
+        lockedBy?: string;
+        lockedAt?: string;
+    }>;
 };
 export type ElectronAPI = typeof api;
 export {};

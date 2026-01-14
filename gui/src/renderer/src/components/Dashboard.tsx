@@ -8,7 +8,13 @@ import ProjectPicker from './ProjectPicker'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import AgentStateIndicator from './AgentStateIndicator'
 import { BotIcon, CrownIcon } from './icons'
+import { WorkflowBuilderPage } from './WorkflowEditor'
 import type { DefaultToolSettings } from '../../../shared/types/settings'
+import type {
+  WorkflowConfig,
+  WorkflowItem,
+  SubagentType
+} from '../../../main/services/types/WorkflowTypes'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -120,7 +126,20 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   const [autoCommit, setAutoCommit] = useState(true)
   const [ghAvailable, setGhAvailable] = useState(true)
   const [ghError, setGhError] = useState<string>('')
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    projectPath: string
+    agentId: string
+    shortName: string
+    prompt: string
+    tool: string
+    model: string
+    mode: string
+    status: string
+    yolo: boolean
+    chrome: boolean
+    isSuper: boolean
+    workflow: WorkflowConfig | null
+  }>({
     projectPath: '',
     agentId: '',
     shortName: '',
@@ -131,8 +150,13 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     status: 'pending',
     yolo: true,
     chrome: true,
-    isSuper: false
+    isSuper: false,
+    workflow: null
   })
+
+  // Workflow editor state
+  const [subagentTypes, setSubagentTypes] = useState<SubagentType[]>([])
+  const [workflowEditMode, setWorkflowEditMode] = useState(false)
 
   // Keyboard shortcuts context
   const { registerModalControls, unregisterModalControls } = useKeyboardShortcutsContext()
@@ -231,6 +255,19 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     loadDefaults()
   }, [])
 
+  // Load workflow data on component mount
+  useEffect(() => {
+    const loadWorkflowData = async () => {
+      try {
+        const types = await window.electronAPI.getSubagentTypes()
+        setSubagentTypes(types)
+      } catch (error) {
+        console.error('Failed to load workflow data:', error)
+      }
+    }
+    loadWorkflowData()
+  }, [])
+
   // Auto-poll PR status for all pr_open assignments
   const prOpenAssignments = assignments.filter(a => a.status === 'pr_open')
   usePRPolling({
@@ -320,7 +357,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
           prompt: formData.prompt,
           status: 'in_progress',
           yolo: formData.yolo,
-          chrome: formData.chrome
+          chrome: formData.chrome,
+          workflow: formData.workflow
         })
       } else {
         result = await window.electronAPI.createAssignmentForProject(projectPath, {
@@ -362,7 +400,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
           status: 'pending',
           yolo: settings.defaultAgent.yoloMode,
           chrome: settings.defaultAgent.chromeIntegration,
-          isSuper: false
+          isSuper: false,
+          workflow: null
         })
       } catch {
         // Fallback to hardcoded defaults if settings fail
@@ -377,7 +416,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
           status: 'pending',
           yolo: true,
           chrome: true,
-          isSuper: false
+          isSuper: false,
+          workflow: null
         })
       }
       setShowTypeSelection(true)
@@ -503,7 +543,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     )
   }
 
-  const handleNewAssignment = (isSuper?: boolean) => {
+  const handleNewAssignment = async (isSuper?: boolean) => {
     // Auto-select last selected project, or first project if only one exists
     const lastProject = localStorage.getItem('lastSelectedProjectPath')
     const defaultProject = (lastProject && activeProjects.some(p => p.path === lastProject))
@@ -513,18 +553,83 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     // If isSuper is explicitly set, skip type selection and go to form
     // Otherwise show type selection (user clicked "New Minion")
     if (isSuper !== undefined) {
-      setFormData({ ...formData, projectPath: defaultProject, isSuper })
+      if (isSuper) {
+        // Load default workflow for super minion
+        try {
+          const systemConfig = await window.electronAPI.getWorkflowConfig()
+          const defaultWorkflow = systemConfig.workflows.find((w: WorkflowConfig) => w.isDefault)
+          setFormData(prev => ({
+            ...prev,
+            projectPath: defaultProject,
+            isSuper,
+            workflow: defaultWorkflow || null
+          }))
+        } catch (error) {
+          console.error('Failed to load default workflow:', error)
+          setFormData(prev => ({ ...prev, projectPath: defaultProject, isSuper, workflow: null }))
+        }
+      } else {
+        setFormData(prev => ({ ...prev, projectPath: defaultProject, isSuper, workflow: null }))
+      }
       setShowTypeSelection(false)
     } else {
-      setFormData({ ...formData, projectPath: defaultProject, isSuper: false })
+      setFormData(prev => ({ ...prev, projectPath: defaultProject, isSuper: false, workflow: null }))
       setShowTypeSelection(true)
     }
     setShowCreateForm(true)
   }
 
-  const selectAgentType = (isSuper: boolean) => {
-    setFormData({ ...formData, isSuper })
+  const selectAgentType = async (isSuper: boolean) => {
+    if (isSuper) {
+      // Load default workflow for super minion
+      try {
+        const systemConfig = await window.electronAPI.getWorkflowConfig()
+        const defaultWorkflow = systemConfig.workflows.find((w: WorkflowConfig) => w.isDefault)
+        setFormData(prev => ({
+          ...prev,
+          isSuper,
+          workflow: defaultWorkflow || null
+        }))
+      } catch (error) {
+        console.error('Failed to load default workflow:', error)
+        setFormData(prev => ({ ...prev, isSuper, workflow: null }))
+      }
+    } else {
+      setFormData(prev => ({ ...prev, isSuper, workflow: null }))
+    }
     setShowTypeSelection(false)
+  }
+
+  // Helper function to count enabled steps in a workflow
+  // Steps are enabled by default if `enabled` is not explicitly set to false
+  const countSteps = (items: WorkflowItem[]): number => {
+    return items.reduce((count, item) => {
+      if (item.type === 'step') return count + (item.enabled !== false ? 1 : 0)
+      if (item.type === 'parallel') return count + item.steps.filter(s => s.enabled !== false).length
+      return count
+    }, 0)
+  }
+
+  // Prepare workflow for saving - creates a new ID for modified system workflows
+  const prepareWorkflowForSave = (workflow: WorkflowConfig): WorkflowConfig => {
+    // If this is a system workflow (template or default), give it a new ID for the custom version
+    if (workflow.isTemplate || workflow.isDefault) {
+      return {
+        ...workflow,
+        id: `custom-${Date.now()}`,
+        name: workflow.name, // Keep the name
+        isTemplate: false,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    }
+
+    // Otherwise just update the timestamp
+    return {
+      ...workflow,
+      updatedAt: new Date().toISOString()
+    }
   }
 
   const handleTeleportClick = () => {
@@ -975,7 +1080,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                             checked={formData.yolo}
                             onChange={(e) => setFormData({ ...formData, yolo: e.target.checked })}
                           />
-                          <span className="checkbox-text">Yolo mode 🔥</span>
+                          <span className="checkbox-text">Yolo mode</span>
                         </label>
                         <label className="checkbox-label">
                           <input
@@ -983,11 +1088,33 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                             checked={formData.chrome}
                             onChange={(e) => setFormData({ ...formData, chrome: e.target.checked })}
                           />
-                          <span className="checkbox-text">Chrome integration 🌐</span>
+                          <span className="checkbox-text">Chrome integration</span>
                         </label>
                       </div>
                       <div className="form-hint">
                         Yolo: Auto-approve edits and commands. Chrome: Enable browser automation.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Workflow preview for Super Minions */}
+                  {formData.isSuper && formData.workflow && (
+                    <div className="form-group">
+                      <label>Workflow</label>
+                      <div className="workflow-preview-card">
+                        <div className="workflow-preview-info">
+                          <span className="workflow-preview-name">{formData.workflow.name}</span>
+                          <span className="workflow-preview-count">
+                            {countSteps(formData.workflow.items)} steps
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="edit-workflow-btn"
+                          onClick={() => setWorkflowEditMode(true)}
+                        >
+                          Edit Workflow
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1121,6 +1248,20 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {workflowEditMode && formData.workflow && (
+        <WorkflowBuilderPage
+          workflow={formData.workflow}
+          subagentTypes={subagentTypes}
+          onSave={(updatedWorkflow) => {
+            const workflowToSave = prepareWorkflowForSave(updatedWorkflow)
+            setFormData(prev => ({ ...prev, workflow: workflowToSave }))
+            setWorkflowEditMode(false)
+          }}
+          onCancel={() => setWorkflowEditMode(false)}
+          title="Configure Workflow"
+        />
       )}
 
     </div>

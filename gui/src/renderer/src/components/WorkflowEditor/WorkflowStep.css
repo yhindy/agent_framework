@@ -1,0 +1,421 @@
+/* =============================================================================
+   WORKFLOW STEP CARD
+   Individual step card with editing capabilities
+   ============================================================================= */
+
+.workflow-step-card {
+  background: linear-gradient(135deg, var(--bg-overlay) 0%, var(--bg-elevated) 100%);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--color-teal);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.workflow-step-card:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 4px 24px rgba(0, 217, 181, 0.15);
+  transform: translateY(-2px);
+}
+
+.workflow-step-card.dragging {
+  opacity: 0.8;
+  cursor: grabbing;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.workflow-step-card.disabled {
+  opacity: 0.5;
+  border-left-color: var(--text-disabled);
+}
+
+.workflow-step-card.selected {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-warning-dim);
+}
+
+.workflow-step-card.selected::before {
+  content: '';
+  position: absolute;
+  top: var(--space-2);
+  left: calc(var(--space-2) + 4px);
+  width: 18px;
+  height: 18px;
+  background: var(--color-warning);
+  border-radius: var(--radius-sm);
+}
+
+.workflow-step-card.expanded {
+  background: var(--bg-elevated);
+  border-color: var(--accent-primary);
+  box-shadow: 0 8px 32px rgba(0, 217, 181, 0.2);
+}
+
+/* =============================================================================
+   TYPE-SPECIFIC BORDER COLORS
+   ============================================================================= */
+
+.workflow-step-card[data-type="explore"] {
+  border-left-color: var(--color-info);
+}
+
+.workflow-step-card[data-type="implement"] {
+  border-left-color: var(--color-success);
+}
+
+.workflow-step-card[data-type="plan"] {
+  border-left-color: var(--color-warning);
+}
+
+.workflow-step-card[data-type="debug"] {
+  border-left-color: var(--color-error);
+}
+
+/* =============================================================================
+   DRAG HANDLE
+   ============================================================================= */
+
+.step-drag-handle {
+  position: absolute;
+  left: calc(var(--space-2) + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--transition-base);
+  padding: var(--space-1);
+}
+
+.workflow-step-card:hover .step-drag-handle {
+  opacity: 0.4;
+}
+
+.workflow-step-card:hover .step-drag-handle:hover {
+  opacity: 1;
+}
+
+.step-drag-handle span {
+  width: 100%;
+  height: 2px;
+  background: var(--text-muted);
+  border-radius: 1px;
+}
+
+/* Adjust card padding when drag handle is visible */
+.workflow-step-card {
+  padding-left: calc(var(--space-4) + 20px);
+}
+
+/* =============================================================================
+   CARD HEADER
+   ============================================================================= */
+
+.step-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.step-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.step-name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =============================================================================
+   REORDER CONTROLS
+   ============================================================================= */
+
+.step-reorder-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.workflow-step-card:hover .step-reorder-controls {
+  opacity: 1;
+}
+
+.step-reorder-btn {
+  width: 24px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  padding: 0;
+}
+
+.step-reorder-btn:hover:not(:disabled) {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.step-reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   ACTIONS BUTTON (DELETE)
+   ============================================================================= */
+
+.step-actions-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workflow-step-card:hover .step-actions-btn {
+  opacity: 1;
+}
+
+.step-actions-btn:hover {
+  background: var(--color-error-dim);
+  color: var(--color-error);
+}
+
+/* =============================================================================
+   STEP DESCRIPTION
+   ============================================================================= */
+
+.step-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* =============================================================================
+   CONFIGURATION FORM (EXPANDED STATE)
+   ============================================================================= */
+
+.step-config-form {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.step-config-field label {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.step-config-field input,
+.step-config-field textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  transition: border-color var(--transition-base);
+  resize: vertical;
+}
+
+.step-config-field input:focus,
+.step-config-field textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.step-config-field input::placeholder,
+.step-config-field textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.step-config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.step-save-btn {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.step-save-btn:hover {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-glow-sm);
+}
+
+/* =============================================================================
+   METADATA ROW
+   ============================================================================= */
+
+.step-metadata {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* =============================================================================
+   TOGGLE SWITCH
+   ============================================================================= */
+
+.step-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.step-toggle-label {
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+}
+
+.step-toggle-switch {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-muted);
+  border: none;
+  border-radius: var(--radius-full);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--transition-base);
+  padding: 0;
+}
+
+.step-toggle-switch.enabled {
+  background: var(--accent-primary);
+}
+
+.step-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: var(--radius-full);
+  transition: transform var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.step-toggle-switch.enabled::after {
+  transform: translateX(16px);
+}
+
+/* =============================================================================
+   DELETE BUTTON (EXPANDED STATE)
+   ============================================================================= */
+
+.step-delete-btn {
+  background: var(--color-error-dim);
+  color: var(--color-error);
+  border: 1px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.step-delete-btn:hover {
+  background: var(--color-error);
+  color: white;
+  border-color: var(--color-error);
+}
+
+/* =============================================================================
+   ANIMATIONS
+   ============================================================================= */
+
+.workflow-step-card.entering {
+  animation: stepEnter var(--transition-spring);
+}
+
+@keyframes stepEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.workflow-step-card.leaving {
+  animation: stepLeave var(--transition-fast);
+}
+
+@keyframes stepLeave {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}

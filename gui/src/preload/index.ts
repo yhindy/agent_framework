@@ -196,7 +196,23 @@ const api = {
       callback(data)
     ipcRenderer.on('agent:resumeFailed', subscription)
     return () => ipcRenderer.removeListener('agent:resumeFailed', subscription)
-  }
+  },
+
+  // Workflow APIs
+  getWorkflowConfig: () => ipcRenderer.invoke('workflow:getConfig'),
+  getSubagentTypes: () => ipcRenderer.invoke('workflow:getSubagentTypes'),
+  getProjectWorkflow: (projectPath: string) => ipcRenderer.invoke('workflow:getProjectWorkflow', projectPath),
+  saveProjectWorkflow: (projectPath: string, config: any) => ipcRenderer.invoke('workflow:saveProjectWorkflow', projectPath, config),
+  getActiveWorkflow: (projectPath: string) => ipcRenderer.invoke('workflow:getActiveWorkflow', projectPath),
+  setActiveWorkflow: (projectPath: string, workflowId: string) => ipcRenderer.invoke('workflow:setActiveWorkflow', projectPath, workflowId),
+  createWorkflow: (projectPath: string, workflow: any) => ipcRenderer.invoke('workflow:createWorkflow', projectPath, workflow),
+  updateWorkflow: (projectPath: string, workflowId: string, updates: any) => ipcRenderer.invoke('workflow:updateWorkflow', projectPath, workflowId, updates),
+  deleteWorkflow: (projectPath: string, workflowId: string) => ipcRenderer.invoke('workflow:deleteWorkflow', projectPath, workflowId),
+  getWorkflowTemplates: () => ipcRenderer.invoke('workflow:getTemplates'),
+  saveWorkflowAsTemplate: (workflow: any, name: string) => ipcRenderer.invoke('workflow:saveAsTemplate', workflow, name),
+  lockWorkflow: (projectPath: string, agentId: string) => ipcRenderer.invoke('workflow:lockWorkflow', projectPath, agentId),
+  unlockWorkflow: (projectPath: string, agentId: string) => ipcRenderer.invoke('workflow:unlockWorkflow', projectPath, agentId),
+  isWorkflowLocked: (projectPath: string) => ipcRenderer.invoke('workflow:isWorkflowLocked', projectPath)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
