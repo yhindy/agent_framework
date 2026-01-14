@@ -531,64 +531,92 @@
   background: #3d2a3d;
 }
 
-/* Modal styles */
+/* ================================================
+   MODAL STYLES - Project Picker Modal
+   ================================================
+   Clean modal wrapper that lets content breathe
+   ================================================ */
+
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal-backdrop);
+  animation: fadeIn var(--transition-fast) ease-out;
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(8px)) {
+  .modal-overlay {
+    background: rgba(0, 0, 0, 0.85);
+  }
 }
 
 .modal-content {
-  background: #1e1e1e;
-  border-radius: 8px;
-  max-width: 600px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  max-width: 640px;
   width: 90%;
-  max-height: 80vh;
+  max-height: 85vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  animation: springIn var(--transition-spring) ease-out;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .modal-content {
+    animation: fadeIn var(--transition-fast) ease-out;
+  }
 }
 
 .modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #3c3c3c;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-4);
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
 }
 
-.modal-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #ffffff;
+/* Hide the h2 in project picker modal - the ProjectPicker has its own title */
+.project-picker-modal .modal-header h2 {
+  display: none;
 }
 
 .close-btn {
-  background: none;
-  border: none;
-  color: #cccccc;
-  font-size: 24px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 20px;
   cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s, color 0.2s;
+  border-radius: var(--radius-full);
+  transition: all var(--transition-fast);
 }
 
 .close-btn:hover {
-  background: #3c3c3c;
-  color: #ffffff;
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  border-color: var(--border-default);
 }
 
 .modal-body {
@@ -597,14 +625,20 @@
   padding: 0;
 }
 
+/* ------------------------------------------------
+   PROJECT PICKER MODAL SPECIFICS
+   Let the ProjectPicker component handle all styling
+   ------------------------------------------------ */
+
+.project-picker-modal {
+  position: relative;
+}
+
 .project-picker-modal .project-picker {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  min-height: 480px;
 }
 
 .project-picker-modal .project-picker-container {
-  flex: 1;
   overflow-y: auto;
 }
 
