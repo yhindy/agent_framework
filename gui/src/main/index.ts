@@ -661,6 +661,11 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('assignments:createSuper', async (_event, projectPath: string, assignment: any) => {
+    // Set the active workflow for this project if provided
+    if (assignment.workflow) {
+      services!.workflow.setActiveWorkflow(projectPath, assignment.workflow)
+    }
+
     const result = await services!.agent.createSuperAssignment(projectPath, assignment)
 
     // Trigger updates

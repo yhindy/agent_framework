@@ -27,6 +27,7 @@ function generateId(prefix: string): string {
  */
 export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
+  private activeWorkflows: Map<string, WorkflowConfig> = new Map() // projectPath -> workflow
 
   constructor() {
     // Initialize with default workflows
@@ -59,10 +60,19 @@ export class WorkflowService {
 
   /**
    * Get the active workflow for a project.
-   * For now, always returns the default workflow.
+   * Returns the workflow set for this project, or DEFAULT_WORKFLOW if none set.
    */
-  getActiveWorkflow(_projectPath: string): WorkflowConfig {
-    return DEFAULT_WORKFLOW
+  getActiveWorkflow(projectPath: string): WorkflowConfig {
+    return this.activeWorkflows.get(projectPath) || DEFAULT_WORKFLOW
+  }
+
+  /**
+   * Set the active workflow for a project.
+   * This is called when creating a super minion with a custom workflow.
+   */
+  setActiveWorkflow(projectPath: string, workflow: WorkflowConfig): void {
+    this.activeWorkflows.set(projectPath, workflow)
+    log.info('Set active workflow for project:', { projectPath, workflowId: workflow.id, workflowName: workflow.name })
   }
 
   /**
