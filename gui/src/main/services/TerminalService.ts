@@ -3,7 +3,7 @@ import * as pty from 'node-pty'
 import { join, resolve } from 'path'
 import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
 import { v5 as uuidv5 } from 'uuid'
-import { AgentInfo } from './types/ProjectConfig'
+import { AgentInfo, isSuperMinion } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
 import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import { NotificationService } from './NotificationService'
@@ -38,7 +38,7 @@ interface TerminalSession {
   yolo?: boolean              // Store for restart
   chrome?: boolean            // Store for restart
   idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
-  statePollingInterval?: NodeJS.Timeout // JSONL-based state polling for Claude
+  statePollingInterval?: NodeJS.Timeout // JSONL-based unified polling for Claude (state + tasks)
 }
 
 interface PlainTerminalSession {
@@ -342,8 +342,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             args.push('--permission-mode', 'plan')
 
             // Add system prompt file for super minions
-            const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion) {
+            if (agentInfo && isSuperMinion(agentInfo)) {
               const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
             }
@@ -366,8 +365,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           if (mode === 'planning') {
             args.push('--permission-mode', 'plan')
 
-            const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
-            if (isSuperMinion) {
+            if (agentInfo && isSuperMinion(agentInfo)) {
               const rulesPath = this.getSuperMinionRulesPath(projectPath, worktreePath, agentId)
               args.push('--system-prompt-file', rulesPath)
             }
@@ -522,62 +520,68 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         })
       }
 
-      // Check session state and broadcast changes
+      // Track state for change detection
+      const isSuperMinionAgent = agentInfo && isSuperMinion(agentInfo)
+      let lastTaskHash = ''
+
+      // Handle state transition and persist updates
+      const handleStateTransition = (newState: 'working' | 'waiting', previousState: 'working' | 'waiting' | 'unknown'): void => {
+        this.mainWindow.webContents.send('agent:stateChanged', agentId, newState)
+
+        if (newState === 'waiting') {
+          this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+          this.notificationService?.notify({
+            title: 'Input Required',
+            body: `${displayName} is waiting for your input`,
+            agentId
+          })
+          this.updateAgentInfo(worktreePath, {
+            isWaitingForInput: true,
+            claudeState: 'waiting',
+            claudeLastSeen: new Date().toISOString(),
+            waitingSince: new Date().toISOString()
+          }).then(() => this.mainWindow.webContents.send('agents:updated'))
+            .catch(err => log.error('Failed to update agent info', err))
+        } else {
+          log.debug(`${agentId} is working`)
+          if (previousState === 'waiting') {
+            this.notificationService?.clearCooldown(agentId)
+          }
+          this.mainWindow.webContents.send('agent:resumedWork', agentId)
+          this.updateAgentInfo(worktreePath, {
+            isWaitingForInput: false,
+            claudeState: 'working',
+            claudeLastSeen: new Date().toISOString(),
+            waitingSince: undefined
+          }).then(() => this.mainWindow.webContents.send('agents:updated'))
+            .catch(err => log.error('Failed to update agent info', err))
+        }
+      }
+
+      // Unified polling: state and task detection in a single JSONL parse
       const checkAndBroadcastState = (): void => {
         if (!effectiveSessionId) return
 
-        const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
+        const sessionInfo = this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
+        const currentState = sessionInfo?.state || 'unknown'
 
         tryDetectBranch()
 
-        // Detect state transitions
-        if (currentState !== lastKnownState) {
-          // Broadcast new state via IPC
-          this.mainWindow.webContents.send('agent:stateChanged', agentId, currentState)
-
-          if (currentState === 'waiting') {
-            // Transitioned to waiting - send notification and event
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
-
-            // Send desktop notification
-            this.notificationService?.notify({
-              title: 'Input Required',
-              body: `${displayName} is waiting for your input`,
-              agentId
-            })
-
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: true,
-              claudeState: 'waiting',
-              claudeLastSeen: new Date().toISOString(),
-              waitingSince: new Date().toISOString()
-            }).then(() => {
-              this.mainWindow.webContents.send('agents:updated')
-            }).catch(err => log.error('Failed to update agent info', err))
-
-          } else if (currentState === 'working') {
-            // Transitioned to working - clear waiting state
-            log.debug(`${agentId} is working`)
-
-            // Clear notification cooldown when user provides input
-            if (lastKnownState === 'waiting') {
-              this.notificationService?.clearCooldown(agentId)
-            }
-
-            // Send event for UI updates
-            this.mainWindow.webContents.send('agent:resumedWork', agentId)
-
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: false,
-              claudeState: 'working',
-              claudeLastSeen: new Date().toISOString(),
-              waitingSince: undefined
-            }).then(() => {
-              this.mainWindow.webContents.send('agents:updated')
-            }).catch(err => log.error('Failed to update agent info', err))
-          }
-
+        // Handle state transitions
+        if (currentState !== lastKnownState && (currentState === 'working' || currentState === 'waiting')) {
+          handleStateTransition(currentState, lastKnownState)
           lastKnownState = currentState
+        }
+
+        // For super minions: detect task invocation changes for sidebar updates
+        if (isSuperMinionAgent && sessionInfo) {
+          const currentHash = sessionInfo.taskInvocations
+            .map(t => `${t.toolUseId}:${t.status}`)
+            .join('|')
+          if (currentHash !== lastTaskHash) {
+            lastTaskHash = currentHash
+            this.mainWindow.webContents.send('agents:updated')
+          }
         }
       }
 
@@ -699,8 +703,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
       await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
-      // Set up JSONL watcher for super minions to emit updates on task invocation changes
-      if ((agentInfo as any)?.isSuperMinion && this.claudeSessionInfoService) {
+      // JSONL watcher for super minions provides immediate updates; polling serves as backup
+      if (agentInfo && isSuperMinion(agentInfo) && this.claudeSessionInfoService) {
         this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
           this.mainWindow.webContents.send('agents:updated')
         })
@@ -712,29 +716,25 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       this.handleOutput(agentId, data)
     })
 
-    // Handle exit
     terminal.onExit((data) => {
       const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
       log.info(`Terminal exited for ${agentId} - ${exitInfo}`)
 
-      // Clean up idle detector (legacy, for non-Claude tools)
+      // Clean up resources
       session.idleDetector?.dispose()
-
-      // Clean up JSONL state polling (Claude sessions)
       if (session.statePollingInterval) {
         clearInterval(session.statePollingInterval)
       }
-
-      // Clean up JSONL watcher for super minions
       if (tool === 'claude' && effectiveSessionId) {
         this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
       }
 
-      // Mark session as inactive on exit
+      // Mark Claude session as inactive
       if (tool === 'claude' && worktreePath) {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
           .catch(err => log.error('Failed to mark session inactive', err))
       }
+
       this.terminals.delete(agentId)
       this.mainWindow.webContents.send('agents:updated')
     })
@@ -957,19 +957,15 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
   stopAgent(agentId: string): void {
     const session = this.terminals.get(agentId)
-    if (session) {
-      // Clean up idle detector (legacy, for non-Claude tools)
-      session.idleDetector?.dispose()
+    if (!session) return
 
-      // Clean up JSONL state polling (Claude sessions)
-      if (session.statePollingInterval) {
-        clearInterval(session.statePollingInterval)
-      }
-
-      session.pty.kill()
-      this.terminals.delete(agentId)
-      this.mainWindow.webContents.send('agents:updated')
+    session.idleDetector?.dispose()
+    if (session.statePollingInterval) {
+      clearInterval(session.statePollingInterval)
     }
+    session.pty.kill()
+    this.terminals.delete(agentId)
+    this.mainWindow.webContents.send('agents:updated')
   }
 
   sendInput(agentId: string, data: string): void {
