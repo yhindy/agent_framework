@@ -591,6 +591,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
           onClose={() => setIsWorkflowEditorOpen(false)}
           projectPath={agent.project}
           workflowId={agent.workflowId}
+          readOnly
         />
       )}
 

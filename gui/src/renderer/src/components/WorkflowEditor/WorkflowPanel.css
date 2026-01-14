@@ -587,3 +587,25 @@
 .add-first-step-btn.agent-simplify {
   color: #607d8b;
 }
+
+/* =============================================================================
+   READ-ONLY MODE
+   ============================================================================= */
+
+/* Step name in read-only mode */
+.step-name.read-only {
+  cursor: default;
+}
+
+.step-name.read-only:hover {
+  color: var(--text-primary);
+}
+
+/* Custom prompt in read-only mode */
+.agent-custom-prompt.read-only {
+  cursor: default;
+}
+
+.agent-custom-prompt.read-only:hover {
+  background: var(--bg-muted);
+}
