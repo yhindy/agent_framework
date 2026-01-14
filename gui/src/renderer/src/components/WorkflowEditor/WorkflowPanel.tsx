@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { XIcon, HourglassIcon } from '../icons'
 import { WorkflowPipeline } from './WorkflowPipeline'
-import StepPalette from './StepPalette'
 import type {
   WorkflowConfig,
-  WorkflowItem,
   WorkflowStep,
   SubagentType
 } from '../../../../main/services/types/WorkflowTypes'
@@ -14,7 +12,6 @@ export interface WorkflowPanelProps {
   isOpen: boolean
   onClose: () => void
   projectPath: string
-  agentId?: string  // For locking awareness
 }
 
 interface PanelState {
@@ -23,23 +20,18 @@ interface PanelState {
   isLoading: boolean
   error: string | null
   isDirty: boolean
-  isLocked: boolean
-  lockedBy?: string
 }
 
-export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: WorkflowPanelProps) {
+export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelProps) {
   const [state, setState] = useState<PanelState>({
     workflow: null,
     subagentTypes: [],
     isLoading: false,
     error: null,
-    isDirty: false,
-    isLocked: false
+    isDirty: false
   })
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
-  const [isPaletteExpanded, setIsPaletteExpanded] = useState(false)
 
   // Load workflow data when panel opens
   useEffect(() => {
@@ -49,30 +41,18 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
       setState(prev => ({ ...prev, isLoading: true, error: null }))
 
       try {
-        // Load subagent types and active workflow in parallel
-        const [subagentTypes, workflow, lockStatus] = await Promise.all([
+        const [subagentTypes, workflow] = await Promise.all([
           window.electronAPI.getSubagentTypes(),
-          window.electronAPI.getActiveWorkflow(projectPath),
-          window.electronAPI.isWorkflowLocked(projectPath)
+          window.electronAPI.getActiveWorkflow(projectPath)
         ])
-
-        // Check if locked by another agent
-        const isLockedByOther = lockStatus.locked && lockStatus.lockedBy !== agentId
 
         setState({
           workflow,
           subagentTypes,
           isLoading: false,
           error: null,
-          isDirty: false,
-          isLocked: isLockedByOther,
-          lockedBy: lockStatus.lockedBy
+          isDirty: false
         })
-
-        // Acquire lock if not locked
-        if (agentId && !lockStatus.locked) {
-          await window.electronAPI.lockWorkflow(projectPath, agentId)
-        }
       } catch (err: any) {
         console.error('[WorkflowPanel] Failed to load workflow:', err)
         setState(prev => ({
@@ -84,72 +64,29 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
     }
 
     loadData()
+  }, [isOpen, projectPath])
 
-    // Release lock on unmount
-    return () => {
-      if (agentId && projectPath) {
-        window.electronAPI.unlockWorkflow(projectPath, agentId).catch(() => {
-          // Ignore unlock errors on cleanup
-        })
-      }
-    }
-  }, [isOpen, projectPath, agentId])
-
-  // Handle items change from pipeline
-  const handleItemsChange = useCallback((items: WorkflowItem[]) => {
+  // Handle steps change from pipeline
+  const handleStepsChange = useCallback((steps: WorkflowStep[]) => {
     setState(prev => {
       if (!prev.workflow) return prev
       return {
         ...prev,
-        workflow: { ...prev.workflow, items },
+        workflow: { ...prev.workflow, steps },
         isDirty: true
       }
     })
   }, [])
-
-  // Handle selection change
-  const handleSelectionChange = useCallback((ids: string[]) => {
-    setSelectedIds(ids)
-  }, [])
-
-  // Handle adding a new step from the palette
-  const handleAddStep = useCallback((typeId: string) => {
-    if (!state.workflow) return
-
-    const subagentType = state.subagentTypes.find(t => t.id === typeId)
-    const newStep: WorkflowStep = {
-      id: `step-${Date.now()}`,
-      type: 'step',
-      name: `New ${subagentType?.name || 'Step'}`,
-      subagentTypeId: typeId,
-      enabled: true
-    }
-
-    const updatedItems = [...state.workflow.items, newStep]
-    setState(prev => {
-      if (!prev.workflow) return prev
-      return {
-        ...prev,
-        workflow: { ...prev.workflow, items: updatedItems },
-        isDirty: true
-      }
-    })
-    setIsPaletteExpanded(false)
-  }, [state.workflow, state.subagentTypes])
 
   // Save workflow
   const handleSave = async () => {
-    if (!state.workflow || !projectPath) return
+    if (!state.workflow) return
 
     setIsSaving(true)
     try {
       await window.electronAPI.updateWorkflow(
-        projectPath,
         state.workflow.id,
-        {
-          items: state.workflow.items,
-          updatedAt: new Date().toISOString()
-        }
+        { steps: state.workflow.steps }
       )
       setState(prev => ({ ...prev, isDirty: false }))
     } catch (err: any) {
@@ -163,12 +100,8 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
     }
   }
 
-  // Handle close with unsaved changes check
+  // Handle close
   const handleClose = () => {
-    if (state.isDirty) {
-      // Could show confirmation dialog here
-      // For now, just close
-    }
     onClose()
   }
 
@@ -189,7 +122,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, state.isDirty])
+  }, [isOpen])
 
   return (
     <>
@@ -216,17 +149,9 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
           >
             <XIcon size="sm" />
           </button>
-          <div className="workflow-header-content">
-            <h2 id="workflow-panel-title" className="workflow-title">
-              WORKFLOW EDITOR
-            </h2>
-            <p className="workflow-subtitle">
-              Configure execution order for your Super Minion
-            </p>
-          </div>
-          <button className="workflow-help-btn" title="Help">
-            ?
-          </button>
+          <h2 id="workflow-panel-title" className="workflow-title">
+            Workflow
+          </h2>
         </div>
 
         {/* Content */}
@@ -243,66 +168,44 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, agentId }: Workflo
                 Dismiss
               </button>
             </div>
-          ) : state.isLocked ? (
-            <div className="workflow-locked">
-              <p>This workflow is being edited by another agent.</p>
-              {state.lockedBy && <p className="locked-by">Locked by: {state.lockedBy}</p>}
-            </div>
           ) : state.workflow ? (
-            <>
-              <StepPalette
-                subagentTypes={state.subagentTypes}
-                onAddStep={handleAddStep}
-                isExpanded={isPaletteExpanded}
-                onToggleExpanded={() => setIsPaletteExpanded(!isPaletteExpanded)}
-              />
-              <WorkflowPipeline
-                items={state.workflow.items}
-                subagentTypes={state.subagentTypes}
-                onItemsChange={handleItemsChange}
-                selectedIds={selectedIds}
-                onSelectionChange={handleSelectionChange}
-              />
-            </>
+            <WorkflowPipeline
+              steps={state.workflow.steps}
+              subagentTypes={state.subagentTypes}
+              onStepsChange={handleStepsChange}
+            />
           ) : (
-            <div className="workflow-empty-state">
-              <div className="workflow-empty-icon">
-                <span role="img" aria-label="workflow">+</span>
-              </div>
-              <h3 className="workflow-empty-title">No Workflow Configured</h3>
-              <p className="workflow-empty-desc">
-                Create a workflow to define how your Super Minion orchestrates tasks.
-              </p>
-              <button className="workflow-start-btn">
-                Create Workflow
-              </button>
+            <div className="workflow-empty">
+              <p>No workflow configured</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="workflow-panel-footer">
-          {state.isDirty && (
-            <div className="workflow-unsaved-indicator">
-              Unsaved changes
+        {state.workflow && !state.workflow.isDefault && (
+          <div className="workflow-panel-footer">
+            {state.isDirty && (
+              <div className="workflow-unsaved-indicator">
+                Unsaved changes
+              </div>
+            )}
+            <div className="workflow-footer-actions">
+              <button
+                className="workflow-cancel-btn"
+                onClick={handleClose}
+              >
+                Cancel
+              </button>
+              <button
+                className="workflow-save-btn"
+                onClick={handleSave}
+                disabled={!state.isDirty || isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
             </div>
-          )}
-          <div className="workflow-footer-actions">
-            <button
-              className="workflow-cancel-btn"
-              onClick={handleClose}
-            >
-              Cancel
-            </button>
-            <button
-              className="workflow-save-btn"
-              onClick={handleSave}
-              disabled={!state.isDirty || isSaving || state.isLocked}
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
           </div>
-        </div>
+        )}
       </div>
     </>
   )

@@ -144,29 +144,24 @@ export class TerminalService {
       const workflow = this.workflowService.getActiveWorkflow(projectPath)
       const subagentTypes = this.workflowService.getSubagentTypes()
 
-      // Build numbered phase list with bold formatting (only enabled steps)
-      // Steps are enabled by default if `enabled` is not explicitly set to false
+      // Build numbered step list
       const phases: string[] = []
-      let phaseNum = 1
 
-      for (const item of workflow.items) {
-        if (item.type === 'step') {
-          // Skip explicitly disabled steps (enabled defaults to true)
-          if (item.enabled === false) continue
-          const type = subagentTypes.find(t => t.id === item.subagentTypeId)
-          phases.push(`${phaseNum}. **${item.name}** using ${type?.name || item.subagentTypeId} agent`)
-          phaseNum++
-        } else if (item.type === 'parallel') {
-          // Filter to only enabled steps within the parallel group (enabled defaults to true)
-          const enabledSteps = item.steps.filter(s => s.enabled !== false)
-          if (enabledSteps.length === 0) continue
+      for (let i = 0; i < workflow.steps.length; i++) {
+        const step = workflow.steps[i]
+        const isParallel = step.agents.length > 1
 
-          const parallelSteps = enabledSteps.map(s => {
-            const type = subagentTypes.find(t => t.id === s.subagentTypeId)
-            return `${s.name} (${type?.name || s.subagentTypeId})`
+        if (isParallel) {
+          // Multiple agents run in parallel
+          const agentNames = step.agents.map(id => {
+            const type = subagentTypes.find(t => t.id === id)
+            return type?.name || id
           }).join(' + ')
-          phases.push(`${phaseNum}. **PARALLEL**: ${parallelSteps}`)
-          phaseNum++
+          phases.push(`${i + 1}. **${step.name}** (PARALLEL: ${agentNames})`)
+        } else {
+          // Single agent
+          const type = subagentTypes.find(t => t.id === step.agents[0])
+          phases.push(`${i + 1}. **${step.name}** using ${type?.name || step.agents[0]} agent`)
         }
       }
 
@@ -346,7 +341,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
               // Lock workflow while super minion is running
               if (this.workflowService) {
-                this.workflowService.lockWorkflow(projectPath, agentId)
+                // Workflow locking removed in simplification
               }
             }
           } else if (mode === 'dev') {
@@ -381,7 +376,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
               // Lock workflow while super minion is running
               if (this.workflowService) {
-                this.workflowService.lockWorkflow(projectPath, agentId)
+                // Workflow locking removed in simplification
               }
             }
           } else if (mode === 'dev') {
@@ -767,7 +762,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // Unlock workflow if this was a super minion
       const isSuperMinion = (agentInfo as any)?.isSuperMinion === true
       if (isSuperMinion && this.workflowService && projectPath) {
-        this.workflowService.unlockWorkflow(projectPath, agentId)
+        // Workflow unlocking removed in simplification
         log.debug('Unlocked workflow on exit for super minion', { agentId, projectPath })
       }
 
@@ -806,7 +801,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
         // Lock workflow while super minion is running
         if (this.workflowService) {
-          this.workflowService.lockWorkflow(projectPath, agentId)
+          // Workflow locking removed in simplification
         }
       }
 
@@ -1026,7 +1021,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         // Check if agent is a super minion and unlock the workflow
         this.readAgentInfo(session.worktreePath).then((agentInfo) => {
           if ((agentInfo as any)?.isSuperMinion) {
-            this.workflowService!.unlockWorkflow(session.projectPath!, agentId)
+            // Workflow unlocking removed in simplification
             log.debug('Unlocked workflow for super minion', { agentId, projectPath: session.projectPath })
           }
         }).catch(err => {

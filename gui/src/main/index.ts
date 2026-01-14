@@ -15,7 +15,7 @@ import { TeleportService } from './services/TeleportService'
 import { TeleportMetadataService } from './services/TeleportMetadataService'
 import { WorkflowService } from './services/WorkflowService'
 import { createLogger } from './services/logger'
-import type { ProjectWorkflowConfig, WorkflowConfig } from './services/types/WorkflowTypes'
+import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowTypes'
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 
@@ -145,9 +145,6 @@ function initializeServices(): void {
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
   terminalService.setWorkflowService(services.workflow)
-
-  // Wire up WorkflowService to AgentService for saving workflows on super minion creation
-  agentService.setWorkflowService(services.workflow)
 
   // Migrate existing assignments from config.json to .agent-info files
   const activeProjects = services.project.getActiveProjects()
@@ -1096,61 +1093,47 @@ function setupIPC(): void {
     return null
   })
 
-  // Workflow Config APIs
-  ipcMain.handle('workflow:getConfig', async () => {
-    return services!.workflow.getSystemConfig()
-  })
-
+  // Workflow Config APIs (Simplified)
   ipcMain.handle('workflow:getSubagentTypes', async () => {
     return services!.workflow.getSubagentTypes()
-  })
-
-  ipcMain.handle('workflow:getProjectWorkflow', async (_event, projectPath: string) => {
-    return services!.workflow.getProjectWorkflow(projectPath)
-  })
-
-  ipcMain.handle('workflow:saveProjectWorkflow', async (_event, projectPath: string, config: ProjectWorkflowConfig) => {
-    return services!.workflow.saveProjectWorkflow(projectPath, config)
   })
 
   ipcMain.handle('workflow:getActiveWorkflow', async (_event, projectPath: string) => {
     return services!.workflow.getActiveWorkflow(projectPath)
   })
 
-  ipcMain.handle('workflow:setActiveWorkflow', async (_event, projectPath: string, workflowId: string) => {
-    return services!.workflow.setActiveWorkflow(projectPath, workflowId)
+  ipcMain.handle('workflow:getAllWorkflows', async () => {
+    return services!.workflow.getAllWorkflows()
   })
 
-  ipcMain.handle('workflow:createWorkflow', async (_event, projectPath: string, workflow: Partial<WorkflowConfig>) => {
-    return services!.workflow.createWorkflow(projectPath, workflow as Omit<WorkflowConfig, 'id' | 'createdAt' | 'updatedAt' | 'version'>)
+  ipcMain.handle('workflow:createWorkflow', async (_event, name: string, description?: string) => {
+    return services!.workflow.createWorkflow(name, description)
   })
 
-  ipcMain.handle('workflow:updateWorkflow', async (_event, projectPath: string, workflowId: string, updates: Partial<WorkflowConfig>) => {
-    return services!.workflow.updateWorkflow(projectPath, workflowId, updates)
+  ipcMain.handle('workflow:updateWorkflow', async (_event, workflowId: string, updates: Partial<WorkflowConfig>) => {
+    return services!.workflow.updateWorkflow(workflowId, updates)
   })
 
-  ipcMain.handle('workflow:deleteWorkflow', async (_event, projectPath: string, workflowId: string) => {
-    return services!.workflow.deleteWorkflow(projectPath, workflowId)
+  ipcMain.handle('workflow:deleteWorkflow', async (_event, workflowId: string) => {
+    return services!.workflow.deleteWorkflow(workflowId)
   })
 
-  ipcMain.handle('workflow:getTemplates', async () => {
-    return services!.workflow.getTemplates()
+  ipcMain.handle('workflow:addStep', async (_event, workflowId: string, name: string, agents: string[]) => {
+    return services!.workflow.addStep(workflowId, name, agents)
   })
 
-  ipcMain.handle('workflow:saveAsTemplate', async (_event, workflow: WorkflowConfig, templateName: string) => {
-    return services!.workflow.saveAsTemplate(workflow, templateName)
+  ipcMain.handle('workflow:updateStep', async (_event, workflowId: string, stepId: string, updates: Partial<WorkflowStep>) => {
+    return services!.workflow.updateStep(workflowId, stepId, updates)
   })
 
-  ipcMain.handle('workflow:lockWorkflow', async (_event, projectPath: string, agentId: string) => {
-    return services!.workflow.lockWorkflow(projectPath, agentId)
+  ipcMain.handle('workflow:removeStep', async (_event, workflowId: string, stepId: string) => {
+    return services!.workflow.removeStep(workflowId, stepId)
   })
 
-  ipcMain.handle('workflow:unlockWorkflow', async (_event, projectPath: string, agentId: string) => {
-    return services!.workflow.unlockWorkflow(projectPath, agentId)
-  })
-
-  ipcMain.handle('workflow:isWorkflowLocked', async (_event, projectPath: string) => {
-    return services!.workflow.isWorkflowLocked(projectPath)
+  ipcMain.handle('workflow:generateRules', async (_event, workflowId: string) => {
+    const workflow = services!.workflow.getWorkflow(workflowId)
+    if (!workflow) throw new Error(`Workflow not found: ${workflowId}`)
+    return services!.workflow.generateRulesMarkdown(workflow)
   })
 
   // Setup Wizard handlers

@@ -614,28 +614,22 @@ describe('Super Minion System Prompt', () => {
   const SUPER_MINION_AGENT_INFO = { isSuperMinion: true }
   const REGULAR_AGENT_INFO = { isSuperMinion: false }
 
-  // Mock workflow configuration
+  // Mock workflow configuration (new simplified model)
   const MOCK_WORKFLOW = {
     id: 'test-workflow',
     name: 'Test Workflow',
-    items: [
-      { type: 'step', name: 'Design Phase', subagentTypeId: 'planner' },
-      { type: 'step', name: 'Implementation', subagentTypeId: 'dev' },
-      {
-        type: 'parallel',
-        steps: [
-          { name: 'Test', subagentTypeId: 'tester' },
-          { name: 'Review', subagentTypeId: 'reviewer' }
-        ]
-      }
+    steps: [
+      { id: 'step-1', name: 'Design Phase', agents: ['planner'] },
+      { id: 'step-2', name: 'Implementation', agents: ['dev'] },
+      { id: 'step-3', name: 'Test & Review', agents: ['tester', 'reviewer'] }
     ]
   }
 
   const MOCK_SUBAGENT_TYPES = [
-    { id: 'planner', name: 'Planner' },
-    { id: 'dev', name: 'Developer' },
-    { id: 'tester', name: 'Tester' },
-    { id: 'reviewer', name: 'Reviewer' }
+    { id: 'planner', name: 'Planner', description: 'Plans the work' },
+    { id: 'dev', name: 'Developer', description: 'Implements code' },
+    { id: 'tester', name: 'Tester', description: 'Tests the code' },
+    { id: 'reviewer', name: 'Reviewer', description: 'Reviews the code' }
   ]
 
   // Helper to get the command written to PTY
@@ -683,9 +677,7 @@ describe('Super Minion System Prompt', () => {
     mockWorkflowService = {
       getActiveWorkflow: vi.fn().mockReturnValue(MOCK_WORKFLOW),
       getSubagentTypes: vi.fn().mockReturnValue(MOCK_SUBAGENT_TYPES),
-      generateRulesMarkdown: vi.fn().mockReturnValue('# Workflow Rules'),
-      lockWorkflow: vi.fn(),
-      unlockWorkflow: vi.fn()
+      generateRulesMarkdown: vi.fn().mockReturnValue('# Workflow Rules\n\nThis is the workflow rules markdown.')
     }
 
     setupAgentInfo(SUPER_MINION_AGENT_INFO)
@@ -710,11 +702,15 @@ describe('Super Minion System Prompt', () => {
   it('should include workflow-aware prompt for super minion', async () => {
     await startAgent()
 
-    const command = getWrittenCommand()
-    expect(command).toContain('**Super Minion**')
-    expect(command).toContain('3-phase workflow')
-    expect(command).toContain('## Your Goal')
-    expect(command).toContain('Create feature X')
+    // Verify generateRulesMarkdown was called with the workflow
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalledWith(MOCK_WORKFLOW)
+
+    // Check that the rules file was written
+    expect(fs.writeFileSync).toHaveBeenCalled()
+    const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      call => typeof call[0] === 'string' && call[0].includes('dynamic-rules.md')
+    )
+    expect(writeCall).toBeDefined()
   })
 
   it('should NOT pass --system-prompt-file flag for regular planning mode', async () => {
@@ -737,20 +733,28 @@ describe('Super Minion System Prompt', () => {
     expect(command).not.toContain('## Your Mission')
   })
 
-  it('should include workflow phases in prompt', async () => {
+  it('should include workflow in rules file', async () => {
     await startAgent('Build feature Y')
 
+    // Verify generateRulesMarkdown was called
+    expect(mockWorkflowService.generateRulesMarkdown).toHaveBeenCalled()
+
+    // The command should include --system-prompt-file pointing to the rules
     const command = getWrittenCommand()
-    // New format: "1. **Design Phase** using Planner agent"
-    expect(command).toContain('**Design Phase** using Planner agent')
-    expect(command).toContain('**Implementation** using Developer agent')
-    expect(command).toContain('**PARALLEL**: Test (Tester) + Review (Reviewer)')
+    expect(command).toContain('--system-prompt-file')
+    expect(command).toContain('dynamic-rules.md')
   })
 
-  it('should lock workflow when starting super minion', async () => {
+  it('should write rules to dynamic-rules.md file', async () => {
     await startAgent()
 
-    expect(mockWorkflowService.lockWorkflow).toHaveBeenCalledWith(TEST_PROJECT_PATH, TEST_AGENT_ID)
+    // Check the rules file was created with the generated markdown
+    const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      call => typeof call[0] === 'string' && call[0].includes('dynamic-rules.md')
+    )
+    expect(writeCall).toBeDefined()
+    // The content should be from generateRulesMarkdown
+    expect(writeCall?.[1]).toContain('# Workflow Rules')
   })
 
   it('should use fallback prompt if workflow service fails', async () => {

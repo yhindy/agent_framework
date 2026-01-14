@@ -12,7 +12,6 @@ import { WorkflowBuilderPage } from './WorkflowEditor'
 import type { DefaultToolSettings } from '../../../shared/types/settings'
 import type {
   WorkflowConfig,
-  WorkflowItem,
   SubagentType
 } from '../../../main/services/types/WorkflowTypes'
 import './Dashboard.css'
@@ -600,36 +599,24 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     setShowTypeSelection(false)
   }
 
-  // Helper function to count enabled steps in a workflow
-  // Steps are enabled by default if `enabled` is not explicitly set to false
-  const countSteps = (items: WorkflowItem[]): number => {
-    return items.reduce((count, item) => {
-      if (item.type === 'step') return count + (item.enabled !== false ? 1 : 0)
-      if (item.type === 'parallel') return count + item.steps.filter(s => s.enabled !== false).length
-      return count
-    }, 0)
+  // Helper function to count steps in a workflow
+  const countSteps = (workflow: WorkflowConfig): number => {
+    return workflow.steps.length
   }
 
   // Prepare workflow for saving - creates a new ID for modified system workflows
   const prepareWorkflowForSave = (workflow: WorkflowConfig): WorkflowConfig => {
-    // If this is a system workflow (template or default), give it a new ID for the custom version
-    if (workflow.isTemplate || workflow.isDefault) {
+    // If this is the default workflow, give it a new ID for the custom version
+    if (workflow.isDefault) {
       return {
         ...workflow,
         id: `custom-${Date.now()}`,
-        name: workflow.name, // Keep the name
-        isTemplate: false,
-        isDefault: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        name: workflow.name,
+        isDefault: false
       }
     }
 
-    // Otherwise just update the timestamp
-    return {
-      ...workflow,
-      updatedAt: new Date().toISOString()
-    }
+    return workflow
   }
 
   const handleTeleportClick = () => {
@@ -1105,7 +1092,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                         <div className="workflow-preview-info">
                           <span className="workflow-preview-name">{formData.workflow.name}</span>
                           <span className="workflow-preview-count">
-                            {countSteps(formData.workflow.items)} steps
+                            {countSteps(formData.workflow)} steps
                           </span>
                         </div>
                         <button

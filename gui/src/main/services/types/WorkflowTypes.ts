@@ -1,125 +1,115 @@
 /**
- * Workflow Editor Type Definitions
+ * Workflow Editor Type Definitions (Simplified)
  *
- * This module defines all TypeScript interfaces for the Workflow Editor feature,
- * including subagent types, workflow steps, parallel execution groups, and
- * project-specific configurations.
+ * Simple model: A workflow is a sequence of steps.
+ * Each step has one or more agents - multiple agents run in parallel automatically.
  */
 
 /**
- * Defines a subagent type that can be used in workflows.
- * Subagent types represent different agent personalities/configurations
- * optimized for specific tasks like exploration, debugging, or planning.
+ * Defines an agent type that can be used in workflow steps.
  */
 export interface SubagentType {
-  id: string                    // e.g., 'explore', 'general-purpose', 'plan', 'debugger'
-  name: string                  // Human-readable name for UI display
-  description: string           // What this subagent does
-  defaultPromptTemplate: string // Default system prompt template
-  icon?: string                 // Optional icon identifier for UI rendering
-  capabilities?: string[]       // e.g., ['read-only', 'file-edit', 'test-execution']
+  id: string        // e.g., 'explore', 'implement', 'plan', 'debug'
+  name: string      // Human-readable name
+  description: string
 }
 
 /**
- * Configuration options for a workflow step.
- * Controls timeout, retry, and failure handling behavior.
- */
-export interface WorkflowStepConfig {
-  timeout?: number              // Maximum execution time in milliseconds
-  retryOnFailure?: boolean      // Whether to retry if step fails
-  continueOnFailure?: boolean   // Whether to continue workflow if step fails
-}
-
-/**
- * A single step in a workflow (sequential execution).
- * Each step runs a specific subagent type with optional customization.
+ * A single step in a workflow.
+ * If a step has multiple agents, they run in parallel automatically.
  */
 export interface WorkflowStep {
-  id: string                    // Unique identifier for this step
-  type: 'step'                  // Discriminator for union type
-  name: string                  // Display name for UI
-  subagentTypeId: string        // Reference to SubagentType.id
-  promptOverride?: string       // Optional custom prompt to override default
-  enabled: boolean              // Can be toggled off without removing
-  config?: WorkflowStepConfig   // Optional execution configuration
-}
-
-/**
- * A group of steps that execute in parallel.
- * All steps within a parallel group start simultaneously and the group
- * completes when all steps finish (or fail based on configuration).
- */
-export interface ParallelGroup {
-  id: string                    // Unique identifier for this group
-  type: 'parallel'              // Discriminator for union type
-  steps: WorkflowStep[]         // Steps to execute in parallel
-}
-
-/**
- * Union type for workflow items.
- * A workflow consists of a sequence of items, where each item is either
- * a single step or a parallel group of steps.
- */
-export type WorkflowItem = WorkflowStep | ParallelGroup
-
-/**
- * Type guard to check if a workflow item is a single step.
- * @param item - The workflow item to check
- * @returns True if the item is a WorkflowStep
- */
-export function isWorkflowStep(item: WorkflowItem): item is WorkflowStep {
-  return item.type === 'step'
-}
-
-/**
- * Type guard to check if a workflow item is a parallel group.
- * @param item - The workflow item to check
- * @returns True if the item is a ParallelGroup
- */
-export function isParallelGroup(item: WorkflowItem): item is ParallelGroup {
-  return item.type === 'parallel'
+  id: string        // Unique identifier
+  name: string      // Display name (e.g., "Planning", "Implementation")
+  agents: string[]  // Array of SubagentType.ids - multiple = parallel execution
 }
 
 /**
  * A complete workflow configuration.
- * Represents a named, versioned sequence of workflow items that can be
- * executed by the orchestrator.
  */
 export interface WorkflowConfig {
-  id: string                    // Unique identifier for this workflow
-  name: string                  // Display name for UI
-  description?: string          // Optional description of what this workflow does
-  items: WorkflowItem[]         // Ordered list of steps and parallel groups
-  isDefault?: boolean           // Whether this is the default workflow
-  isTemplate?: boolean          // Whether this is a template (read-only)
-  createdAt: string             // ISO timestamp of creation
-  updatedAt: string             // ISO timestamp of last update
-  version: number               // Version number for optimistic locking
-  lockedBy?: string             // User ID if workflow is being edited
-  lockedAt?: string             // ISO timestamp of when lock was acquired
+  id: string
+  name: string
+  description?: string
+  steps: WorkflowStep[]
+  isDefault?: boolean
 }
 
 /**
- * Root configuration with all subagent types and workflows.
- * This represents the global workflow system configuration that applies
- * across all projects unless overridden.
+ * Available agent types for the workflow system.
  */
-export interface WorkflowSystemConfig {
-  subagentTypes: SubagentType[] // All available subagent types
-  workflows: WorkflowConfig[]   // All defined workflows
-  defaultWorkflowId: string     // ID of the default workflow to use
-  version: number               // Schema version for migrations
-}
-
-/**
- * Project-specific workflow configuration.
- * Allows projects to customize which workflow is active, define custom
- * workflows, and override subagent type settings for their specific needs.
- */
-export interface ProjectWorkflowConfig {
-  activeWorkflowId: string      // ID of the currently active workflow
-  customWorkflows: WorkflowConfig[]  // Project-specific workflow definitions
-  overrides?: {                 // Optional per-subagent customizations
-    [subagentTypeId: string]: Partial<SubagentType>
+export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
+  {
+    id: 'explore',
+    name: 'Explorer',
+    description: 'Quick codebase reconnaissance - searches files, reads code'
+  },
+  {
+    id: 'implement',
+    name: 'Implementer',
+    description: 'Full implementation following TDD - writes tests first, then code'
+  },
+  {
+    id: 'plan',
+    name: 'Planner',
+    description: 'Architecture and design planning - creates technical specifications'
+  },
+  {
+    id: 'debug',
+    name: 'Debugger',
+    description: 'Debug unexpected behavior - traces bugs, adds logging, fixes issues'
   }
+]
+
+/**
+ * Default workflow matching the original super-minion behavior.
+ */
+export const DEFAULT_WORKFLOW: WorkflowConfig = {
+  id: 'default',
+  name: 'Standard Workflow',
+  description: 'Plan, implement, then validate',
+  steps: [
+    { id: 'step-1', name: 'Planning', agents: ['explore', 'plan'] },
+    { id: 'step-2', name: 'Implementation', agents: ['implement'] },
+    { id: 'step-3', name: 'Validation', agents: ['debug', 'implement'] }
+  ],
+  isDefault: true
+}
+
+// Legacy type aliases for backward compatibility during migration
+// TODO: Remove these after all code is migrated
+
+/** @deprecated Use WorkflowStep with multiple agents instead */
+export interface ParallelGroup {
+  id: string
+  type: 'parallel'
+  steps: LegacyWorkflowStep[]
+}
+
+/** @deprecated Use WorkflowStep instead */
+export interface LegacyWorkflowStep {
+  id: string
+  type: 'step'
+  name: string
+  subagentTypeId: string
+  promptOverride?: string
+  enabled: boolean
+  config?: {
+    timeout?: number
+    retryOnFailure?: boolean
+    continueOnFailure?: boolean
+  }
+}
+
+/** @deprecated Use WorkflowStep instead */
+export type WorkflowItem = LegacyWorkflowStep | ParallelGroup
+
+/** @deprecated */
+export function isWorkflowStep(item: WorkflowItem): item is LegacyWorkflowStep {
+  return item.type === 'step'
+}
+
+/** @deprecated */
+export function isParallelGroup(item: WorkflowItem): item is ParallelGroup {
+  return item.type === 'parallel'
 }

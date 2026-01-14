@@ -38,30 +38,23 @@ function WorkflowSettings(): JSX.Element {
   const handleCreateTemplate = async (): Promise<void> => {
     try {
       const config = await window.electronAPI.getWorkflowConfig()
-      const defaultWorkflow = config.workflows.find((w) => w.isDefault)
+      const defaultWorkflow = config.workflows.find((w: WorkflowConfig) => w.isDefault)
       if (defaultWorkflow) {
         setEditingTemplate({
           ...defaultWorkflow,
-          id: `template-${Date.now()}`,
-          name: 'New Workflow Template',
+          id: `workflow-${Date.now()}`,
+          name: 'New Workflow',
           description: '',
-          isDefault: false,
-          isTemplate: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          isDefault: false
         })
       } else {
-        // Create empty template if no default exists
+        // Create empty workflow if no default exists
         setEditingTemplate({
-          id: `template-${Date.now()}`,
-          name: 'New Workflow Template',
+          id: `workflow-${Date.now()}`,
+          name: 'New Workflow',
           description: '',
-          items: [],
-          isDefault: false,
-          isTemplate: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          version: 1
+          steps: [],
+          isDefault: false
         })
       }
     } catch (err) {
@@ -85,16 +78,8 @@ function WorkflowSettings(): JSX.Element {
     setEditingTemplate({ ...template })
   }
 
-  const getStepCount = (template: WorkflowConfig): number => {
-    let count = 0
-    for (const item of template.items) {
-      if (item.type === 'step') {
-        count++
-      } else if (item.type === 'parallel') {
-        count += item.steps.length
-      }
-    }
-    return count
+  const getStepCount = (workflow: WorkflowConfig): number => {
+    return workflow.steps.length
   }
 
   if (isLoading) {

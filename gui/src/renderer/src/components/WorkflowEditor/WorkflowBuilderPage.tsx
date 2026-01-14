@@ -9,7 +9,6 @@ import { FloatingAddButton } from './FloatingAddButton'
 import { WorkflowPipeline } from './WorkflowPipeline'
 import type {
   WorkflowConfig,
-  WorkflowItem,
   WorkflowStep,
   SubagentType
 } from '../../../../main/services/types/WorkflowTypes'
@@ -20,21 +19,7 @@ export interface WorkflowBuilderPageProps {
   subagentTypes: SubagentType[]
   onSave: (workflow: WorkflowConfig) => void
   onCancel: () => void
-  title?: string // "Configure Workflow" or "Edit Template"
-}
-
-// Count enabled steps including those in parallel groups
-// Steps are enabled by default if `enabled` is not explicitly set to false
-function countSteps(items: WorkflowItem[]): number {
-  return items.reduce((count, item) => {
-    if (item.type === 'parallel') {
-      return count + item.steps.filter(s => s.enabled !== false).length
-    }
-    if (item.type === 'step') {
-      return count + (item.enabled !== false ? 1 : 0)
-    }
-    return count
-  }, 0)
+  title?: string
 }
 
 export function WorkflowBuilderPage({
@@ -45,16 +30,12 @@ export function WorkflowBuilderPage({
   title = 'Configure Workflow'
 }: WorkflowBuilderPageProps): JSX.Element {
   // Local state for editing
-  const [items, setItems] = useState<WorkflowItem[]>(workflow.items)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [steps, setSteps] = useState<WorkflowStep[]>(workflow.steps)
 
   // Track if changes have been made
   const isDirty = useMemo(() => {
-    return JSON.stringify(items) !== JSON.stringify(workflow.items)
-  }, [items, workflow.items])
-
-  // Step count for display
-  const stepCount = useMemo(() => countSteps(items), [items])
+    return JSON.stringify(steps) !== JSON.stringify(workflow.steps)
+  }, [steps, workflow.steps])
 
   // Handle adding a new step
   const handleAddStep = useCallback(
@@ -64,42 +45,32 @@ export function WorkflowBuilderPage({
 
       const newStep: WorkflowStep = {
         id: `step-${Date.now()}`,
-        type: 'step',
         name: subagentType.name,
-        subagentTypeId: subagentType.id,
-        enabled: true
+        agents: [subagentType.id]
       }
 
-      setItems((prev) => [...prev, newStep])
+      setSteps((prev) => [...prev, newStep])
     },
     [subagentTypes]
   )
 
-  // Handle items change from pipeline
-  const handleItemsChange = useCallback((newItems: WorkflowItem[]) => {
-    setItems(newItems)
-  }, [])
-
-  // Handle selection change from pipeline
-  const handleSelectionChange = useCallback((ids: string[]) => {
-    setSelectedIds(ids)
+  // Handle steps change from pipeline
+  const handleStepsChange = useCallback((newSteps: WorkflowStep[]) => {
+    setSteps(newSteps)
   }, [])
 
   // Handle save
   const handleSave = useCallback(() => {
     const updatedWorkflow: WorkflowConfig = {
       ...workflow,
-      items,
-      updatedAt: new Date().toISOString(),
-      version: workflow.version + 1
+      steps
     }
     onSave(updatedWorkflow)
-  }, [workflow, items, onSave])
+  }, [workflow, steps, onSave])
 
   // Handle discard/cancel
   const handleDiscard = useCallback(() => {
     if (isDirty) {
-      // Show confirmation dialog
       const confirmed = window.confirm(
         'You have unsaved changes. Are you sure you want to discard them?'
       )
@@ -158,7 +129,7 @@ export function WorkflowBuilderPage({
       {/* Canvas area */}
       <main className="workflow-builder-canvas">
         <div className="workflow-builder-canvas-inner">
-          {items.length === 0 ? (
+          {steps.length === 0 ? (
             // Empty state
             <div className="workflow-builder-empty">
               <div className="workflow-builder-empty-icon">
@@ -175,14 +146,12 @@ export function WorkflowBuilderPage({
             // Pipeline visualization
             <>
               <div className="workflow-builder-step-count">
-                {stepCount} {stepCount === 1 ? 'step' : 'steps'}
+                {steps.length} {steps.length === 1 ? 'step' : 'steps'}
               </div>
               <WorkflowPipeline
-                items={items}
+                steps={steps}
                 subagentTypes={subagentTypes}
-                onItemsChange={handleItemsChange}
-                selectedIds={selectedIds}
-                onSelectionChange={handleSelectionChange}
+                onStepsChange={handleStepsChange}
               />
             </>
           )}
