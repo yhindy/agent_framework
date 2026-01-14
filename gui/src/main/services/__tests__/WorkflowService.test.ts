@@ -78,9 +78,65 @@ describe('WorkflowService', () => {
         .toThrow('Workflow not found')
     })
 
-    it('should throw error when trying to modify default workflow', () => {
-      expect(() => service.updateWorkflow('default', { name: 'Modified' }))
-        .toThrow('Cannot modify the default workflow')
+    it('should allow modifying default workflow', () => {
+      const updated = service.updateWorkflow('default', { name: 'Modified Default' })
+      expect(updated.name).toBe('Modified Default')
+      expect(updated.id).toBe('default')
+      expect(updated.isDefault).toBe(true)
+    })
+
+    it('should update workflow with new steps (regression test for saveWorkflowAsTemplate)', () => {
+      // Create a workflow and add steps
+      const workflow = service.createWorkflow('Test Workflow', 'Original description')
+      service.addStep(workflow.id, 'Original Step', ['explore'])
+
+      // Verify initial state
+      const initial = service.getWorkflow(workflow.id)
+      expect(initial?.steps).toHaveLength(1)
+      expect(initial?.steps[0].name).toBe('Original Step')
+
+      // Update with new steps (simulating what saveWorkflowAsTemplate should do)
+      const newSteps = [
+        { id: 'new-step-1', name: 'New Step 1', agents: [{ id: 'a1', typeId: 'plan' }] },
+        { id: 'new-step-2', name: 'New Step 2', agents: [{ id: 'a2', typeId: 'implement' }, { id: 'a3', typeId: 'debug' }] }
+      ]
+
+      const updated = service.updateWorkflow(workflow.id, {
+        name: 'Updated Workflow',
+        description: 'Updated description',
+        steps: newSteps
+      })
+
+      // Verify the update preserved the ID and updated all fields
+      expect(updated.id).toBe(workflow.id)
+      expect(updated.name).toBe('Updated Workflow')
+      expect(updated.description).toBe('Updated description')
+      expect(updated.steps).toHaveLength(2)
+      expect(updated.steps[0].name).toBe('New Step 1')
+      expect(updated.steps[1].name).toBe('New Step 2')
+      expect(updated.steps[1].agents).toHaveLength(2)
+
+      // Verify the workflow count didn't increase (update, not create)
+      expect(service.getAllWorkflows()).toHaveLength(3) // default + debug + updated
+    })
+
+    it('should preserve existing workflow ID when updating', () => {
+      const workflow = service.createWorkflow('Test', 'Description')
+      const originalId = workflow.id
+      service.addStep(workflow.id, 'Step', ['explore'])
+
+      const updated = service.updateWorkflow(workflow.id, {
+        name: 'New Name',
+        steps: [{ id: 's1', name: 'New Step', agents: [{ id: 'a1', typeId: 'plan' }] }]
+      })
+
+      // ID must be preserved (not regenerated)
+      expect(updated.id).toBe(originalId)
+
+      // The workflow should be retrievable by the same ID
+      const retrieved = service.getWorkflow(originalId)
+      expect(retrieved?.name).toBe('New Name')
+      expect(retrieved?.steps[0].name).toBe('New Step')
     })
   })
 
