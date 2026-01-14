@@ -309,6 +309,192 @@ Actual: [actual behavior]
 
 ---
 
+## Spawning Super Minion Subagents
+
+You can delegate complex, multi-phase work to a Super Minion subagent. This is useful when:
+- A sub-feature requires its own 5-phase workflow
+- Work is complex enough to benefit from dedicated context
+- You want structured acceptance criteria for a sub-feature
+
+### Approval Modes
+
+| Mode | Value | Use When |
+|------|-------|----------|
+| Human | `APPROVAL_AUTHORITY: human` | Human should review/approve criteria directly |
+| Parent | `APPROVAL_AUTHORITY: parent` | You (the parent) want to review criteria before proceeding |
+| Pre-approved | `APPROVAL_AUTHORITY: pre-approved` | You've already defined criteria; subagent skips Phase 1 |
+
+### Example: Human Approval Mode
+
+Use when the subagent should interact directly with the human for criteria approval:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Super Minion: Implement user authentication",
+    prompt="""
+<super-minion-config>
+APPROVAL_AUTHORITY: human
+</super-minion-config>
+
+<mission>
+Implement user authentication with email/password login.
+Requirements:
+- Login form with validation
+- Secure password storage
+- Session management
+</mission>
+
+<super-minion-protocol>
+[Contents of super-minion-subagent-template.md]
+</super-minion-protocol>
+"""
+)
+```
+
+### Example: Parent Approval Mode
+
+Use when you want to review the proposed criteria before the subagent proceeds. This creates a two-step handshake:
+
+**Step 1: Spawn subagent to propose criteria**
+
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Super Minion: Design API endpoints",
+    prompt="""
+<super-minion-config>
+APPROVAL_AUTHORITY: parent
+</super-minion-config>
+
+<mission>
+Design and implement REST API endpoints for the user service.
+</mission>
+
+<super-minion-protocol>
+[Contents of super-minion-subagent-template.md]
+</super-minion-protocol>
+"""
+)
+```
+
+The subagent will explore the codebase, then return a `CRITERIA_PROPOSAL` result:
+
+```json
+{
+  "status": "CRITERIA_PROPOSAL",
+  "proposed_criteria": [
+    {"id": 1, "description": "GET /users returns paginated list", "type": "functional"},
+    {"id": 2, "description": "All endpoints have OpenAPI docs", "type": "engineering"}
+  ],
+  "clarifying_questions": [
+    "Should we support filtering by user status?"
+  ],
+  "exploration_summary": "Found existing API patterns in src/api/. Using Express router."
+}
+```
+
+**Step 2: Re-invoke with approved criteria**
+
+After reviewing and approving (or modifying) the criteria:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Super Minion: Design API endpoints (approved)",
+    prompt="""
+<super-minion-config>
+APPROVAL_AUTHORITY: pre-approved
+PRE_APPROVED_CRITERIA:
+1. GET /users returns paginated list with limit/offset
+2. POST /users creates new user with validation
+3. All endpoints have OpenAPI documentation
+4. Unit tests cover all endpoints
+</super-minion-config>
+
+<mission>
+Design and implement REST API endpoints for the user service.
+
+EXPLORATION CONTEXT (from Phase 1):
+Found existing API patterns in src/api/. Using Express router.
+</mission>
+
+<super-minion-protocol>
+[Contents of super-minion-subagent-template.md]
+</super-minion-protocol>
+"""
+)
+```
+
+**Important**: Include the `exploration_summary` from the first invocation in the mission section to preserve context.
+
+### Example: Pre-approved Mode
+
+Use when you've already defined criteria and want the subagent to execute immediately:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Super Minion: Add rate limiting",
+    prompt="""
+<super-minion-config>
+APPROVAL_AUTHORITY: pre-approved
+PRE_APPROVED_CRITERIA:
+1. API endpoints respect rate limits (100 req/min per user)
+2. Rate limit headers included in responses
+3. 429 status returned when limit exceeded
+4. Unit tests verify rate limiting behavior
+</super-minion-config>
+
+<mission>
+Add rate limiting to the API endpoints.
+</mission>
+
+<super-minion-protocol>
+[Contents of super-minion-subagent-template.md]
+</super-minion-protocol>
+"""
+)
+```
+
+### Parsing Subagent Results
+
+Super Minion subagents return structured results you can parse:
+
+```json
+{
+  "status": "COMPLETED",
+  "criteria_verification": [
+    {"id": 1, "description": "...", "status": "PASSED", "evidence": "..."},
+    {"id": 2, "description": "...", "status": "PASSED", "evidence": "..."}
+  ],
+  "files_modified": ["src/api/users.ts"],
+  "files_created": ["src/api/users.test.ts"],
+  "blockers": [],
+  "warnings": ["Consider adding caching for performance"],
+  "summary": "Implemented user API endpoints. All criteria satisfied."
+}
+```
+
+**Status values:**
+- `COMPLETED` - All criteria satisfied, verification passed
+- `FAILED` - One or more criteria could not be satisfied
+- `BLOCKED` - Cannot proceed without external input/decision
+- `CRITERIA_PROPOSAL` - Phase 1 complete, awaiting parent approval (parent mode only)
+
+### Nesting Limits
+
+**Keep nesting shallow.**
+
+- Maximum depth: 1 level (parent Super Minion -> child Super Minion)
+- Each nesting adds ~2,500 tokens overhead
+- Prefer sequential tasks over nested Super Minions
+- Do NOT spawn a Super Minion from within a Super Minion subagent
+
+If a sub-feature needs its own sub-features, break them into sequential phases instead.
+
+---
+
 ## Human Escalation
 
 Use **AskUserQuestion** ONLY when:
