@@ -173,7 +173,7 @@ Task(subagent_type="general-purpose", description="Implement [component B]", pro
 
 4. **Wait for all implementation agents** to complete before proceeding to Phase 5.
 
-### Referencing Criteria During Implementation
+### Referencing Criteria During Execution
 
 When spawning each Task subagent, you MUST:
 - Include the relevant acceptance criteria in the prompt
