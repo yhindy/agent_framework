@@ -45,19 +45,42 @@ fi
 REPO_ROOT="$(pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load config
-if [ -z "$CONFIG_FILE" ]; then
-  CONFIG_FILE="$REPO_ROOT/minions/config.json"
-fi
+# Config detection (new format first, legacy fallback)
+# If --config was passed, use that directly
+if [ -n "$CONFIG_FILE" ]; then
+  # Ensure absolute path
+  if [[ "$CONFIG_FILE" != /* ]]; then
+    CONFIG_FILE="$(cd "$(dirname "$CONFIG_FILE")" && pwd)/$(basename "$CONFIG_FILE")"
+  fi
 
-# Ensure absolute path
-if [[ "$CONFIG_FILE" != /* ]]; then
-  CONFIG_FILE="$(cd "$(dirname "$CONFIG_FILE")" && pwd)/$(basename "$CONFIG_FILE")"
-fi
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo -e "${RED}Config file not found: $CONFIG_FILE${NC}"
+    exit 1
+  fi
 
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo -e "${RED}Config file not found: $CONFIG_FILE${NC}"
-  exit 1
+  # Determine format based on path
+  if [[ "$CONFIG_FILE" == *"/minions.json" ]]; then
+    CONFIG_FORMAT="v2"
+    echo "   Using config: minions.json (v2 format)"
+  else
+    CONFIG_FORMAT="v1"
+    echo "   Using config: minions/config.json (legacy format)"
+  fi
+else
+  # Auto-detect config format
+  if [ -f "$REPO_ROOT/minions.json" ]; then
+    CONFIG_FILE="$REPO_ROOT/minions.json"
+    CONFIG_FORMAT="v2"
+    echo "   Using config: minions.json (v2 format)"
+  elif [ -f "$REPO_ROOT/minions/config.json" ]; then
+    CONFIG_FILE="$REPO_ROOT/minions/config.json"
+    CONFIG_FORMAT="v1"
+    echo "   Using config: minions/config.json (legacy format)"
+  else
+    echo -e "${RED}❌ Error: No minions configuration found${NC}"
+    echo "   Expected: minions.json (new) or minions/config.json (legacy)"
+    exit 1
+  fi
 fi
 
 # Helper to read config values using python (available on macOS/Linux usually)
@@ -115,6 +138,8 @@ python3 << PYTHON_SCRIPT |
 import json
 import sys
 
+config_format = "$CONFIG_FORMAT"
+
 try:
     with open("$CONFIG_FILE", "r") as f:
         data = json.load(f)
@@ -126,17 +151,38 @@ try:
         sys.exit(1)
 
     for entry in files_to_copy:
-        if not isinstance(entry, str):
-            sys.stderr.write(f"Error: Each filesToCopy entry must be a string, got {type(entry).__name__}\n")
-            sys.exit(1)
-
-        # Parse entry: "source" or "source:destination"
-        if ':' in entry:
-            parts = entry.split(':', 1)
-            source = parts[0]
-            destination = parts[1]
+        if config_format == "v2":
+            # v2 format: simple string array
+            if not isinstance(entry, str):
+                sys.stderr.write(f"Error: Each filesToCopy entry must be a string in v2 format, got {type(entry).__name__}\n")
+                sys.exit(1)
+            # Parse entry: "source" or "source:destination"
+            if ':' in entry:
+                parts = entry.split(':', 1)
+                source = parts[0]
+                destination = parts[1]
+            else:
+                source = destination = entry
         else:
-            source = destination = entry
+            # v1 (legacy) format: can be string or object {source, destination}
+            if isinstance(entry, str):
+                # Parse entry: "source" or "source:destination"
+                if ':' in entry:
+                    parts = entry.split(':', 1)
+                    source = parts[0]
+                    destination = parts[1]
+                else:
+                    source = destination = entry
+            elif isinstance(entry, dict):
+                # Object format: {source: "...", destination: "..."}
+                source = entry.get('source', '')
+                destination = entry.get('destination', source)
+                if not source:
+                    sys.stderr.write("Error: Object entry missing 'source' field\n")
+                    sys.exit(1)
+            else:
+                sys.stderr.write(f"Error: Each filesToCopy entry must be a string or object, got {type(entry).__name__}\n")
+                sys.exit(1)
 
         # Output in format that bash can parse
         print(f"{source}:{destination}")
@@ -215,7 +261,15 @@ except: pass" | while read -r cmd; do
     fi
 done
 
-# Note: .agent-info file is now created by the GUI with full assignment data in JSON format
+# For v2 format, ensure .minions/agents directory exists in main repo
+# The GUI will write agent info there instead of .agent-info in worktree
+if [ "$CONFIG_FORMAT" = "v2" ]; then
+    echo -e "${BLUE}📁 Ensuring .minions/agents directory exists...${NC}"
+    mkdir -p "$REPO_ROOT/.minions/agents"
+    echo "   Created .minions/agents directory for agent state"
+fi
+
+# Note: .agent-info file (legacy) or .minions/agents/{id}.json (v2) is created by the GUI
 
 echo ""
 echo -e "${GREEN}✅ Minion ready for service!${NC}"

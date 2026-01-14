@@ -1083,6 +1083,10 @@ function setupIPC(): void {
     return services!.setupWizard.finalizeSetup(projectPath, config)
   })
 
+  ipcMain.handle('wizard:quickSetup', async (_event, projectPath: string) => {
+    return services!.setupWizard.quickSetup(projectPath)
+  })
+
   // Migration handler
   ipcMain.handle('project:migrate', async (_event, projectPath: string) => {
     return services!.minionsConfig.migrateFromLegacy(projectPath)

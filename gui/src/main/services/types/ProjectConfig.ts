@@ -1,3 +1,21 @@
+// Re-export MinionsConfig types for convenient imports
+export type {
+  MinionsConfig,
+  MinionsConfigProject,
+  MinionsConfigSetup,
+  MinionsConfigDetected,
+  MinionsConfigWizard,
+  WizardSession,
+  WizardSessionStatus
+} from './MinionsConfig'
+
+export {
+  createDefaultMinionsConfig,
+  isValidMinionsConfig,
+  WIZARD_SESSION_STATUSES,
+  DEFAULT_WIZARD_TIMEOUT_MS
+} from './MinionsConfig'
+
 // UI state for terminal and tab restoration
 export interface UIState {
   lastActiveTab: string          // e.g., 'agent', 'terminal-2', 'test-dev'

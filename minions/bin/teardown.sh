@@ -48,20 +48,38 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(pwd)"
 
-# Load config
-if [ -z "$CONFIG_FILE" ]; then
-  CONFIG_FILE="$REPO_ROOT/minions/config.json"
-fi
+# Config detection (new format first, legacy fallback)
+# If --config was passed, use that directly
+if [ -n "$CONFIG_FILE" ]; then
+  # Ensure absolute path
+  if [[ "$CONFIG_FILE" != /* ]]; then
+    CONFIG_FILE="$(cd "$(dirname "$CONFIG_FILE")" && pwd)/$(basename "$CONFIG_FILE")"
+  fi
 
-# Ensure absolute path
-if [[ "$CONFIG_FILE" != /* ]]; then
-  CONFIG_FILE="$(cd "$(dirname "$CONFIG_FILE")" && pwd)/$(basename "$CONFIG_FILE")"
-fi
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo -e "${RED}Config file not found: $CONFIG_FILE${NC}"
+    exit 1
+  fi
 
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo -e "${RED}Config file not found: $CONFIG_FILE${NC}"
-  # Fallback? No, new system requires config.json
-  exit 1
+  # Determine format based on path
+  if [[ "$CONFIG_FILE" == *"/minions.json" ]]; then
+    CONFIG_FORMAT="v2"
+  else
+    CONFIG_FORMAT="v1"
+  fi
+else
+  # Auto-detect config format
+  if [ -f "$REPO_ROOT/minions.json" ]; then
+    CONFIG_FILE="$REPO_ROOT/minions.json"
+    CONFIG_FORMAT="v2"
+  elif [ -f "$REPO_ROOT/minions/config.json" ]; then
+    CONFIG_FILE="$REPO_ROOT/minions/config.json"
+    CONFIG_FORMAT="v1"
+  else
+    echo -e "${RED}❌ Error: No minions configuration found${NC}"
+    echo "   Expected: minions.json (new) or minions/config.json (legacy)"
+    exit 1
+  fi
 fi
 
 # Helper to read config values
@@ -117,6 +135,21 @@ fi
 echo -e "${BLUE}📁 Removing worktree...${NC}"
 cd "$REPO_ROOT"
 git worktree remove "$WORKTREE_PATH" ${FORCE:+--force}
+
+# Clean up agent info file based on config format
+if [ "$CONFIG_FORMAT" = "v2" ]; then
+    # v2 format: agent info is in .minions/agents/{agentId}.json
+    AGENT_INFO_PATH="$REPO_ROOT/.minions/agents/$AGENT_ID.json"
+    if [ -f "$AGENT_INFO_PATH" ]; then
+        echo -e "${BLUE}🗑️  Removing agent info file...${NC}"
+        rm "$AGENT_INFO_PATH"
+        echo "   Removed $AGENT_INFO_PATH"
+    fi
+else
+    # v1 (legacy) format: agent info was in .agent-info inside worktree
+    # The worktree removal already cleaned this up
+    echo "   Agent info (.agent-info) removed with worktree"
+fi
 
 # Optionally delete the branch
 if [ -n "$BRANCH" ]; then

@@ -196,7 +196,17 @@ const api = {
       callback(data)
     ipcRenderer.on('agent:resumeFailed', subscription)
     return () => ipcRenderer.removeListener('agent:resumeFailed', subscription)
-  }
+  },
+
+  // Setup Wizard APIs
+  checkWizard: (projectPath: string) => ipcRenderer.invoke('wizard:check', projectPath),
+  startWizard: (projectPath: string) => ipcRenderer.invoke('wizard:start', projectPath),
+  cancelWizard: (sessionId: string) => ipcRenderer.invoke('wizard:cancel', sessionId),
+  finalizeWizard: (projectPath: string, config: any) => ipcRenderer.invoke('wizard:finalize', projectPath, config),
+  quickSetup: (projectPath: string) => ipcRenderer.invoke('wizard:quickSetup', projectPath),
+
+  // Migration APIs
+  migrateProject: (projectPath: string) => ipcRenderer.invoke('project:migrate', projectPath)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
