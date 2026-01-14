@@ -56,7 +56,7 @@ This document provides essential context for AI assistants working with the Agen
 
 ## Project Overview
 
-**Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase. Users can text articles, links, reminders, and other content to save for later.
+**Minion Framework** is a lightweight system for running multiple AI coding agents (minions) in parallel on any codebase.
 
 ### Core Features
 - GUI (Agent Orchestrator): Electron desktop app for managing agents visually

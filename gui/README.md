@@ -13,7 +13,7 @@ A desktop application for managing and orchestrating AI coding minions in your p
 
 ## Prerequisites
 
-- Node.js 18 or later
+- Node.js 20.x or later
 - npm or yarn
 
 ## Installation
