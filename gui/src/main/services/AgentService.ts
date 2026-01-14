@@ -1779,8 +1779,42 @@ export class AgentService {
   }
 
   // Archive helper methods
+
+  /**
+   * Resolve the main repository path from a potential worktree path.
+   * Git worktrees have a .git file (not directory) pointing to the main repo.
+   */
+  private resolveMainProjectPath(projectPath: string): string {
+    const gitPath = join(projectPath, '.git')
+    try {
+      if (existsSync(gitPath) && statSync(gitPath).isFile()) {
+        // This is a worktree - read the main repo path
+        const gitContent = readFileSync(gitPath, 'utf-8').trim()
+        // Format: "gitdir: /path/to/repo/.git/worktrees/name"
+        const match = gitContent.match(/gitdir:\s*(.+)/)
+        if (match) {
+          const gitDir = match[1]
+          // Extract main repo path from gitdir
+          const mainGitMatch = gitDir.match(/(.+)\/\.git\/worktrees\//)
+          if (mainGitMatch) {
+            log.info(`Resolved worktree ${projectPath} to main repo ${mainGitMatch[1]}`)
+            return mainGitMatch[1]
+          }
+        }
+      }
+    } catch (error) {
+      log.warn(`Failed to resolve main project path for ${projectPath}:`, error)
+    }
+    return projectPath
+  }
+
   private getArchiveDirectory(projectPath: string): string {
-    return join(projectPath, 'minions', 'archive')
+    log.info(`[DEBUG] getArchiveDirectory called with: ${projectPath}`)
+    const mainPath = this.resolveMainProjectPath(projectPath)
+    log.info(`[DEBUG] resolveMainProjectPath returned: ${mainPath}`)
+    const archiveDir = join(mainPath, '.minions', 'archive')
+    log.info(`[DEBUG] Final archive directory: ${archiveDir}`)
+    return archiveDir
   }
 
   private ensureArchiveDirectory(projectPath: string): string {
@@ -1852,9 +1886,13 @@ export class AgentService {
   }
 
   async listArchivedAgents(projectPath: string): Promise<ArchivedAgent[]> {
+    log.info(`[DEBUG] listArchivedAgents called with projectPath: ${projectPath}`)
     const archiveDir = this.getArchiveDirectory(projectPath)
+    log.info(`[DEBUG] getArchiveDirectory returned: ${archiveDir}`)
+    log.info(`[DEBUG] archiveDir exists: ${existsSync(archiveDir)}`)
 
     if (!existsSync(archiveDir)) {
+      log.info(`[DEBUG] Archive directory does not exist, returning empty array`)
       return []
     }
 

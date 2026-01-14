@@ -951,9 +951,18 @@ function setupIPC(): void {
 
   // Archive handlers
   ipcMain.handle('archive:list', async (_event, projectPath?: string) => {
-    const path = projectPath || services!.project.getCurrentProject()?.path
-    if (!path) return []
-    return services!.agent.listArchivedAgents(path)
+    log.info(`[DEBUG] archive:list IPC handler called with projectPath: ${projectPath}`)
+    const currentProject = services!.project.getCurrentProject()
+    log.info(`[DEBUG] getCurrentProject returned: ${currentProject?.path || 'null'}`)
+    const path = projectPath || currentProject?.path
+    log.info(`[DEBUG] Using path: ${path}`)
+    if (!path) {
+      log.info(`[DEBUG] No path, returning empty array`)
+      return []
+    }
+    const result = await services!.agent.listArchivedAgents(path)
+    log.info(`[DEBUG] listArchivedAgents returned ${result.length} archives`)
+    return result
   })
 
   ipcMain.handle('archive:get', async (_event, projectPath: string, archiveId: string) => {

@@ -115,6 +115,15 @@
   gap: var(--space-3);
 }
 
+.archive-item-project {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
 .archive-item-branch {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: var(--font-size-base);
