@@ -1,14 +1,20 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import SuperAgentView from '../SuperAgentView'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import React from 'react'
 import { KeyboardShortcutsProvider } from '../../contexts/KeyboardShortcutsContext'
 import { SnackbarProvider } from '../../contexts/SnackbarContext'
+import { usePRPolling } from '../../hooks/usePRPolling'
 
 // Mock Terminal component to avoid xterm issues in test environment
 vi.mock('../Terminal', () => ({
   default: () => <div data-testid="mock-terminal">Terminal Component</div>
+}))
+
+// Mock usePRPolling hook
+vi.mock('../../hooks/usePRPolling', () => ({
+  usePRPolling: vi.fn(() => ({}))
 }))
 
 // Wrapper component with all required providers
@@ -604,6 +610,143 @@ describe('SuperAgentView PR Status Check on Load', () => {
     // Should call detectPullRequest (not checkPullRequestStatus) when no prUrl
     expect(window.electronAPI.detectPullRequest).toHaveBeenCalledWith('super-1')
     expect(window.electronAPI.checkPullRequestStatus).not.toHaveBeenCalled()
+  })
+
+  it('only checks PR status once per session (ref prevents redundant checks)', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithPR)
+    vi.mocked(window.electronAPI.checkPullRequestStatus).mockResolvedValue({ status: 'OPEN' })
+
+    const { rerender } = render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    // Wait for initial load and PR check
+    await waitFor(() => {
+      expect(window.electronAPI.checkPullRequestStatus).toHaveBeenCalledTimes(1)
+    })
+
+    // Simulate agent list update which triggers loadAgent again
+    // First, reset the getSuperAgentDetails mock to return same data
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithPR)
+
+    // Force a re-render by updating activeProjects (triggers component update)
+    rerender(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[{ id: 'test' }]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    // Give time for any potential additional calls
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // PR status should still only have been checked once
+    expect(window.electronAPI.checkPullRequestStatus).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SuperAgentView PR Polling', () => {
+  const mockSuperAgentWithOpenPR = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/test-project/master-coordination',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'pr_open',
+    prUrl: 'https://github.com/test/repo/pull/123',
+    prStatus: 'OPEN',
+    tool: 'claude',
+    mode: 'planning',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    children: [],
+    pendingPlans: [],
+    taskInvocations: []
+  }
+
+  const mockSuperAgentNotPROpen = {
+    id: 'super-1',
+    agentId: 'super-1',
+    branch: 'feature/test-project/master-coordination',
+    project: 'test-project',
+    feature: 'Master feature',
+    status: 'active',
+    tool: 'claude',
+    mode: 'planning',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+    isSuperMinion: true,
+    children: [],
+    pendingPlans: [],
+    taskInvocations: []
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+    vi.mocked(window.electronAPI.checkPullRequestStatus).mockResolvedValue({ status: 'OPEN' })
+    vi.mocked(window.electronAPI.detectPullRequest).mockResolvedValue({ found: false })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('calls usePRPolling with correct parameters when agent has pr_open status', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentWithOpenPR)
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+    })
+
+    // The hook should be called - verify it was invoked
+    expect(usePRPolling).toHaveBeenCalled()
+
+    // Get the last call arguments
+    const lastCallArgs = vi.mocked(usePRPolling).mock.calls[vi.mocked(usePRPolling).mock.calls.length - 1][0]
+
+    // When agent has pr_open status, usePRPolling should be called with enabled: true
+    expect(lastCallArgs.enabled).toBe(true)
+    expect(lastCallArgs.assignmentIds).toContain('super-1')
+  })
+
+  it('calls usePRPolling with enabled: false when agent status is not pr_open', async () => {
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue(mockSuperAgentNotPROpen)
+
+    render(
+      <TestWrapper initialEntries={['/workspace/super/super-1']}>
+        <Routes>
+          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
+        </Routes>
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+    })
+
+    // The hook should be called
+    expect(usePRPolling).toHaveBeenCalled()
+
+    // Get the last call arguments - when status is not pr_open, enabled should be false
+    const lastCallArgs = vi.mocked(usePRPolling).mock.calls[vi.mocked(usePRPolling).mock.calls.length - 1][0]
+    expect(lastCallArgs.enabled).toBe(false)
   })
 })
 
