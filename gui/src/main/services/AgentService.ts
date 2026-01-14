@@ -971,15 +971,17 @@ export class AgentService {
     }
     
     // Update .agent-info with super minion fields
+    const workflowId = assignment.workflow?.id
     this.updateAgentInfo(worktreePath, {
       isSuperMinion: true,
       children: [],
-      pendingPlans: []
+      pendingPlans: [],
+      workflowId
     } as any)
 
-    // Workflow saving removed in simplification - workflows are managed in-memory
+    // Log workflow selection
     if (assignment.workflow) {
-      log.debug(`Super minion ${result.agentId} using workflow: ${assignment.workflow.name}`)
+      log.debug(`Super minion ${result.agentId} using workflow: ${assignment.workflow.name} (${workflowId})`)
     }
 
     // Return the updated info

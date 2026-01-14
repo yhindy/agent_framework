@@ -103,6 +103,7 @@ export interface SuperAgentInfo extends AgentInfo {
   children: AgentInfo[]
   pendingPlans: ChildPlan[]
   taskInvocations: import('../ClaudeSessionInfoService').TaskInvocation[]
+  workflowId?: string  // ID of the workflow selected when this super minion was created
 }
 
 export function isSuperMinion(agent: AgentInfo): agent is SuperAgentInfo {

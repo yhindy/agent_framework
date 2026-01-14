@@ -50,6 +50,7 @@ export interface SuperAgentInfo {
   uiState?: UIState
   prUrl?: string
   prStatus?: string
+  workflowId?: string  // ID of the workflow selected when this super minion was created
 }
 
 export interface AgentInfo {

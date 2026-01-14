@@ -202,6 +202,7 @@ const api = {
   getWorkflowConfig: () => ipcRenderer.invoke('workflow:getAllWorkflows').then((workflows: any[]) => ({ workflows })),
   getSubagentTypes: () => ipcRenderer.invoke('workflow:getSubagentTypes'),
   getActiveWorkflow: (projectPath: string) => ipcRenderer.invoke('workflow:getActiveWorkflow', projectPath),
+  getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:getWorkflow', workflowId),
   getAllWorkflows: () => ipcRenderer.invoke('workflow:getAllWorkflows'),
   createWorkflow: (name: string, description?: string) => ipcRenderer.invoke('workflow:createWorkflow', name, description),
   updateWorkflow: (workflowId: string, updates: any) => ipcRenderer.invoke('workflow:updateWorkflow', workflowId, updates),

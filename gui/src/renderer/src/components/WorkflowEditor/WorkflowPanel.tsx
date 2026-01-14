@@ -12,6 +12,7 @@ export interface WorkflowPanelProps {
   isOpen: boolean
   onClose: () => void
   projectPath: string
+  workflowId?: string  // If provided, load this specific workflow instead of the active workflow
   readOnly?: boolean
 }
 
@@ -23,7 +24,7 @@ interface PanelState {
   isDirty: boolean
 }
 
-export function WorkflowPanel({ isOpen, onClose, projectPath, readOnly = false }: WorkflowPanelProps) {
+export function WorkflowPanel({ isOpen, onClose, projectPath, workflowId, readOnly = false }: WorkflowPanelProps) {
   const [state, setState] = useState<PanelState>({
     workflow: null,
     subagentTypes: [],
@@ -42,13 +43,16 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, readOnly = false }
       setState(prev => ({ ...prev, isLoading: true, error: null }))
 
       try {
+        // Load workflow by ID if provided, otherwise fall back to active workflow
         const [subagentTypes, workflow] = await Promise.all([
           window.electronAPI.getSubagentTypes(),
-          window.electronAPI.getActiveWorkflow(projectPath)
+          workflowId
+            ? window.electronAPI.getWorkflow(workflowId)
+            : window.electronAPI.getActiveWorkflow(projectPath)
         ])
 
         setState({
-          workflow,
+          workflow: workflow || null,
           subagentTypes,
           isLoading: false,
           error: null,
@@ -65,7 +69,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, readOnly = false }
     }
 
     loadData()
-  }, [isOpen, projectPath])
+  }, [isOpen, projectPath, workflowId])
 
   // Handle steps change from pipeline
   const handleStepsChange = useCallback((steps: WorkflowStep[]) => {
@@ -146,7 +150,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath, readOnly = false }
             <XIcon size="sm" />
           </button>
           <h2 id="workflow-panel-title" className="workflow-title">
-            Workflow
+            {state.workflow ? state.workflow.name : 'Workflow'}
           </h2>
         </div>
 
