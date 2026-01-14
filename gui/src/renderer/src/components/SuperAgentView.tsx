@@ -9,6 +9,7 @@ import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { CrownIcon, TerminalIcon, StopIcon, PlayIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, WorkflowIcon } from './icons'
 import { WorkflowPanel } from './WorkflowEditor/WorkflowPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
+import { usePRPolling } from '../hooks/usePRPolling'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
@@ -57,6 +58,9 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
 
+  // Track if we've checked PR status for this agent session
+  const hasCheckedPRRef = useRef(false)
+
   // Debounced save for UI state
   const saveUIStateDebounced = useRef(
     debounce(async (agentId: string, uiState: any) => {
@@ -78,6 +82,12 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     handleCreatePRClick,
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
+
+  // Auto-poll PR status if this agent has an open PR
+  usePRPolling({
+    assignmentIds: agent?.status === 'pr_open' && agent?.id ? [agent.id] : [],
+    enabled: agent?.status === 'pr_open' || false
+  })
 
   const loadAgent = async () => {
     if (!agentId) return
@@ -102,6 +112,21 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         }
       }
 
+      // Check PR status if prUrl exists - refresh status when landing on page (only once per session)
+      if (details && details.prUrl && !hasCheckedPRRef.current) {
+        hasCheckedPRRef.current = true
+        try {
+          await window.electronAPI.checkPullRequestStatus(details.id)
+          // Reload agent to get updated PR status
+          const refreshed = await window.electronAPI.getSuperAgentDetails(agentId!)
+          if (refreshed) {
+            setAgent(refreshed)
+          }
+        } catch (err) {
+          console.error('[SuperAgentView] Failed to check PR status:', err)
+        }
+      }
+
       // Restore UI state if available
       if (details?.uiState) {
         const { lastActiveTab, plainTerminals: savedTerminals, terminalCounter: savedCounter } = details.uiState
@@ -122,6 +147,11 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
       setError(err.message || 'Failed to load super agent')
     }
   }
+
+  // Reset PR check ref when agentId changes
+  useEffect(() => {
+    hasCheckedPRRef.current = false
+  }, [agentId])
 
   useEffect(() => {
     loadAgent()
