@@ -12,6 +12,7 @@ export interface WorkflowPanelProps {
   isOpen: boolean
   onClose: () => void
   projectPath: string
+  readOnly?: boolean
 }
 
 interface PanelState {
@@ -22,7 +23,7 @@ interface PanelState {
   isDirty: boolean
 }
 
-export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelProps) {
+export function WorkflowPanel({ isOpen, onClose, projectPath, readOnly = false }: WorkflowPanelProps) {
   const [state, setState] = useState<PanelState>({
     workflow: null,
     subagentTypes: [],
@@ -100,15 +101,10 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
     }
   }
 
-  // Handle close
-  const handleClose = () => {
-    onClose()
-  }
-
   // Handle backdrop click
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      handleClose()
+      onClose()
     }
   }
 
@@ -116,13 +112,13 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        handleClose()
+        onClose()
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen])
+  }, [isOpen, onClose])
 
   return (
     <>
@@ -144,7 +140,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
         <div className="workflow-panel-header">
           <button
             className="workflow-close-btn"
-            onClick={handleClose}
+            onClick={onClose}
             aria-label="Close workflow editor"
           >
             <XIcon size="sm" />
@@ -173,6 +169,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
               steps={state.workflow.steps}
               subagentTypes={state.subagentTypes}
               onStepsChange={handleStepsChange}
+              readOnly={readOnly}
             />
           ) : (
             <div className="workflow-empty">
@@ -182,7 +179,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
         </div>
 
         {/* Footer */}
-        {state.workflow && !state.workflow.isDefault && (
+        {state.workflow && !state.workflow.isDefault && !readOnly && (
           <div className="workflow-panel-footer">
             {state.isDirty && (
               <div className="workflow-unsaved-indicator">
@@ -192,7 +189,7 @@ export function WorkflowPanel({ isOpen, onClose, projectPath }: WorkflowPanelPro
             <div className="workflow-footer-actions">
               <button
                 className="workflow-cancel-btn"
-                onClick={handleClose}
+                onClick={onClose}
               >
                 Cancel
               </button>

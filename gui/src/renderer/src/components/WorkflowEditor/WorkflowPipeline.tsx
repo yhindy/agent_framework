@@ -14,6 +14,7 @@ export interface WorkflowPipelineProps {
   steps: WorkflowStep[]
   subagentTypes: SubagentType[]
   onStepsChange: (steps: WorkflowStep[]) => void
+  readOnly?: boolean
 }
 
 interface StepCardProps {
@@ -26,6 +27,7 @@ interface StepCardProps {
   onDelete: () => void
   onUpdateAgents: (agents: StepAgent[]) => void
   onUpdateName: (name: string) => void
+  readOnly?: boolean
 }
 
 function StepCard({
@@ -37,7 +39,8 @@ function StepCard({
   onMoveDown,
   onDelete,
   onUpdateAgents,
-  onUpdateName
+  onUpdateName,
+  readOnly = false
 }: StepCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(step.name)
@@ -121,9 +124,9 @@ function StepCard({
           />
         ) : (
           <span
-            className="step-name"
-            onClick={() => setIsEditing(true)}
-            title="Click to edit"
+            className={`step-name ${readOnly ? 'read-only' : ''}`}
+            onClick={readOnly ? undefined : () => setIsEditing(true)}
+            title={readOnly ? undefined : 'Click to edit'}
           >
             {step.name}
           </span>
@@ -133,31 +136,33 @@ function StepCard({
           <span className="parallel-badge">PARALLEL</span>
         )}
 
-        <div className="step-actions">
-          <button
-            className="step-action-btn"
-            onClick={onMoveUp}
-            disabled={index === 0}
-            title="Move up"
-          >
-            <ChevronUpIcon size="sm" />
-          </button>
-          <button
-            className="step-action-btn"
-            onClick={onMoveDown}
-            disabled={index === totalCount - 1}
-            title="Move down"
-          >
-            <ChevronDownIcon size="sm" />
-          </button>
-          <button
-            className="step-action-btn delete"
-            onClick={onDelete}
-            title="Delete step"
-          >
-            <XIcon size="sm" />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="step-actions">
+            <button
+              className="step-action-btn"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              title="Move up"
+            >
+              <ChevronUpIcon size="sm" />
+            </button>
+            <button
+              className="step-action-btn"
+              onClick={onMoveDown}
+              disabled={index === totalCount - 1}
+              title="Move down"
+            >
+              <ChevronDownIcon size="sm" />
+            </button>
+            <button
+              className="step-action-btn delete"
+              onClick={onDelete}
+              title="Delete step"
+            >
+              <XIcon size="sm" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="step-agents">
@@ -170,14 +175,16 @@ function StepCard({
               <div className={`agent-chip ${getAgentColorClass(stepAgent.typeId)}`}>
                 {getAgentIcon(stepAgent.typeId)}
                 <span>{agentType?.name || stepAgent.typeId}</span>
-                <button
-                  className="agent-edit-btn"
-                  onClick={() => handleEditPrompt(stepAgent)}
-                  title={stepAgent.customPrompt ? 'Edit custom prompt' : 'Add custom prompt'}
-                >
-                  <EditIcon size="sm" />
-                </button>
-                {step.agents.length > 1 && (
+                {!readOnly && (
+                  <button
+                    className="agent-edit-btn"
+                    onClick={() => handleEditPrompt(stepAgent)}
+                    title={stepAgent.customPrompt ? 'Edit custom prompt' : 'Add custom prompt'}
+                  >
+                    <EditIcon size="sm" />
+                  </button>
+                )}
+                {!readOnly && step.agents.length > 1 && (
                   <button
                     className="agent-remove-btn"
                     onClick={() => handleRemoveAgent(stepAgent.id)}
@@ -188,7 +195,10 @@ function StepCard({
                 )}
               </div>
               {stepAgent.customPrompt && !isEditingThisPrompt && (
-                <div className="agent-custom-prompt" onClick={() => handleEditPrompt(stepAgent)}>
+                <div
+                  className={`agent-custom-prompt ${readOnly ? 'read-only' : ''}`}
+                  onClick={readOnly ? undefined : () => handleEditPrompt(stepAgent)}
+                >
                   {stepAgent.customPrompt}
                 </div>
               )}
@@ -216,30 +226,32 @@ function StepCard({
           )
         })}
 
-        <div className="add-agent-wrapper" ref={addAgentRef}>
-          <button
-            className="add-agent-btn"
-            onClick={() => setShowAddAgent(!showAddAgent)}
-            title="Add parallel agent"
-          >
-            <PlusIcon size="sm" />
-          </button>
+        {!readOnly && (
+          <div className="add-agent-wrapper" ref={addAgentRef}>
+            <button
+              className="add-agent-btn"
+              onClick={() => setShowAddAgent(!showAddAgent)}
+              title="Add parallel agent"
+            >
+              <PlusIcon size="sm" />
+            </button>
 
-          {showAddAgent && (
-            <div className="agent-dropdown" onClick={(e) => e.stopPropagation()}>
-              {subagentTypes.map(agentType => (
-                <button
-                  key={agentType.id}
-                  className={`agent-option ${getAgentColorClass(agentType.id)}`}
-                  onClick={() => handleAddAgent(agentType.id)}
-                >
-                  {getAgentIcon(agentType.id)}
-                  <span>{agentType.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            {showAddAgent && (
+              <div className="agent-dropdown" onClick={(e) => e.stopPropagation()}>
+                {subagentTypes.map(agentType => (
+                  <button
+                    key={agentType.id}
+                    className={`agent-option ${getAgentColorClass(agentType.id)}`}
+                    onClick={() => handleAddAgent(agentType.id)}
+                  >
+                    {getAgentIcon(agentType.id)}
+                    <span>{agentType.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -248,7 +260,8 @@ function StepCard({
 export function WorkflowPipeline({
   steps,
   subagentTypes,
-  onStepsChange
+  onStepsChange,
+  readOnly = false
 }: WorkflowPipelineProps) {
   const [showAddStep, setShowAddStep] = useState(false)
   const addStepRef = useRef<HTMLDivElement>(null)
@@ -320,19 +333,21 @@ export function WorkflowPipeline({
   if (steps.length === 0) {
     return (
       <div className="workflow-empty">
-        <p>No steps yet. Add your first step to get started.</p>
-        <div className="empty-actions">
-          {subagentTypes.map(agent => (
-            <button
-              key={agent.id}
-              className={`add-first-step-btn ${getAgentColorClass(agent.id)}`}
-              onClick={() => handleAddStep(agent.id)}
-            >
-              {getAgentIcon(agent.id)}
-              <span>{agent.name}</span>
-            </button>
-          ))}
-        </div>
+        <p>{readOnly ? 'No workflow steps configured.' : 'No steps yet. Add your first step to get started.'}</p>
+        {!readOnly && (
+          <div className="empty-actions">
+            {subagentTypes.map(agent => (
+              <button
+                key={agent.id}
+                className={`add-first-step-btn ${getAgentColorClass(agent.id)}`}
+                onClick={() => handleAddStep(agent.id)}
+              >
+                {getAgentIcon(agent.id)}
+                <span>{agent.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -352,42 +367,45 @@ export function WorkflowPipeline({
             onDelete={() => handleDelete(index)}
             onUpdateAgents={(agents) => handleUpdateAgents(index, agents)}
             onUpdateName={(name) => handleUpdateName(index, name)}
+            readOnly={readOnly}
           />
         </div>
       ))}
 
-      <div className="add-step-section" ref={addStepRef}>
-        <div className="pipeline-connector-line" />
-        {showAddStep ? (
-          <div className="add-step-dropdown" onClick={(e) => e.stopPropagation()}>
-            <span className="add-step-label">Add step with agent:</span>
-            {subagentTypes.map(agent => (
+      {!readOnly && (
+        <div className="add-step-section" ref={addStepRef}>
+          <div className="pipeline-connector-line" />
+          {showAddStep ? (
+            <div className="add-step-dropdown" onClick={(e) => e.stopPropagation()}>
+              <span className="add-step-label">Add step with agent:</span>
+              {subagentTypes.map(agent => (
+                <button
+                  key={agent.id}
+                  className={`agent-option ${getAgentColorClass(agent.id)}`}
+                  onClick={() => handleAddStep(agent.id)}
+                >
+                  {getAgentIcon(agent.id)}
+                  <span>{agent.name}</span>
+                </button>
+              ))}
               <button
-                key={agent.id}
-                className={`agent-option ${getAgentColorClass(agent.id)}`}
-                onClick={() => handleAddStep(agent.id)}
+                className="cancel-add-btn"
+                onClick={() => setShowAddStep(false)}
               >
-                {getAgentIcon(agent.id)}
-                <span>{agent.name}</span>
+                Cancel
               </button>
-            ))}
+            </div>
+          ) : (
             <button
-              className="cancel-add-btn"
-              onClick={() => setShowAddStep(false)}
+              className="add-step-btn"
+              onClick={() => setShowAddStep(true)}
             >
-              Cancel
+              <PlusIcon size="sm" />
+              <span>Add Step</span>
             </button>
-          </div>
-        ) : (
-          <button
-            className="add-step-btn"
-            onClick={() => setShowAddStep(true)}
-          >
-            <PlusIcon size="sm" />
-            <span>Add Step</span>
-          </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
