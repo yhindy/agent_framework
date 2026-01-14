@@ -112,8 +112,8 @@ export const DEFAULT_WORKFLOW: WorkflowConfig = {
       id: 'step-3',
       name: 'Design Review',
       agents: [
-        { id: 'a3', typeId: 'review', customPrompt: 'Review the engineering design for technical correctness and best practices' },
-        { id: 'a4', typeId: 'review', customPrompt: 'Review the design against acceptance criteria and requirements' }
+        { id: 'a3', typeId: 'review', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
+        { id: 'a4', typeId: 'review', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
       ]
     },
     { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'implement' }] },
@@ -122,8 +122,8 @@ export const DEFAULT_WORKFLOW: WorkflowConfig = {
       name: 'Validation',
       agents: [
         { id: 'a6', typeId: 'simplify' },
-        { id: 'a7', typeId: 'test' },
-        { id: 'a8', typeId: 'review', customPrompt: 'Final code review before merge' },
+        { id: 'a7', typeId: 'test', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
+        { id: 'a8', typeId: 'review', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
         { id: 'a9', typeId: 'document' }
       ]
     }

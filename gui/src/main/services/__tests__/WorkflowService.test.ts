@@ -245,4 +245,39 @@ describe('WorkflowService', () => {
       expect(markdown).toContain('Focus on security issues')
     })
   })
+
+  describe('DEFAULT_WORKFLOW custom prompts', () => {
+    it('should have role-specific custom prompts for reviewers', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+      const reviewStep = workflow.steps.find(s => s.name === 'Design Review')
+
+      expect(reviewStep).toBeDefined()
+      expect(reviewStep?.agents).toHaveLength(2)
+      expect(reviewStep?.agents[0].customPrompt).toContain('senior engineer')
+      expect(reviewStep?.agents[1].customPrompt).toContain('criteria validator')
+    })
+
+    it('should have acceptance criteria checker in validation phase', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+      const validateStep = workflow.steps.find(s => s.name === 'Validation')
+
+      expect(validateStep).toBeDefined()
+      expect(validateStep?.agents).toHaveLength(4)
+
+      const criteriaChecker = validateStep?.agents.find(a =>
+        a.customPrompt?.includes('acceptance criteria checker')
+      )
+      expect(criteriaChecker).toBeDefined()
+      expect(criteriaChecker?.typeId).toBe('review')
+    })
+
+    it('should have test runner with custom prompt in validation', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+      const validateStep = workflow.steps.find(s => s.name === 'Validation')
+
+      const testAgent = validateStep?.agents.find(a => a.typeId === 'test')
+      expect(testAgent).toBeDefined()
+      expect(testAgent?.customPrompt).toContain('Run all tests')
+    })
+  })
 })
