@@ -107,6 +107,16 @@ declare global {
       getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
       openFeedback: () => Promise<void>
+
+      // Setup Wizard APIs
+      checkWizard: (projectPath: string) => Promise<{ needsWizard: boolean; hasLegacy: boolean }>
+      startWizard: (projectPath: string) => Promise<any>
+      cancelWizard: (sessionId: string) => Promise<void>
+      finalizeWizard: (projectPath: string, config: any) => Promise<void>
+      quickSetup: (projectPath: string) => Promise<void>
+
+      // Migration APIs
+      migrateProject: (projectPath: string) => Promise<any>
     }
   }
 }
