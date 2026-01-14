@@ -40,25 +40,44 @@ export class TestEnvService {
   }
 
   /**
-   * Load test environment configuration from minions/config.json
+   * Load test environment configuration from minions.json (new format) or minions/config.json (legacy)
    */
   loadConfig(projectPath: string): TestEnvConfig {
-    const configPath = join(projectPath, 'minions', 'config.json')
-    
-    log.debug('Loading config from:', configPath)
-    
-    if (!existsSync(configPath)) {
-      log.debug('Config file not found at:', configPath)
-      // Return empty config if file doesn't exist
+    // Check new format first (minions.json at project root)
+    const newConfigPath = join(projectPath, 'minions.json')
+    const legacyConfigPath = join(projectPath, 'minions', 'config.json')
+
+    let configPath: string
+    let isNewFormat: boolean
+
+    if (existsSync(newConfigPath)) {
+      configPath = newConfigPath
+      isNewFormat = true
+      log.debug('Loading config from:', configPath, '(new format)')
+    } else if (existsSync(legacyConfigPath)) {
+      configPath = legacyConfigPath
+      isNewFormat = false
+      log.debug('Loading config from:', configPath, '(legacy format)')
+    } else {
+      log.debug('No config file found at:', newConfigPath, 'or', legacyConfigPath)
+      // Return empty config if neither file exists
       return { defaultCommands: [] }
     }
 
     try {
       const content = readFileSync(configPath, 'utf-8')
       const config = JSON.parse(content)
-      return { defaultCommands: config.testEnvironments || [] }
+
+      // Both formats store testEnvironments in the same location
+      // New format: minions.json may have setup.testEnvironments or root testEnvironments
+      // Legacy format: minions/config.json has testEnvironments at root
+      const testEnvs = isNewFormat
+        ? (config.setup?.testEnvironments || config.testEnvironments || [])
+        : (config.testEnvironments || [])
+
+      return { defaultCommands: testEnvs }
     } catch (error) {
-      log.error('Error loading config.json:', error)
+      log.error('Error loading config:', error)
       return { defaultCommands: [] }
     }
   }
