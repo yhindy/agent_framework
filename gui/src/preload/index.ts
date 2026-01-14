@@ -196,7 +196,13 @@ const api = {
       callback(data)
     ipcRenderer.on('agent:resumeFailed', subscription)
     return () => ipcRenderer.removeListener('agent:resumeFailed', subscription)
-  }
+  },
+
+  // Archive APIs
+  listArchivedAgents: (projectPath?: string) =>
+    ipcRenderer.invoke('archive:list', projectPath),
+  getArchivedAgent: (projectPath: string, archiveId: string) =>
+    ipcRenderer.invoke('archive:get', projectPath, archiveId)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
