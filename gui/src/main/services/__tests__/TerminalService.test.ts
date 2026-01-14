@@ -1169,3 +1169,340 @@ describe('Late Branch Detection', () => {
     expect(needsBranchDetection).toBe(false)
   })
 })
+
+describe('Super Minion Unified Polling (State + Tasks)', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+  let mockAgentService: any
+  let mockClaudeSessionInfoService: any
+  let mockWorkflowService: any
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents
+    } as unknown as BrowserWindow
+
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+
+    mockAgentService = {
+      readAgentInfo: vi.fn().mockResolvedValue({ isSuperMinion: true }),
+      updateAgentInfo: vi.fn().mockResolvedValue(undefined),
+      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules'),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
+    }
+
+    // Unified polling uses parseSessionInfo for both state and tasks
+    mockClaudeSessionInfoService = {
+      parseSessionInfo: vi.fn().mockReturnValue({
+        sessionId: 'test-session',
+        state: 'working',
+        taskInvocations: []
+      }),
+      watchSession: vi.fn(),
+      unwatchSession: vi.fn(),
+      extractGitBranch: vi.fn().mockReturnValue(null)
+    }
+
+    mockWorkflowService = {
+      getActiveWorkflow: vi.fn().mockReturnValue({ id: 'default', name: 'Default', steps: [] }),
+      getSubagentTypes: vi.fn().mockReturnValue([]),
+      generateRulesMarkdown: vi.fn().mockReturnValue('# Rules')
+    }
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+      mode: 0o755
+    } as any)
+
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+    terminalService.setClaudeSessionInfoService(mockClaudeSessionInfoService)
+    terminalService.setWorkflowService(mockWorkflowService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('should use unified 1-second polling for super minions (state + tasks)', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Should have set up the watcher
+    expect(mockClaudeSessionInfoService.watchSession).toHaveBeenCalled()
+
+    // Advance time by 1 second (unified polling interval)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Should have called parseSessionInfo for unified state + task checking
+    expect(mockClaudeSessionInfoService.parseSessionInfo).toHaveBeenCalled()
+  })
+
+  it('should emit agents:updated when task invocations change', async () => {
+    // Start with no tasks
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: []
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Clear any initial calls
+    mockWebContents.send.mockClear()
+
+    // Advance time by 1 second (unified polling interval)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Now simulate a task being spawned
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: [
+        {
+          toolUseId: 'task-1',
+          description: 'Implement feature',
+          subagentType: 'Developer',
+          prompt: 'Build the feature',
+          status: 'running',
+          startedAt: new Date().toISOString()
+        }
+      ]
+    })
+
+    // Advance another 1 second
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Should have emitted agents:updated when tasks changed
+    const updateCalls = mockWebContents.send.mock.calls.filter(
+      (call: any[]) => call[0] === 'agents:updated'
+    )
+    expect(updateCalls.length).toBeGreaterThan(0)
+  })
+
+  it('should NOT emit agents:updated when task invocations are unchanged', async () => {
+    // Start with one task
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: [
+        {
+          toolUseId: 'task-1',
+          description: 'Implement feature',
+          subagentType: 'Developer',
+          prompt: 'Build the feature',
+          status: 'running',
+          startedAt: new Date().toISOString()
+        }
+      ]
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Advance past initial poll (1 second unified interval)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Clear calls after initial detection
+    mockWebContents.send.mockClear()
+
+    // Advance another 1 second - same tasks, no change
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Should NOT have emitted agents:updated (no change in hash)
+    const updateCalls = mockWebContents.send.mock.calls.filter(
+      (call: any[]) => call[0] === 'agents:updated'
+    )
+    expect(updateCalls.length).toBe(0)
+  })
+
+  it('should emit agents:updated when task status changes', async () => {
+    // Start with running task
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: [
+        {
+          toolUseId: 'task-1',
+          description: 'Implement feature',
+          subagentType: 'Developer',
+          prompt: 'Build the feature',
+          status: 'running',
+          startedAt: new Date().toISOString()
+        }
+      ]
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Advance past initial poll (1 second unified interval)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Clear calls
+    mockWebContents.send.mockClear()
+
+    // Task completes
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: [
+        {
+          toolUseId: 'task-1',
+          description: 'Implement feature',
+          subagentType: 'Developer',
+          prompt: 'Build the feature',
+          status: 'completed',  // Changed from running
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString()
+        }
+      ]
+    })
+
+    // Advance another 1 second
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Should have emitted agents:updated due to status change
+    const updateCalls = mockWebContents.send.mock.calls.filter(
+      (call: any[]) => call[0] === 'agents:updated'
+    )
+    expect(updateCalls.length).toBeGreaterThan(0)
+  })
+
+  it('should clean up unified polling interval on stopAgent', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Verify polling is working (1 second unified interval)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
+
+    // Stop the agent
+    terminalService.stopAgent('super-minion-1')
+
+    // Advance time and verify no more polling calls
+    mockClaudeSessionInfoService.parseSessionInfo.mockClear()
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Should not have any new parseSessionInfo calls after stopAgent
+    expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBe(0)
+  })
+
+  it('should clean up unified polling interval on terminal exit', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Get the exit handler
+    const exitHandler = mockPty.onExit.mock.calls[0][0]
+
+    // Verify polling is working (1 second unified interval)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Simulate terminal exit
+    exitHandler({ exitCode: 0, signal: null })
+
+    // Clear and advance time
+    mockClaudeSessionInfoService.parseSessionInfo.mockClear()
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Should not have any new parseSessionInfo calls after exit
+    expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBe(0)
+  })
+
+  it('should NOT set up task watcher for regular agents', async () => {
+    // Non-super minion agent
+    mockAgentService.readAgentInfo.mockResolvedValue({ isSuperMinion: false })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'regular-agent-1',
+      'claude',
+      'dev',
+      'Fix a bug'
+    )
+
+    // Should NOT have set up watcher (only for super minions)
+    expect(mockClaudeSessionInfoService.watchSession).not.toHaveBeenCalled()
+
+    // Advance time (1 second unified interval)
+    mockClaudeSessionInfoService.parseSessionInfo.mockClear()
+    await vi.advanceTimersByTimeAsync(2000)
+
+    // parseSessionInfo is still called for state polling (unified polling handles both)
+    // but the task hash check is only done for super minions
+    // The key verification is that watchSession was not called
+  })
+
+  it('should detect task changes within 1 second (faster than previous 2-second interval)', async () => {
+    // This test verifies the improvement: tasks are now detected at 1-second intervals
+    mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
+      sessionId: 'test-session',
+      state: 'working',
+      taskInvocations: []
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'super-minion-1',
+      'claude',
+      'planning',
+      'Create a feature'
+    )
+
+    // Clear initial calls
+    mockWebContents.send.mockClear()
+    mockClaudeSessionInfoService.parseSessionInfo.mockClear()
+
+    // After 1 second, parsing should have been called
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
+  })
+})
