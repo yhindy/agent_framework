@@ -7,6 +7,7 @@ import MissionDropdown from './MissionDropdown'
 import ProjectPicker from './ProjectPicker'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import AgentStateIndicator from './AgentStateIndicator'
+import { BotIcon, CrownIcon } from './icons'
 import type { DefaultToolSettings } from '../../../shared/types/settings'
 import './Dashboard.css'
 
@@ -628,7 +629,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Minion Missions 🍌</h1>
+        <h1>Minion Missions <BotIcon /></h1>
         <div className="header-actions">
           <MissionDropdown
             variant="button"
@@ -774,12 +775,12 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                 <p className="type-selection-subtitle">Choose how you want to work</p>
                 <div className="type-selection">
                   <div className="type-card" onClick={() => selectAgentType(false)}>
-                    <div className="type-icon">🤖</div>
+                    <div className="type-icon"><BotIcon /></div>
                     <div className="type-title">Single Agent</div>
                     <div className="type-description">One agent works on a focused task</div>
                   </div>
                   <div className="type-card super" onClick={() => selectAgentType(true)}>
-                    <div className="type-icon">👑</div>
+                    <div className="type-icon"><CrownIcon /></div>
                     <div className="type-title">Orchestrator</div>
                     <div className="type-description">Breaks down work and coordinates a team</div>
                   </div>

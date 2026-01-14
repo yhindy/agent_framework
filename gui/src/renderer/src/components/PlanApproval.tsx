@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import './PlanApproval.css'
 import { ChildPlan } from '../types/agent'
+import { ClipboardIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon, XIcon } from './icons'
 
 interface PlanApprovalProps {
   plans: ChildPlan[]
@@ -30,7 +31,7 @@ const PlanApproval: React.FC<PlanApprovalProps> = ({ plans, onApprove, onReject 
         {plans.map(plan => (
           <div key={plan.id} className="plan-item">
             <div className="plan-header">
-              <span className="plan-name">📋 {plan.shortName}</span>
+              <span className="plan-name"><ClipboardIcon size="sm" /> {plan.shortName}</span>
               {plan.estimatedComplexity && (
                 <span className={`complexity-badge ${plan.estimatedComplexity}`}>
                   {plan.estimatedComplexity}
@@ -45,7 +46,7 @@ const PlanApproval: React.FC<PlanApprovalProps> = ({ plans, onApprove, onReject 
                   className="expand-prompt-btn"
                   onClick={() => toggleExpand(plan.id)}
                 >
-                  {expandedPlans.has(plan.id) ? '▼ Hide Details' : '▶ View Details'}
+                  {expandedPlans.has(plan.id) ? <><ChevronDownIcon size="sm" /> Hide Details</> : <><ChevronRightIcon size="sm" /> View Details</>}
                 </button>
                 {expandedPlans.has(plan.id) && (
                   <pre className="plan-prompt">{plan.prompt}</pre>
@@ -58,13 +59,13 @@ const PlanApproval: React.FC<PlanApprovalProps> = ({ plans, onApprove, onReject 
                 className="approve-btn"
                 onClick={() => onApprove(plan.id)}
               >
-                ✓ Approve
+                <CheckIcon size="sm" /> Approve
               </button>
               <button
                 className="reject-btn"
                 onClick={() => onReject(plan.id)}
               >
-                ✗ Reject
+                <XIcon size="sm" /> Reject
               </button>
             </div>
           </div>

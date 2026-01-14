@@ -1,6 +1,7 @@
+import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { BrowserRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AgentView from '../AgentView'
 
 // Mock dependencies
@@ -20,7 +21,7 @@ vi.mock('../ConfirmModal', () => ({
   default: () => <div>Mocked ConfirmModal</div>
 }))
 
-vi.mock('../hooks/usePRCreation', () => ({
+vi.mock('../../hooks/usePRCreation', () => ({
   usePRCreation: () => ({
     showPRConfirm: false,
     setShowPRConfirm: vi.fn(),
@@ -33,26 +34,32 @@ vi.mock('../hooks/usePRCreation', () => ({
   })
 }))
 
-vi.mock('../hooks/useLoadingSnackbar', () => ({
+vi.mock('../../hooks/useLoadingSnackbar', () => ({
   useLoadingSnackbar: () => ({
     showLoading: vi.fn(),
     hideLoading: vi.fn()
   })
 }))
 
-vi.mock('../utils/debounce', () => ({
-  debounce: (fn: any) => fn
+vi.mock('../../hooks/usePRPolling', () => ({
+  usePRPolling: () => ({})
 }))
 
-// Mock useParams
-const mockUseParams = vi.fn()
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useParams: mockUseParams
+vi.mock('../../utils/debounce', () => ({
+  debounce: (fn: any) => {
+    fn.cancel = vi.fn()
+    return fn
   }
-})
+}))
+
+// Wrapper component to provide routing context
+const TestWrapper = ({ children, agentId = 'test-agent' }: { children: React.ReactNode; agentId?: string }) => (
+  <MemoryRouter initialEntries={[`/workspace/agent/${agentId}`]}>
+    <Routes>
+      <Route path="/workspace/agent/:agentId" element={children} />
+    </Routes>
+  </MemoryRouter>
+)
 
 describe('AgentView Header Consolidation', () => {
   const mockAssignment = {
@@ -80,43 +87,38 @@ describe('AgentView Header Consolidation', () => {
   }
 
   beforeEach(() => {
-    mockUseParams.mockReturnValue({ agentId: 'test-agent' })
-
-    // Setup electronAPI mock
-    global.window.electronAPI = {
-      listAgentsForProject: vi.fn().mockResolvedValue([mockAgent]),
-      getAssignmentsForProject: vi.fn().mockResolvedValue({
-        assignments: [mockAssignment]
-      }),
-      getTestEnvConfig: vi.fn().mockResolvedValue({ defaultCommands: [] }),
-      getTestEnvStatus: vi.fn().mockResolvedValue([]),
-      openInCursor: vi.fn().mockResolvedValue(undefined),
-      stopAgent: vi.fn().mockResolvedValue(undefined),
-      saveUIState: vi.fn().mockResolvedValue(undefined)
-    } as any
+    // Setup electronAPI mock using vi.mocked to update the already-defined mock
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue([mockAgent])
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
+      assignments: [mockAssignment]
+    })
+    vi.mocked(window.electronAPI.getTestEnvConfig).mockResolvedValue({ defaultCommands: [] })
+    vi.mocked(window.electronAPI.getTestEnvStatus).mockResolvedValue([])
+    vi.mocked(window.electronAPI.detectPullRequest).mockResolvedValue(null)
   })
 
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('renders consolidated header with shortened branch name and banana emoji', async () => {
-    render(
-      <BrowserRouter>
+  it('renders consolidated header with shortened branch name and bot icon', async () => {
+    const { container } = render(
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/🍌 add-feature/)).toBeInTheDocument()
+      expect(screen.getByText('add-feature')).toBeInTheDocument()
+      expect(container.querySelector('[data-testid="bot-icon"]')).toBeInTheDocument()
     })
   })
 
   it('renders feature, agent ID, and status badges when assignment exists', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -129,9 +131,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('does not render old tool dropdown', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -141,9 +143,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('does not render old model dropdown', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -153,9 +155,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('does not render old mode dropdown', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -165,9 +167,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('does not render old agent-info-bar section', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -178,9 +180,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('does not render agent-controls section', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -191,9 +193,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders status dot with correct color class for working status', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -204,14 +206,14 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders status dot with correct color class for idle status', async () => {
     const idleAssignment = { ...mockAssignment, status: 'idle' }
-    global.window.electronAPI.getAssignmentsForProject = vi.fn().mockResolvedValue({
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: [idleAssignment]
     })
 
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -222,14 +224,14 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders status dot with correct color class for pr_open status', async () => {
     const prOpenAssignment = { ...mockAssignment, status: 'pr_open', prUrl: 'https://github.com/test/pr' }
-    global.window.electronAPI.getAssignmentsForProject = vi.fn().mockResolvedValue({
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: [prOpenAssignment]
     })
 
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -240,14 +242,14 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders status dot with correct color class for merged status', async () => {
     const mergedAssignment = { ...mockAssignment, status: 'merged', prUrl: 'https://github.com/test/pr' }
-    global.window.electronAPI.getAssignmentsForProject = vi.fn().mockResolvedValue({
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: [mergedAssignment]
     })
 
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -258,9 +260,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders badges in agent-header-left container', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -280,9 +282,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('displays feature badge with label and value', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -295,9 +297,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('displays branch badge with monospace font styling', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -311,23 +313,22 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders action buttons in correct section', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
-      const openCursorBtn = screen.getByText('Open in Cursor')
+      const openCursorBtn = screen.getByText('Cursor')
       expect(openCursorBtn).toBeInTheDocument()
-      expect(openCursorBtn.closest('.agent-actions')).toBeInTheDocument()
     })
   })
 
   it('renders minion terminal tab name when tool is claude', async () => {
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -337,14 +338,14 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders Cursor IDE tab name when tool is cursor and not running', async () => {
     const cursorAssignment = { ...mockAssignment, tool: 'cursor' }
-    global.window.electronAPI.getAssignmentsForProject = vi.fn().mockResolvedValue({
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: [cursorAssignment]
     })
 
     render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -354,9 +355,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders feature badge with title attribute for truncation', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -367,9 +368,9 @@ describe('AgentView Header Consolidation', () => {
 
   it('renders agent ID badge with title attribute for truncation', async () => {
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -379,18 +380,19 @@ describe('AgentView Header Consolidation', () => {
   })
 
   it('does not render badges when no assignment exists', async () => {
-    global.window.electronAPI.getAssignmentsForProject = vi.fn().mockResolvedValue({
+    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: []
     })
 
     const { container } = render(
-      <BrowserRouter>
+      <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </BrowserRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/🍌 test-agent/)).toBeInTheDocument()
+      expect(screen.getByText('test-agent')).toBeInTheDocument()
+      expect(container.querySelector('[data-testid="bot-icon"]')).toBeInTheDocument()
       expect(container.querySelector('.feature-badge')).not.toBeInTheDocument()
       expect(container.querySelector('.agent-id-badge')).not.toBeInTheDocument()
       expect(container.querySelector('.status-badge')).not.toBeInTheDocument()

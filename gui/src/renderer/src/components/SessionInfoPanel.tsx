@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './SessionInfoPanel.css'
+import { ChevronUpIcon, ChevronDownIcon, CopyIcon } from './icons'
 
 interface SessionInfo {
   sessionId: string
@@ -160,7 +161,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
             </span>
           </div>
           <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
-            {isExpanded ? '▲' : '▼'}
+            {isExpanded ? <ChevronUpIcon size="sm" /> : <ChevronDownIcon size="sm" />}
           </button>
         </div>
         {isExpanded && (
@@ -174,7 +175,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
                   onClick={handleCopyAgentId}
                   title="Copy agent ID"
                 >
-                  {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+                  {copyFeedback === 'agent' ? 'Copied!' : <CopyIcon size="sm" />}
                 </button>
               </span>
             </div>
@@ -196,7 +197,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
             </span>
           </div>
           <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
-            {isExpanded ? '▲' : '▼'}
+            {isExpanded ? <ChevronUpIcon size="sm" /> : <ChevronDownIcon size="sm" />}
           </button>
         </div>
         {isExpanded && (
@@ -210,7 +211,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
                   onClick={handleCopyAgentId}
                   title="Copy agent ID"
                 >
-                  {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+                  {copyFeedback === 'agent' ? 'Copied!' : <CopyIcon size="sm" />}
                 </button>
               </span>
             </div>
@@ -239,7 +240,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
         </div>
 
         <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
-          {isExpanded ? '▲' : '▼'}
+          {isExpanded ? <ChevronUpIcon size="sm" /> : <ChevronDownIcon size="sm" />}
         </button>
       </div>
 
@@ -255,7 +256,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
                 onClick={handleCopyAgentId}
                 title="Copy agent ID"
               >
-                {copyFeedback === 'agent' ? 'Copied!' : '📋'}
+                {copyFeedback === 'agent' ? 'Copied!' : <CopyIcon size="sm" />}
               </button>
             </span>
           </div>
@@ -269,7 +270,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
                 onClick={handleCopySessionId}
                 title="Copy session ID"
               >
-                {copyFeedback === 'session' ? 'Copied!' : '📋'}
+                {copyFeedback === 'session' ? 'Copied!' : <CopyIcon size="sm" />}
               </button>
             </span>
           </div>

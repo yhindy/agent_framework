@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getModifierSymbol } from '../hooks/useKeyboardShortcuts'
+import { FolderIcon, BotIcon, SatelliteIcon } from './icons'
 import './MissionDropdown.css'
 
 interface MissionDropdownProps {
@@ -69,7 +70,7 @@ function MissionDropdown({
                 className="mission-dropdown-item"
                 onClick={() => handleItemClick(onAddProject)}
               >
-                <span className="mission-dropdown-item-icon">📁</span>
+                <span className="mission-dropdown-item-icon"><FolderIcon size="sm" /></span>
                 <span className="mission-dropdown-item-label">Add Project</span>
                 <span className="shortcut-hint">{getModifierSymbol()}O</span>
               </div>
@@ -79,7 +80,7 @@ function MissionDropdown({
             className="mission-dropdown-item"
             onClick={() => handleItemClick(() => onNewMission())}
           >
-            <span className="mission-dropdown-item-icon">🍌</span>
+            <span className="mission-dropdown-item-icon"><BotIcon size="sm" /></span>
             <span className="mission-dropdown-item-label">New Minion</span>
             <span className="shortcut-hint">{getModifierSymbol()}N</span>
           </div>
@@ -88,7 +89,7 @@ function MissionDropdown({
             className="mission-dropdown-item teleport-option"
             onClick={() => handleItemClick(onTeleport)}
           >
-            <span className="mission-dropdown-item-icon">📡</span>
+            <span className="mission-dropdown-item-icon"><SatelliteIcon size="sm" /></span>
             <span className="mission-dropdown-item-label">Teleport from Cloud</span>
             <span className="shortcut-hint">{getModifierSymbol()}T</span>
           </div>
