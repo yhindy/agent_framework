@@ -112,6 +112,7 @@ declare global {
       getWorkflowConfig: () => Promise<{ workflows: import('../../main/services/types/WorkflowTypes').WorkflowConfig[] }>
       getSubagentTypes: () => Promise<import('../../main/services/types/WorkflowTypes').SubagentType[]>
       getActiveWorkflow: (projectPath: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
+      getWorkflow: (workflowId: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig | undefined>
       getAllWorkflows: () => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig[]>
       createWorkflow: (name: string, description?: string) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>
       updateWorkflow: (workflowId: string, updates: Partial<import('../../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../../main/services/types/WorkflowTypes').WorkflowConfig>

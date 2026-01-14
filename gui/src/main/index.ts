@@ -1128,6 +1128,10 @@ function setupIPC(): void {
     return services!.workflow.getAllWorkflows()
   })
 
+  ipcMain.handle('workflow:getWorkflow', async (_event, workflowId: string) => {
+    return services!.workflow.getWorkflow(workflowId)
+  })
+
   ipcMain.handle('workflow:createWorkflow', async (_event, name: string, description?: string) => {
     return services!.workflow.createWorkflow(name, description)
   })

@@ -82,6 +82,7 @@ declare const api: {
     getSubagentTypes: () => Promise<import('../main/services/types/WorkflowTypes').SubagentType[]>;
     getAllWorkflows: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig[]>;
     getActiveWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
+    getWorkflow: (workflowId: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig | undefined>;
     createWorkflow: (name: string, description?: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
     updateWorkflow: (workflowId: string, updates: Partial<import('../main/services/types/WorkflowTypes').WorkflowConfig>) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;
     deleteWorkflow: (workflowId: string) => Promise<void>;
