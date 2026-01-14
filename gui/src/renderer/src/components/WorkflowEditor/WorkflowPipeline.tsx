@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import {
   ChevronUpIcon,
   ChevronDownIcon,
@@ -7,7 +7,11 @@ import {
   ClipboardIcon,
   BugIcon,
   XIcon,
-  PlusIcon
+  PlusIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  EditIcon,
+  RefreshIcon
 } from '../icons'
 import type { WorkflowStep, SubagentType } from '../../../../main/services/types/WorkflowTypes'
 import './WorkflowPanel.css'
@@ -23,12 +27,20 @@ function getAgentIcon(agentId: string) {
   switch (agentId) {
     case 'explore':
       return <SearchIcon size="sm" />
-    case 'implement':
-      return <HammerIcon size="sm" />
     case 'plan':
       return <ClipboardIcon size="sm" />
+    case 'review':
+      return <CheckCircleIcon size="sm" />
+    case 'implement':
+      return <HammerIcon size="sm" />
+    case 'test':
+      return <CheckIcon size="sm" />
     case 'debug':
       return <BugIcon size="sm" />
+    case 'document':
+      return <EditIcon size="sm" />
+    case 'simplify':
+      return <RefreshIcon size="sm" />
     default:
       return <HammerIcon size="sm" />
   }
@@ -39,12 +51,20 @@ function getAgentColorClass(agentId: string): string {
   switch (agentId) {
     case 'explore':
       return 'agent-explore'
-    case 'implement':
-      return 'agent-implement'
     case 'plan':
       return 'agent-plan'
+    case 'review':
+      return 'agent-review'
+    case 'implement':
+      return 'agent-implement'
+    case 'test':
+      return 'agent-test'
     case 'debug':
       return 'agent-debug'
+    case 'document':
+      return 'agent-document'
+    case 'simplify':
+      return 'agent-simplify'
     default:
       return 'agent-implement'
   }
@@ -76,8 +96,23 @@ function StepCard({
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(step.name)
   const [showAddAgent, setShowAddAgent] = useState(false)
+  const addAgentRef = useRef<HTMLDivElement>(null)
 
   const isParallel = step.agents.length > 1
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!showAddAgent) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addAgentRef.current && !addAgentRef.current.contains(event.target as Node)) {
+        setShowAddAgent(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAddAgent])
 
   const handleSaveName = () => {
     if (editName.trim()) {
@@ -177,7 +212,7 @@ function StepCard({
           )
         })}
 
-        <div className="add-agent-wrapper">
+        <div className="add-agent-wrapper" ref={addAgentRef}>
           <button
             className="add-agent-btn"
             onClick={() => setShowAddAgent(!showAddAgent)}
@@ -187,7 +222,7 @@ function StepCard({
           </button>
 
           {showAddAgent && (
-            <div className="agent-dropdown">
+            <div className="agent-dropdown" onClick={(e) => e.stopPropagation()}>
               {subagentTypes
                 .filter(t => !step.agents.includes(t.id))
                 .map(agent => (
@@ -217,6 +252,21 @@ export function WorkflowPipeline({
   onStepsChange
 }: WorkflowPipelineProps) {
   const [showAddStep, setShowAddStep] = useState(false)
+  const addStepRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!showAddStep) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addStepRef.current && !addStepRef.current.contains(event.target as Node)) {
+        setShowAddStep(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAddStep])
 
   const handleMoveUp = useCallback((index: number) => {
     if (index <= 0) return
@@ -303,10 +353,10 @@ export function WorkflowPipeline({
         </div>
       ))}
 
-      <div className="add-step-section">
+      <div className="add-step-section" ref={addStepRef}>
         <div className="pipeline-connector-line" />
         {showAddStep ? (
-          <div className="add-step-dropdown">
+          <div className="add-step-dropdown" onClick={(e) => e.stopPropagation()}>
             <span className="add-step-label">Add step with agent:</span>
             {subagentTypes.map(agent => (
               <button

@@ -260,6 +260,30 @@
   border-color: rgba(255, 82, 82, 0.2);
 }
 
+.agent-chip.agent-review {
+  background: rgba(156, 39, 176, 0.1);
+  color: #9c27b0;
+  border-color: rgba(156, 39, 176, 0.2);
+}
+
+.agent-chip.agent-test {
+  background: rgba(0, 188, 212, 0.1);
+  color: #00bcd4;
+  border-color: rgba(0, 188, 212, 0.2);
+}
+
+.agent-chip.agent-document {
+  background: rgba(121, 85, 72, 0.1);
+  color: #795548;
+  border-color: rgba(121, 85, 72, 0.2);
+}
+
+.agent-chip.agent-simplify {
+  background: rgba(96, 125, 139, 0.1);
+  color: #607d8b;
+  border-color: rgba(96, 125, 139, 0.2);
+}
+
 .agent-remove-btn {
   width: 16px;
   height: 16px;
@@ -443,14 +467,30 @@
   color: var(--color-info);
 }
 
-.add-first-step-btn.agent-implement {
-  color: var(--color-success);
-}
-
 .add-first-step-btn.agent-plan {
   color: var(--color-warning);
 }
 
+.add-first-step-btn.agent-review {
+  color: #9c27b0;
+}
+
+.add-first-step-btn.agent-implement {
+  color: var(--color-success);
+}
+
+.add-first-step-btn.agent-test {
+  color: #00bcd4;
+}
+
 .add-first-step-btn.agent-debug {
   color: var(--color-error);
+}
+
+.add-first-step-btn.agent-document {
+  color: #795548;
+}
+
+.add-first-step-btn.agent-simplify {
+  color: #607d8b;
 }

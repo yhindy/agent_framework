@@ -45,33 +45,55 @@ export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
     description: 'Quick codebase reconnaissance - searches files, reads code'
   },
   {
-    id: 'implement',
-    name: 'Implementer',
-    description: 'Full implementation following TDD - writes tests first, then code'
-  },
-  {
     id: 'plan',
     name: 'Planner',
     description: 'Architecture and design planning - creates technical specifications'
   },
   {
+    id: 'review',
+    name: 'Reviewer',
+    description: 'Code review and validation - checks quality, patterns, and requirements'
+  },
+  {
+    id: 'implement',
+    name: 'Implementer',
+    description: 'Full implementation following TDD - writes tests first, then code'
+  },
+  {
+    id: 'test',
+    name: 'Tester',
+    description: 'Test execution and validation - runs tests, checks coverage'
+  },
+  {
     id: 'debug',
     name: 'Debugger',
     description: 'Debug unexpected behavior - traces bugs, adds logging, fixes issues'
+  },
+  {
+    id: 'document',
+    name: 'Documenter',
+    description: 'Documentation updates - writes READMEs, API docs, code comments'
+  },
+  {
+    id: 'simplify',
+    name: 'Simplifier',
+    description: 'Code simplification - refactors, removes duplication, improves clarity'
   }
 ]
 
 /**
- * Default workflow matching the original super-minion behavior.
+ * Default workflow matching the original super-minion 5-phase workflow.
  */
 export const DEFAULT_WORKFLOW: WorkflowConfig = {
   id: 'default',
   name: 'Standard Workflow',
-  description: 'Plan, implement, then validate',
+  description: 'Standard workflow with 5 phases: explore, design, review, implement, validate',
   steps: [
-    { id: 'step-1', name: 'Planning', agents: ['explore', 'plan'] },
-    { id: 'step-2', name: 'Implementation', agents: ['implement'] },
-    { id: 'step-3', name: 'Validation', agents: ['debug', 'implement'] }
+    { id: 'step-1', name: 'Explore Codebase', agents: ['explore'] },
+    { id: 'step-2', name: 'Engineering Design', agents: ['plan'] },
+    { id: 'step-3', name: 'Design Review', agents: ['review', 'review'] },
+    { id: 'step-4', name: 'Implementation', agents: ['implement'] },
+    { id: 'step-5', name: 'Validation', agents: ['simplify', 'test', 'review', 'document'] }
   ],
   isDefault: true
 }

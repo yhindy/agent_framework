@@ -13,8 +13,10 @@ describe('WorkflowService', () => {
     it('should return default subagent types', () => {
       const types = service.getSubagentTypes()
       expect(types).toEqual(DEFAULT_SUBAGENT_TYPES)
-      expect(types).toHaveLength(4)
-      expect(types.map(t => t.id)).toEqual(['explore', 'implement', 'plan', 'debug'])
+      expect(types).toHaveLength(8)
+      expect(types.map(t => t.id)).toEqual([
+        'explore', 'plan', 'review', 'implement', 'test', 'debug', 'document', 'simplify'
+      ])
     })
   })
 
@@ -35,7 +37,7 @@ describe('WorkflowService', () => {
     it('should return the default workflow', () => {
       const workflow = service.getActiveWorkflow('/some/project')
       expect(workflow).toEqual(DEFAULT_WORKFLOW)
-      expect(workflow.steps).toHaveLength(3)
+      expect(workflow.steps).toHaveLength(5)
     })
   })
 
