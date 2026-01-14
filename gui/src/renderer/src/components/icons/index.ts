@@ -60,3 +60,6 @@ export {
   PlusCircleIcon,
   WorkflowIcon
 } from './ActionIcons'
+
+// Archive icons
+export { ClockIcon } from './ArchiveIcons'

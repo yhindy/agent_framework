@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Dashboard from './Dashboard'
 import AgentView from './AgentView'
 import SuperAgentView from './SuperAgentView'
+import { ArchivePage } from './archive'
 import SettingsPage from './SettingsPage'
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
@@ -147,7 +148,8 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
             modalControls.closeCurrentModal()
           }
         },
-        description: 'Close dialog or help overlay'
+        description: 'Close dialog or help overlay',
+        enabled: () => showHelpOverlay || !!modalControls?.isModalOpen
       },
       {
         key: '/',
@@ -165,6 +167,20 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
       setIsLeftSidebarCollapsed(savedState === 'true')
     }
   }, [])
+
+  // Handle navigation state (e.g., when redirected from wizard setup)
+  useEffect(() => {
+    const state = location.state as { targetAgent?: string } | null
+    if (state?.targetAgent) {
+      console.log('[MainLayout] Navigating to target agent from state:', state.targetAgent)
+      // Small delay to let the agent list populate
+      const timer = setTimeout(() => {
+        navigate(`/workspace/agent/${state.targetAgent}`, { replace: true })
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [location.state, navigate])
 
   const handleNavigate = (path: string) => {
     navigate(path)
@@ -196,6 +212,7 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
           <Route path="/" element={<Dashboard activeProjects={activeProjects} onRefresh={onRefresh} />} />
           <Route path="/agent/:agentId" element={<AgentView activeProjects={activeProjects} />} />
           <Route path="/super/:agentId" element={<SuperAgentView activeProjects={activeProjects} />} />
+          <Route path="/archive" element={<ArchivePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>

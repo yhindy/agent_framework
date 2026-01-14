@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ProjectService } from '../ProjectService'
 import Store from 'electron-store'
 import * as fs from 'fs'
+import { MinionsConfigService } from '../MinionsConfigService'
 
 // Mock dependencies
 vi.mock('electron-store', () => {
@@ -21,6 +22,17 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+}))
+
+vi.mock('../MinionsConfigService', () => ({
+  MinionsConfigService: vi.fn().mockImplementation(() => ({
+    hasConfig: vi.fn(),
+    hasLegacyConfig: vi.fn(),
+    initializeMinionsFolder: vi.fn(),
+    updateGitignore: vi.fn(),
+    getDefaultConfig: vi.fn(),
+    writeConfig: vi.fn(),
+  }))
 }))
 
 // Mock Electron app
@@ -178,10 +190,10 @@ describe('ProjectService Multi-Repo', () => {
     expect(active[0].path).toBe('/valid/path')
   })
 
-  it('installFramework updates project files', async () => {
+  it('installFrameworkLegacy updates project files', async () => {
     const projectPath = '/path/to/myrepo'
 
-    // Mock fs for installFramework
+    // Mock fs for installFrameworkLegacy
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
       if (path.includes('assignments.json')) {
@@ -193,7 +205,7 @@ describe('ProjectService Multi-Repo', () => {
       return ''
     })
 
-    await projectService.installFramework(projectPath)
+    await projectService.installFrameworkLegacy(projectPath)
 
     // Verify config.sh was updated
     expect(fs.writeFileSync).toHaveBeenCalledWith(
@@ -202,10 +214,10 @@ describe('ProjectService Multi-Repo', () => {
     )
   })
 
-  it('installFramework updates config.json with correct project name', async () => {
+  it('installFrameworkLegacy updates config.json with correct project name', async () => {
     const projectPath = '/path/to/newproject'
 
-    // Mock fs for installFramework
+    // Mock fs for installFrameworkLegacy
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
       if (path.includes('config.json')) {
@@ -225,7 +237,7 @@ describe('ProjectService Multi-Repo', () => {
       return ''
     })
 
-    await projectService.installFramework(projectPath)
+    await projectService.installFrameworkLegacy(projectPath)
 
     // Find the config.json write call
     const writeFileCalls = vi.mocked(fs.writeFileSync).mock.calls
@@ -237,7 +249,7 @@ describe('ProjectService Multi-Repo', () => {
     expect(configJsonCall![1]).toContain('"name": "newproject"')
   })
 
-  it('installFramework creates unique base agent ID based on project name from config.json', async () => {
+  it('installFrameworkLegacy creates unique base agent ID based on project name from config.json', async () => {
     const projectPath = '/path/to/uniqueproject'
 
     // Track the config.json content after it's written
@@ -269,12 +281,149 @@ describe('ProjectService Multi-Repo', () => {
       }
     })
 
-    await projectService.installFramework(projectPath)
+    await projectService.installFrameworkLegacy(projectPath)
 
     // Verify config.json was updated with unique project name
     expect(writtenConfigJson).toBeDefined()
     expect(writtenConfigJson.project.name).toBe('uniqueproject')
     expect(writtenConfigJson.project.name).not.toBe('agent_framework')
+  })
+})
+
+describe('ProjectService Project Format Detection', () => {
+  let projectService: ProjectService
+  let mockStore: any
+  let mockMinionsConfigService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    // Setup store mock with state
+    const storeState: Record<string, any> = {}
+    mockStore = {
+      get: vi.fn((key, defaultValue) => storeState[key] ?? defaultValue),
+      set: vi.fn((key, value) => { storeState[key] = value }),
+    }
+    vi.mocked(Store).mockImplementation(() => mockStore)
+
+    // Setup MinionsConfigService mock
+    mockMinionsConfigService = {
+      hasConfig: vi.fn(),
+      hasLegacyConfig: vi.fn(),
+      initializeMinionsFolder: vi.fn(),
+      updateGitignore: vi.fn(),
+      getDefaultConfig: vi.fn(),
+      writeConfig: vi.fn(),
+    }
+    vi.mocked(MinionsConfigService).mockImplementation(() => mockMinionsConfigService)
+
+    // Default fs mock - project path exists
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+
+    projectService = new ProjectService()
+  })
+
+  describe('getProjectFormat', () => {
+    it('returns "new" when minions.json exists', () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(true)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
+
+      const format = projectService.getProjectFormat('/path/to/project')
+
+      expect(format).toBe('new')
+      expect(mockMinionsConfigService.hasConfig).toHaveBeenCalledWith('/path/to/project')
+    })
+
+    it('returns "legacy" when minions/config.json exists but no minions.json', () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(false)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(true)
+
+      const format = projectService.getProjectFormat('/path/to/project')
+
+      expect(format).toBe('legacy')
+    })
+
+    it('returns "none" when neither config exists', () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(false)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
+
+      const format = projectService.getProjectFormat('/path/to/project')
+
+      expect(format).toBe('none')
+    })
+
+    it('returns "new" when both configs exist (prefers new format)', () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(true)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(true)
+
+      const format = projectService.getProjectFormat('/path/to/project')
+
+      expect(format).toBe('new')
+    })
+  })
+
+  describe('addProject needsInstall detection', () => {
+    it('sets needsInstall to false when minions.json exists (new format)', async () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(true)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
+
+      const project = await projectService.addProject('/path/to/project')
+
+      expect(project.needsInstall).toBe(false)
+    })
+
+    it('sets needsInstall to false when minions/config.json exists (legacy format)', async () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(false)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(true)
+
+      const project = await projectService.addProject('/path/to/project')
+
+      expect(project.needsInstall).toBe(false)
+    })
+
+    it('sets needsInstall to true when neither config exists', async () => {
+      mockMinionsConfigService.hasConfig.mockReturnValue(false)
+      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
+
+      const project = await projectService.addProject('/path/to/project')
+
+      expect(project.needsInstall).toBe(true)
+    })
+  })
+
+  describe('initializeMinionsFolder', () => {
+    it('delegates to MinionsConfigService.initializeMinionsFolder', () => {
+      projectService.initializeMinionsFolder('/path/to/project')
+
+      expect(mockMinionsConfigService.initializeMinionsFolder).toHaveBeenCalledWith('/path/to/project')
+    })
+  })
+
+  describe('installFramework (minimal structure)', () => {
+    it('creates minions.json and initializes .minions/ folder', async () => {
+      const projectPath = '/path/to/newproject'
+      const mockConfig = {
+        version: '2.0',
+        project: { name: 'newproject', defaultBaseBranch: 'main' },
+        setup: { filesToCopy: [], postSetupCommands: [] }
+      }
+
+      mockMinionsConfigService.getDefaultConfig.mockReturnValue(mockConfig)
+
+      await projectService.installFramework(projectPath)
+
+      // Should get default config
+      expect(mockMinionsConfigService.getDefaultConfig).toHaveBeenCalledWith(projectPath)
+
+      // Should write the config
+      expect(mockMinionsConfigService.writeConfig).toHaveBeenCalledWith(projectPath, mockConfig)
+
+      // Should initialize .minions/ folder
+      expect(mockMinionsConfigService.initializeMinionsFolder).toHaveBeenCalledWith(projectPath)
+
+      // Should update .gitignore
+      expect(mockMinionsConfigService.updateGitignore).toHaveBeenCalledWith(projectPath)
+    })
   })
 })
 

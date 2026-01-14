@@ -18,13 +18,13 @@ Think of it like having a team of helpful AI assistants, each working on their o
 
 Before you start, make sure you have:
 
-- **Node.js 18+** - [Download from nodejs.org](https://nodejs.org)
+- **Node.js 20.x** - [Download from nodejs.org](https://nodejs.org)
 - **Git** - [Download from git-scm.com](https://git-scm.com) (or use your package manager)
 - **Python 3** - Usually pre-installed on Mac/Linux. Windows users: [python.org](https://python.org)
 
 To check if you have these:
 ```bash
-node -v    # Should show v18.x.x or higher
+node -v    # Should show v20.x.x or higher
 git --version
 python3 --version
 ```
@@ -51,7 +51,7 @@ This will:
 If you see errors:
 
 - **"node: command not found"** → Install Node.js from [nodejs.org](https://nodejs.org)
-- **"Node.js 18+ required"** → Update Node.js to the latest LTS version
+- **"Node.js 20+ required"** → Update Node.js to the latest LTS version
 - **npm install interrupted/failed** → Run `rm -rf node_modules package-lock.json && ./setup.sh` to start fresh
 - **"Cannot find module" errors** → Same as above - clean reinstall
 - **Rebuild errors on Linux** → You may need build tools: `sudo apt install build-essential`

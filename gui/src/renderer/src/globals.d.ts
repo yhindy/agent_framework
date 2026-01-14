@@ -123,6 +123,21 @@ declare global {
       lockWorkflow: (projectPath: string, agentId: string) => Promise<boolean>
       unlockWorkflow: (projectPath: string, agentId: string) => Promise<boolean>
       isWorkflowLocked: (projectPath: string) => Promise<{ locked: boolean; lockedBy?: string; lockedAt?: string }>
+
+      // Setup Wizard APIs
+      checkWizard: (projectPath: string) => Promise<{ needsWizard: boolean; hasLegacy: boolean }>
+      startWizard: (projectPath: string) => Promise<any>
+      cancelWizard: (sessionId: string) => Promise<void>
+      finalizeWizard: (projectPath: string, config: any) => Promise<void>
+      quickSetup: (projectPath: string) => Promise<void>
+
+      // Migration APIs
+      migrateProject: (projectPath: string) => Promise<any>
+
+      // Archive APIs
+      listArchivedAgents: (projectPath?: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent[]>
+      getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent | null>
+      restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').AgentInfo>
     }
   }
 }

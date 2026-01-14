@@ -212,7 +212,25 @@ const api = {
   saveWorkflowAsTemplate: (workflow: any, name: string) => ipcRenderer.invoke('workflow:saveAsTemplate', workflow, name),
   lockWorkflow: (projectPath: string, agentId: string) => ipcRenderer.invoke('workflow:lockWorkflow', projectPath, agentId),
   unlockWorkflow: (projectPath: string, agentId: string) => ipcRenderer.invoke('workflow:unlockWorkflow', projectPath, agentId),
-  isWorkflowLocked: (projectPath: string) => ipcRenderer.invoke('workflow:isWorkflowLocked', projectPath)
+  isWorkflowLocked: (projectPath: string) => ipcRenderer.invoke('workflow:isWorkflowLocked', projectPath),
+
+  // Setup Wizard APIs
+  checkWizard: (projectPath: string) => ipcRenderer.invoke('wizard:check', projectPath),
+  startWizard: (projectPath: string) => ipcRenderer.invoke('wizard:start', projectPath),
+  cancelWizard: (sessionId: string) => ipcRenderer.invoke('wizard:cancel', sessionId),
+  finalizeWizard: (projectPath: string, config: any) => ipcRenderer.invoke('wizard:finalize', projectPath, config),
+  quickSetup: (projectPath: string) => ipcRenderer.invoke('wizard:quickSetup', projectPath),
+
+  // Migration APIs
+  migrateProject: (projectPath: string) => ipcRenderer.invoke('project:migrate', projectPath),
+
+  // Archive APIs
+  listArchivedAgents: (projectPath?: string) =>
+    ipcRenderer.invoke('archive:list', projectPath),
+  getArchivedAgent: (projectPath: string, archiveId: string) =>
+    ipcRenderer.invoke('archive:get', projectPath, archiveId),
+  restoreArchivedAgent: (projectPath: string, archiveId: string) =>
+    ipcRenderer.invoke('archive:restore', projectPath, archiveId)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

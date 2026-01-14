@@ -13,6 +13,7 @@ import {
   WarningIcon,
   SyncIcon,
   PlusCircleIcon,
+  ClockIcon,
   HourglassIcon,
   CheckIcon,
   XIcon
@@ -417,6 +418,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   }
 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
+  const isArchiveActive = currentPath === '/workspace/archive'
   const isSettingsActive = currentPath === '/workspace/settings'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
@@ -756,6 +758,16 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       </div>
 
       <div className="sidebar-footer">
+        <div
+          className={`nav-item archive-nav-item ${isArchiveActive ? 'active' : ''}`}
+          onClick={() => handleNavigate('/workspace/archive')}
+          title="Archive"
+        >
+          <span className="nav-icon">
+            <ClockIcon size="sm" />
+          </span>
+          <span className="nav-label">Archive</span>
+        </div>
         <div
           className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}
           onClick={() => handleNavigate('/workspace/settings')}

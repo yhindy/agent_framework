@@ -16,6 +16,8 @@ import { TeleportMetadataService } from './services/TeleportMetadataService'
 import { WorkflowService } from './services/WorkflowService'
 import { createLogger } from './services/logger'
 import type { ProjectWorkflowConfig, WorkflowConfig } from './services/types/WorkflowTypes'
+import { SetupWizardService } from './services/SetupWizardService'
+import { MinionsConfigService } from './services/MinionsConfigService'
 
 const log = createLogger('Main')
 
@@ -36,6 +38,8 @@ let services: {
   teleport: TeleportService
   teleportMetadata: TeleportMetadataService
   workflow: WorkflowService
+  setupWizard: SetupWizardService
+  minionsConfig: MinionsConfigService
 } | null = null
 
 
@@ -108,6 +112,7 @@ function initializeServices(): void {
   const notificationService = new NotificationService(mainWindow, settingsService)
   const claudeSessionInfoService = new ClaudeSessionInfoService()
   const terminalService = new TerminalService(mainWindow, notificationService)
+  const minionsConfigService = new MinionsConfigService()
 
   // Set service references in TerminalService
   terminalService.setAgentService(agentService)
@@ -117,6 +122,9 @@ function initializeServices(): void {
 
   // Set service references in AgentService
   agentService.setClaudeSessionInfoService(claudeSessionInfoService)
+
+  // Create SetupWizardService (depends on other services)
+  const setupWizardService = new SetupWizardService(agentService, terminalService, minionsConfigService)
 
   services = {
     project: projectService,
@@ -130,7 +138,9 @@ function initializeServices(): void {
     claudeSessionInfo: claudeSessionInfoService,
     teleport: new TeleportService(),
     teleportMetadata: new TeleportMetadataService(),
-    workflow: new WorkflowService()
+    workflow: new WorkflowService(),
+    setupWizard: setupWizardService,
+    minionsConfig: minionsConfigService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
@@ -951,6 +961,27 @@ function setupIPC(): void {
     mainWindow?.webContents.send('agents:updated')
   })
 
+  // Archive handlers
+  ipcMain.handle('archive:list', async (_event, projectPath?: string) => {
+    const path = projectPath || services!.project.getCurrentProject()?.path
+    if (!path) return []
+    return services!.agent.listArchivedAgents(path)
+  })
+
+  ipcMain.handle('archive:get', async (_event, projectPath: string, archiveId: string) => {
+    if (!projectPath) return null
+    return services!.agent.getArchivedAgent(projectPath, archiveId)
+  })
+
+  ipcMain.handle('archive:restore', async (_event, projectPath: string, archiveId: string) => {
+    if (!projectPath || !archiveId) {
+      throw new Error('Project path and archive ID are required')
+    }
+    const agent = await services!.agent.restoreArchivedAgent(projectPath, archiveId)
+    mainWindow?.webContents.send('agents:updated')
+    return agent
+  })
+
   // Test Environment handlers
   ipcMain.handle('testEnv:getConfig', async (_event, agentId?: string) => {
     let projectPath: string | null = null
@@ -1120,6 +1151,35 @@ function setupIPC(): void {
 
   ipcMain.handle('workflow:isWorkflowLocked', async (_event, projectPath: string) => {
     return services!.workflow.isWorkflowLocked(projectPath)
+  })
+
+  // Setup Wizard handlers
+  ipcMain.handle('wizard:check', async (_event, projectPath: string) => {
+    return {
+      needsWizard: services!.setupWizard.needsWizard(projectPath),
+      hasLegacy: services!.setupWizard.hasLegacyStructure(projectPath)
+    }
+  })
+
+  ipcMain.handle('wizard:start', async (_event, projectPath: string) => {
+    return services!.setupWizard.startWizard(projectPath)
+  })
+
+  ipcMain.handle('wizard:cancel', async (_event, sessionId: string) => {
+    return services!.setupWizard.cancelWizard(sessionId)
+  })
+
+  ipcMain.handle('wizard:finalize', async (_event, projectPath: string, config: any) => {
+    return services!.setupWizard.finalizeSetup(projectPath, config)
+  })
+
+  ipcMain.handle('wizard:quickSetup', async (_event, projectPath: string) => {
+    return services!.setupWizard.quickSetup(projectPath)
+  })
+
+  // Migration handler
+  ipcMain.handle('project:migrate', async (_event, projectPath: string) => {
+    return services!.minionsConfig.migrateFromLegacy(projectPath)
   })
 }
 

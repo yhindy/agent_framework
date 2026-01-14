@@ -1,3 +1,21 @@
+// Re-export MinionsConfig types for convenient imports
+export type {
+  MinionsConfig,
+  MinionsConfigProject,
+  MinionsConfigSetup,
+  MinionsConfigDetected,
+  MinionsConfigWizard,
+  WizardSession,
+  WizardSessionStatus
+} from './MinionsConfig'
+
+export {
+  createDefaultMinionsConfig,
+  isValidMinionsConfig,
+  WIZARD_SESSION_STATUSES,
+  DEFAULT_WIZARD_TIMEOUT_MS
+} from './MinionsConfig'
+
 // UI state for terminal and tab restoration
 export interface UIState {
   lastActiveTab: string          // e.g., 'agent', 'terminal-2', 'test-dev'
@@ -89,6 +107,55 @@ export interface SuperAgentInfo extends AgentInfo {
 
 export function isSuperMinion(agent: AgentInfo): agent is SuperAgentInfo {
   return (agent as any).isSuperMinion === true
+}
+
+/**
+ * Represents an archived agent record preserved after teardown.
+ * Contains essential metadata for historical tracking.
+ */
+export interface ArchivedAgent {
+  // Archive metadata
+  archiveId: string              // Unique: `${agentId}-${timestamp}`
+  archivedAt: string             // ISO timestamp
+  archiveVersion: number         // Schema version (start at 1)
+
+  // Original agent identification
+  agentId: string
+  assignmentId: string
+
+  // Task information
+  branch: string
+  feature: string
+  prompt?: string
+
+  // Tool and configuration
+  tool: string
+  model?: string
+  mode: string
+
+  // Timeline
+  createdAt: string
+  completedAt: string
+
+  // Final status
+  finalStatus: string
+
+  // PR information (if applicable)
+  prUrl?: string
+  prStatus?: string
+
+  // Session metrics (optional)
+  totalCostUsd?: number
+  tokenUsage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+  }
+
+  // Parent relationship (for super minions)
+  parentAgentId?: string
+  isSuperMinion?: boolean
 }
 
 // @deprecated - Legacy Assignment interface for backward compatibility during migration

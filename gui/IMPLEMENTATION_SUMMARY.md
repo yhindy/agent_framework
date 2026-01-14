@@ -10,24 +10,24 @@ All planned features have been successfully implemented and tested.
 
 ```
 agent_framework/
-├── docs/agents/
-│   ├── assignments.json         # NEW: JSON format for assignments
-│   ├── types.ts                 # NEW: TypeScript type definitions
-│   └── rules/
-│       └── orchestrator_signals.md  # NEW: Signal protocol docs
-├── scripts/agents/
-│   ├── setup.sh                 # UPDATED: Now copies signal rules
-│   ├── migrate-assignments.js   # NEW: Migration script
-│   └── test_signal.sh           # NEW: Test script for signals
+├── minions/
+│   ├── assignments.json         # JSON format for assignments
+│   ├── assignments/             # Mission files directory
+│   ├── rules/                   # Agent behavior rules
+│   │   └── orchestrator_signals.md  # Signal protocol docs
+│   └── bin/
+│       ├── setup.sh             # Create minion worktree
+│       ├── teardown.sh          # Remove minion worktree
+│       └── list.sh              # List minion worktrees
 ├── gui/                         # NEW: Complete Electron app
 │   ├── src/
 │   │   ├── main/               # Electron main process
 │   │   │   ├── index.ts
 │   │   │   └── services/
 │   │   │       ├── ProjectService.ts
-│   │   │       ├── MinionService.ts
+│   │   │       ├── AgentService.ts
 │   │   │       ├── TerminalService.ts
-│   │   │       └── FileWatcherService.ts
+│   │   │       └── ClaudeSessionInfoService.ts
 │   │   ├── preload/            # IPC bridge
 │   │   │   └── index.ts
 │   │   └── renderer/           # React frontend
@@ -55,13 +55,13 @@ agent_framework/
 
 ### 1. Data Model & Schema ✅
 - Created `assignments.json` format
-- Defined TypeScript types in `docs/agents/types.ts`
+- Defined TypeScript types in `gui/src/renderer/src/types/`
 - Migration script from ASSIGNMENTS.md to JSON
 - Project-scoped state storage
 
 ### 2. Main Process Services ✅
 - **ProjectService**: Manages project selection and recent projects
-- **MinionService**: Discovers minions via git worktrees, manages missions
+- **AgentService**: Discovers agents via git worktrees, manages missions
 - **TerminalService**: Spawns node-pty sessions, detects signals
 - **FileWatcherService**: Watches assignments.json and .agent-info files
 
@@ -73,7 +73,7 @@ agent_framework/
 - Signal detection in output stream
 
 ### 4. Signal Protocol ✅
-- Documented in `docs/agents/rules/orchestrator_signals.md`
+- Documented in `minions/rules/orchestrator_signals.md`
 - Five signals: PLAN_READY, DEV_COMPLETED, BLOCKER, QUESTION, WORKING
 - Automatic detection via ANSI stripping and pattern matching
 - UI notifications for each signal type
@@ -198,8 +198,7 @@ npm run typecheck
 | [`gui/README.md`](README.md) | Complete documentation |
 | [`gui/QUICKSTART.md`](QUICKSTART.md) | 5-minute setup guide |
 | [`gui/TESTING.md`](TESTING.md) | Test scenarios |
-| [`docs/agents/rules/orchestrator_signals.md`](../docs/agents/rules/orchestrator_signals.md) | Signal protocol |
-| [`docs/agents/types.ts`](../docs/agents/types.ts) | Type definitions |
+| [`minions/rules/orchestrator_signals.md`](../minions/rules/orchestrator_signals.md) | Signal protocol |
 
 ---
 

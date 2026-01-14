@@ -281,7 +281,7 @@ describe('useKeyboardShortcuts Hook', () => {
       document.body.removeChild(div)
     })
 
-    it('should allow Escape even when input is focused', () => {
+    it('should not trigger Escape when input is focused (same as other shortcuts)', () => {
       const mockAction = vi.fn()
 
       renderHook(() =>
@@ -303,9 +303,42 @@ describe('useKeyboardShortcuts Hook', () => {
       const event = createKeyboardEvent('Escape')
       document.dispatchEvent(event)
 
-      expect(mockAction).toHaveBeenCalledTimes(1)
+      // ESC should NOT be intercepted when input is focused
+      // This allows ESC to reach the focused element (e.g., terminal)
+      expect(mockAction).not.toHaveBeenCalled()
 
       document.body.removeChild(input)
+    })
+
+    it('should trigger Escape when xterm helper textarea is focused (terminal)', () => {
+      const mockAction = vi.fn()
+
+      renderHook(() =>
+        useKeyboardShortcuts({
+          shortcuts: [
+            {
+              key: 'Escape',
+              action: mockAction,
+              description: 'Close modal',
+              enabled: true
+            }
+          ]
+        })
+      )
+
+      // xterm's helper textarea should not be treated as an input
+      const xtermTextarea = document.createElement('textarea')
+      xtermTextarea.classList.add('xterm-helper-textarea')
+      document.body.appendChild(xtermTextarea)
+      xtermTextarea.focus()
+
+      const event = createKeyboardEvent('Escape')
+      document.dispatchEvent(event)
+
+      // ESC should work when terminal is focused (xterm-helper-textarea is excluded)
+      expect(mockAction).toHaveBeenCalledTimes(1)
+
+      document.body.removeChild(xtermTextarea)
     })
 
     it('should respect disableWhenInputFocused option when set to false', () => {

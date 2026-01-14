@@ -4,8 +4,11 @@ import { existsSync, cpSync, readFileSync, writeFileSync } from 'fs'
 import { app } from 'electron'
 import { AgentService } from './AgentService'
 import { createLogger } from './logger'
+import { MinionsConfigService } from './MinionsConfigService'
 
 const log = createLogger('ProjectService')
+
+export type ProjectFormat = 'new' | 'legacy' | 'none'
 
 export interface ProjectState {
   path: string
@@ -23,8 +26,9 @@ interface StoreSchema {
 export class ProjectService {
   private store: Store<StoreSchema>
   private agentService: AgentService | null = null
+  private minionsConfigService: MinionsConfigService
 
-  constructor(agentService?: AgentService) {
+  constructor(agentService?: AgentService, minionsConfigService?: MinionsConfigService) {
     this.store = new Store<StoreSchema>({
       defaults: {
         currentProjectPath: null,
@@ -34,11 +38,37 @@ export class ProjectService {
     })
 
     this.agentService = agentService || null
+    this.minionsConfigService = minionsConfigService || new MinionsConfigService()
     this.validateActiveProjects()
   }
 
   setAgentService(agentService: AgentService): void {
     this.agentService = agentService
+  }
+
+  /**
+   * Detect the project format based on config files present
+   * @param projectPath - Path to the project root
+   * @returns 'new' if minions.json exists, 'legacy' if minions/config.json exists, 'none' otherwise
+   */
+  getProjectFormat(projectPath: string): ProjectFormat {
+    // Check for new format first (minions.json at project root)
+    if (this.minionsConfigService.hasConfig(projectPath)) {
+      return 'new'
+    }
+    // Then check legacy format (minions/config.json)
+    if (this.minionsConfigService.hasLegacyConfig(projectPath)) {
+      return 'legacy'
+    }
+    return 'none'
+  }
+
+  /**
+   * Initialize the .minions/ folder structure
+   * @param projectPath - Path to the project root
+   */
+  initializeMinionsFolder(projectPath: string): void {
+    this.minionsConfigService.initializeMinionsFolder(projectPath)
   }
 
   // Validate active projects on startup (robustness)
@@ -73,9 +103,12 @@ export class ProjectService {
     }
 
     try {
-      // Check if it has the agent framework
-      const agentsPath = join(projectPath, 'minions')
-      const needsInstall = !existsSync(agentsPath)
+      // Check if project has the agent framework installed
+      // New format: minions.json exists at project root
+      // Legacy format: minions/config.json exists
+      const projectFormat = this.getProjectFormat(projectPath)
+      const needsInstall = projectFormat === 'none'
+      log.info('Project format:', projectFormat)
       log.info('Project needs install:', needsInstall)
 
       const project: ProjectState = {
@@ -177,8 +210,59 @@ export class ProjectService {
     this.store.set('currentProjectPath', null)
   }
 
+  /**
+   * Install the framework using the new minimal structure.
+   * Creates minions.json and .minions/ folder without copying scripts/rules.
+   *
+   * @param projectPath - Path to the project root
+   */
   async installFramework(projectPath: string): Promise<void> {
-    log.info('Installing framework for:', projectPath)
+    log.info('Installing framework (minimal structure) for:', projectPath)
+
+    try {
+      // Get default config with auto-detected project info
+      const config = this.minionsConfigService.getDefaultConfig(projectPath)
+      log.info('Generated default config:', config.project.name)
+
+      // Write minions.json
+      this.minionsConfigService.writeConfig(projectPath, config)
+      log.info('Created minions.json')
+
+      // Initialize .minions/ folder structure
+      this.minionsConfigService.initializeMinionsFolder(projectPath)
+      log.info('Initialized .minions/ folder')
+
+      // Update .gitignore to include .minions/
+      this.minionsConfigService.updateGitignore(projectPath)
+      log.info('Updated .gitignore')
+
+      // Ensure base branch agent exists after framework installation
+      if (this.agentService) {
+        try {
+          await this.agentService.ensureBaseBranchAgent(projectPath)
+          log.info('Base branch agent ensured after installation')
+        } catch (error) {
+          log.error('Error ensuring base branch agent after installation:', error)
+        }
+      }
+
+      log.info('Framework installation completed successfully')
+    } catch (error: any) {
+      const errorMsg = `Failed to install framework: ${error.message}`
+      log.error('Installation error:', errorMsg)
+      log.error('Error details:', error)
+      throw new Error(errorMsg)
+    }
+  }
+
+  /**
+   * Install the framework using the legacy structure (copies minions/ folder).
+   * @deprecated Use installFramework() for new projects.
+   *
+   * @param projectPath - Path to the project root
+   */
+  async installFrameworkLegacy(projectPath: string): Promise<void> {
+    log.info('Installing framework (legacy) for:', projectPath)
 
     const minionsSrc = this.getMinionsSourcePath()
     const minionsDest = join(projectPath, 'minions')

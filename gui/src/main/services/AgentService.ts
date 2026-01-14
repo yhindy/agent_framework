@@ -1,10 +1,10 @@
 import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync, statSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 import { WorkflowService } from './WorkflowService'
 import type { ProjectWorkflowConfig } from './types/WorkflowTypes'
@@ -357,7 +357,31 @@ export class AgentService {
   }
 
   // New helper functions for JSON .agent-info format
-  readAgentInfo(worktreePath: string): AgentInfo | null {
+  /**
+   * Read agent info from file system.
+   * For new format projects with minions.json, checks .minions/agents/{id}.json first.
+   * Falls back to .agent-info in worktree for legacy projects.
+   *
+   * @param worktreePath - Path to the worktree (or project root for base agents)
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
+   * @returns AgentInfo or null if not found
+   */
+  readAgentInfo(worktreePath: string, agentId?: string, projectPath?: string): AgentInfo | null {
+    // If agentId and projectPath provided, try new format first
+    if (agentId && projectPath) {
+      const newAgentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
+      if (existsSync(newAgentInfoPath)) {
+        try {
+          const content = readFileSync(newAgentInfoPath, 'utf-8')
+          return JSON.parse(content) as AgentInfo
+        } catch (error) {
+          console.error(`Error reading new format agent info at ${newAgentInfoPath}:`, error)
+          // Fall through to legacy locations
+        }
+      }
+    }
+
     // Check for base agent info first (.minions-base-info in project root)
     const baseInfoPath = join(worktreePath, '.minions-base-info')
     if (existsSync(baseInfoPath)) {
@@ -408,14 +432,91 @@ export class AgentService {
     }
   }
 
-  writeAgentInfo(worktreePath: string, info: AgentInfo): void {
-    // Base agents use .minions-base-info, regular agents use .agent-info
+  /**
+   * Write agent info to file system.
+   * For new format projects with minions.json, writes to .minions/agents/{id}.json.
+   * For legacy projects, writes to .agent-info in worktree.
+   *
+   * @param worktreePath - Path to the worktree (or project root for base agents)
+   * @param info - AgentInfo to write
+   * @param projectPath - Optional project path for new format detection
+   */
+  writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
+    // Base agents are handled separately via writeBaseAgentInfo
     if (info.isBaseBranchAgent) {
       const baseInfoPath = join(worktreePath, '.minions-base-info')
       writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+      return
+    }
+
+    // Check if this is a new format project
+    const effectiveProjectPath = projectPath || worktreePath
+    if (this.isNewFormatProject(effectiveProjectPath)) {
+      const agentsDir = join(effectiveProjectPath, '.minions', 'agents')
+      mkdirSync(agentsDir, { recursive: true })
+      const agentInfoPath = join(agentsDir, `${info.agentId}.json`)
+      writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
     } else {
+      // Legacy: write to .agent-info in worktree
       const agentInfoPath = join(worktreePath, '.agent-info')
       writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+    }
+  }
+
+  /**
+   * Read base agent info from file system.
+   * For new format projects, checks .minions/base-agent.json first.
+   * Falls back to .minions-base-info for legacy projects.
+   *
+   * @param projectPath - Path to the project root
+   * @returns AgentInfo or null if not found
+   */
+  readBaseAgentInfo(projectPath: string): AgentInfo | null {
+    // New format first: .minions/base-agent.json
+    const newBaseInfoPath = join(projectPath, '.minions', 'base-agent.json')
+    if (existsSync(newBaseInfoPath)) {
+      try {
+        const content = readFileSync(newBaseInfoPath, 'utf-8')
+        return JSON.parse(content) as AgentInfo
+      } catch (error) {
+        console.error(`Error reading new format base agent info at ${newBaseInfoPath}:`, error)
+        // Fall through to legacy location
+      }
+    }
+
+    // Legacy fallback: .minions-base-info
+    const legacyBaseInfoPath = join(projectPath, '.minions-base-info')
+    if (existsSync(legacyBaseInfoPath)) {
+      try {
+        const content = readFileSync(legacyBaseInfoPath, 'utf-8')
+        return JSON.parse(content) as AgentInfo
+      } catch (error) {
+        console.error(`Error reading legacy base agent info at ${legacyBaseInfoPath}:`, error)
+        return null
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Write base agent info to file system.
+   * For new format projects with minions.json, writes to .minions/base-agent.json.
+   * For legacy projects, writes to .minions-base-info.
+   *
+   * @param projectPath - Path to the project root
+   * @param info - AgentInfo to write
+   */
+  writeBaseAgentInfo(projectPath: string, info: AgentInfo): void {
+    if (this.isNewFormatProject(projectPath)) {
+      const minionsDir = join(projectPath, '.minions')
+      mkdirSync(minionsDir, { recursive: true })
+      const baseInfoPath = join(minionsDir, 'base-agent.json')
+      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+    } else {
+      // Legacy: write to .minions-base-info
+      const baseInfoPath = join(projectPath, '.minions-base-info')
+      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
     }
   }
 
@@ -488,7 +589,23 @@ export class AgentService {
   }
 
   private getProjectConfigPath(projectPath: string): string {
+    // New format first: minions.json at project root
+    const newConfigPath = join(projectPath, 'minions.json')
+    if (existsSync(newConfigPath)) {
+      return newConfigPath
+    }
+
+    // Legacy fallback: minions/config.json
     return join(projectPath, 'minions', 'config.json')
+  }
+
+  /**
+   * Check if this project uses the new minions.json format.
+   * @param projectPath - Path to the project root
+   * @returns true if minions.json exists at project root
+   */
+  isNewFormatProject(projectPath: string): boolean {
+    return existsSync(join(projectPath, 'minions.json'))
   }
 
   /**
@@ -962,6 +1079,13 @@ export class AgentService {
   async teardownAgent(projectPath: string, agentId: string, force: boolean = false): Promise<void> {
     const teardownScript = join(this.getMinionsPath(), 'bin', 'teardown.sh')
     const configPath = this.getProjectConfigPath(projectPath)
+
+    // Archive agent metadata before teardown (fail gracefully)
+    try {
+      await this.archiveAgent(projectPath, agentId)
+    } catch (archiveError) {
+      log.warn(`Failed to archive agent ${agentId}:`, archiveError)
+    }
 
     try {
       const args = [agentId, '--config', configPath]
@@ -1673,6 +1797,158 @@ export class AgentService {
       agentInfo,
       shouldStartClaude: isNewAgent && agentInfo.prompt !== undefined
     }
+  }
+
+  // Archive helper methods
+  private getArchiveDirectory(projectPath: string): string {
+    return join(projectPath, 'minions', 'archive')
+  }
+
+  private ensureArchiveDirectory(projectPath: string): string {
+    const archiveDir = this.getArchiveDirectory(projectPath)
+    if (!existsSync(archiveDir)) {
+      mkdirSync(archiveDir, { recursive: true })
+    }
+    return archiveDir
+  }
+
+  async archiveAgent(projectPath: string, agentId: string): Promise<ArchivedAgent> {
+    // 1. Find agent's worktree path
+    const agents = await this.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
+
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found for archiving`)
+    }
+
+    // 2. Read agent info
+    const agentInfo = this.readAgentInfo(agent.worktreePath)
+    if (!agentInfo) {
+      throw new Error(`Could not read agent info for ${agentId}`)
+    }
+
+    // 3. Create archive record
+    const timestamp = Date.now()
+    const archiveId = `${agentId}-${timestamp}`
+
+    const archived: ArchivedAgent = {
+      archiveId,
+      archivedAt: new Date().toISOString(),
+      archiveVersion: 1,
+
+      agentId: agentInfo.agentId,
+      assignmentId: agentInfo.id,
+
+      branch: agentInfo.branch,
+      feature: agentInfo.feature,
+      prompt: agentInfo.prompt,
+
+      tool: agentInfo.tool,
+      model: agentInfo.model,
+      mode: agentInfo.mode,
+
+      createdAt: agentInfo.createdAt,
+      completedAt: new Date().toISOString(),
+
+      finalStatus: agentInfo.status,
+
+      prUrl: agentInfo.prUrl,
+      prStatus: agentInfo.prStatus,
+
+      totalCostUsd: agentInfo.totalCostUsd,
+      tokenUsage: agentInfo.tokenUsage,
+
+      parentAgentId: agentInfo.parentAgentId,
+      isSuperMinion: (agentInfo as any).isSuperMinion
+    }
+
+    // 4. Ensure archive directory exists and write archive file
+    const archiveDir = this.ensureArchiveDirectory(projectPath)
+    const archivePath = join(archiveDir, `${archiveId}.json`)
+    writeFileSync(archivePath, JSON.stringify(archived, null, 2))
+
+    log.info(`Archived agent ${agentId} to ${archivePath}`)
+
+    return archived
+  }
+
+  async listArchivedAgents(projectPath: string): Promise<ArchivedAgent[]> {
+    const archiveDir = this.getArchiveDirectory(projectPath)
+
+    if (!existsSync(archiveDir)) {
+      return []
+    }
+
+    try {
+      const files = readdirSync(archiveDir).filter(f => f.endsWith('.json'))
+      const archives: ArchivedAgent[] = []
+
+      for (const file of files) {
+        try {
+          const content = readFileSync(join(archiveDir, file), 'utf-8')
+          archives.push(JSON.parse(content))
+        } catch (error) {
+          log.warn(`Failed to read archive file ${file}:`, error)
+        }
+      }
+
+      // Sort by archivedAt descending (most recent first)
+      return archives.sort((a, b) =>
+        new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime()
+      )
+    } catch (error) {
+      log.warn('Failed to list archived agents:', error)
+      return []
+    }
+  }
+
+  async getArchivedAgent(projectPath: string, archiveId: string): Promise<ArchivedAgent | null> {
+    const archivePath = join(this.getArchiveDirectory(projectPath), `${archiveId}.json`)
+
+    if (!existsSync(archivePath)) {
+      return null
+    }
+
+    try {
+      const content = readFileSync(archivePath, 'utf-8')
+      return JSON.parse(content)
+    } catch (error) {
+      log.error(`Failed to read archive ${archiveId}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * Restore an archived agent by creating a new agent with the same configuration
+   * @param projectPath - Path to the project
+   * @param archiveId - ID of the archived agent to restore
+   * @returns Newly created agent
+   */
+  async restoreArchivedAgent(projectPath: string, archiveId: string): Promise<AgentInfo> {
+    // Load archived agent metadata
+    const archived = await this.getArchivedAgent(projectPath, archiveId)
+    if (!archived) {
+      throw new Error(`Archive not found: ${archiveId}`)
+    }
+
+    // Generate new branch name with -restored suffix to avoid conflicts
+    const timestamp = Date.now()
+    const originalBranch = archived.branch.replace(/^feature\//, '')
+    const newBranch = `${originalBranch}-restored-${timestamp}`
+
+    // Create new assignment with archived agent's configuration
+    const assignment = await this.createAssignment(projectPath, {
+      feature: archived.feature,
+      branch: newBranch,
+      prompt: archived.prompt || `Restored from archive: ${archived.feature}`,
+      tool: archived.tool,
+      model: archived.model,
+      mode: archived.mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
+    })
+
+    log.info(`Restored agent from archive ${archiveId} as ${assignment.agentId}`)
+
+    return assignment
   }
 
 }

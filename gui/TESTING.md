@@ -184,7 +184,7 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 4. Create a new agent worktree manually:
    ```bash
-   ./scripts/agents/setup.sh agent-new feature/agent-new/test
+   ./minions/bin/setup.sh agent-new feature/agent-new/test
    ```
 
 5. **Expected Result**:

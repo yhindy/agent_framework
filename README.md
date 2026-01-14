@@ -17,6 +17,8 @@ A lightweight framework for running multiple AI coding minions in parallel on an
 
 The getting started guide walks you through everything step-by-step!
 
+**Having issues?** Check the [Troubleshooting Guide](TROUBLESHOOTING.md) for common problems and solutions.
+
 ---
 
 ## Quick Reference
