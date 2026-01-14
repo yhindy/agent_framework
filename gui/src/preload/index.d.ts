@@ -81,6 +81,7 @@ declare const api: {
     startFreshSession: (agentId: string) => Promise<any>;
     getWorkflowConfig: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowSystemConfig>;
     getSubagentTypes: () => Promise<import('../main/services/types/WorkflowTypes').SubagentType[]>;
+    getAllWorkflows: () => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig[]>;
     getProjectWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').ProjectWorkflowConfig>;
     saveProjectWorkflow: (projectPath: string, config: import('../main/services/types/WorkflowTypes').ProjectWorkflowConfig) => Promise<void>;
     getActiveWorkflow: (projectPath: string) => Promise<import('../main/services/types/WorkflowTypes').WorkflowConfig>;

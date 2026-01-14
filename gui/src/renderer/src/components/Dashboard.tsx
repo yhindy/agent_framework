@@ -155,6 +155,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
 
   // Workflow editor state
   const [subagentTypes, setSubagentTypes] = useState<SubagentType[]>([])
+  const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowConfig[]>([])
   const [workflowEditMode, setWorkflowEditMode] = useState(false)
 
   // Keyboard shortcuts context
@@ -258,8 +259,12 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   useEffect(() => {
     const loadWorkflowData = async () => {
       try {
-        const types = await window.electronAPI.getSubagentTypes()
+        const [types, workflows] = await Promise.all([
+          window.electronAPI.getSubagentTypes(),
+          window.electronAPI.getAllWorkflows()
+        ])
         setSubagentTypes(types)
+        setAvailableWorkflows(workflows)
       } catch (error) {
         console.error('Failed to load workflow data:', error)
       }
@@ -597,11 +602,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       setFormData(prev => ({ ...prev, isSuper, workflow: null }))
     }
     setShowTypeSelection(false)
-  }
-
-  // Helper function to count steps in a workflow
-  const countSteps = (workflow: WorkflowConfig): number => {
-    return workflow.steps.length
   }
 
   // Prepare workflow for saving - creates a new ID for modified system workflows
@@ -1084,25 +1084,43 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                     </div>
                   )}
 
-                  {/* Workflow preview for Super Minions */}
-                  {formData.isSuper && formData.workflow && (
+                  {/* Workflow selector for Super Minions */}
+                  {formData.isSuper && (
                     <div className="form-group">
                       <label>Workflow</label>
-                      <div className="workflow-preview-card">
-                        <div className="workflow-preview-info">
-                          <span className="workflow-preview-name">{formData.workflow.name}</span>
-                          <span className="workflow-preview-count">
-                            {countSteps(formData.workflow)} steps
-                          </span>
-                        </div>
+                      <div className="workflow-selector-row">
+                        <select
+                          className="workflow-select"
+                          value={formData.workflow?.id || ''}
+                          onChange={(e) => {
+                            const selected = availableWorkflows.find(w => w.id === e.target.value)
+                            if (selected) {
+                              // Create a copy so edits don't affect the original
+                              setFormData(prev => ({
+                                ...prev,
+                                workflow: JSON.parse(JSON.stringify(selected))
+                              }))
+                            }
+                          }}
+                        >
+                          {availableWorkflows.map(w => (
+                            <option key={w.id} value={w.id}>
+                              {w.name} ({w.steps.length} steps)
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
                           className="edit-workflow-btn"
                           onClick={() => setWorkflowEditMode(true)}
+                          disabled={!formData.workflow}
                         >
-                          Edit Workflow
+                          Customize
                         </button>
                       </div>
+                      {formData.workflow?.description && (
+                        <div className="form-hint">{formData.workflow.description}</div>
+                      )}
                     </div>
                   )}
 
