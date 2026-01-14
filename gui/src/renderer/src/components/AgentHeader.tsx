@@ -11,8 +11,8 @@ export interface HeaderBadge {
 }
 
 interface AgentHeaderProps {
-  /** Icon to display (emoji) */
-  icon: string
+  /** Icon to display (React component or element) */
+  icon: ReactNode
   /** Main title text */
   title: string
   /** Type label shown above the title */

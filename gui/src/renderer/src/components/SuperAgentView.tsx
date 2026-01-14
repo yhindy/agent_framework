@@ -6,6 +6,7 @@ import TestEnvTerminal from './TestEnvTerminal'
 import TaskStatusCard from './TaskStatusCard'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
+import { CrownIcon, TerminalIcon, StopIcon, PlayIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from './icons'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
@@ -350,7 +351,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   return (
     <div className="super-agent-view">
       <AgentHeader
-        icon="👑"
+        icon={<CrownIcon size="md" />}
         title={extractBranchName(agent.branch) || agent.agentId}
         typeLabel="Super Minion"
         agentId={agent.agentId}
@@ -370,7 +371,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
             className={`unified-tab ${activeTab === 'orchestration' ? 'active' : ''}`}
             onClick={() => setActiveTab('orchestration')}
           >
-            <span className="tab-icon">👑</span>
+            <span className="tab-icon"><CrownIcon size="sm" /></span>
             <span className="tab-name">Orchestration</span>
           </div>
 
@@ -394,7 +395,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
                       handleStopTestEnv(cmd.id)
                     }}
                   >
-                    ⬛
+                    <StopIcon size="sm" />
                   </button>
                 ) : (
                   <button
@@ -404,7 +405,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
                       handleStartTestEnv(cmd.id)
                     }}
                   >
-                    ▶
+                    <PlayIcon size="sm" />
                   </button>
                 )}
               </div>
@@ -418,7 +419,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
               className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
               onClick={() => setActiveTab(terminalId)}
             >
-              <span className="tab-icon">⌨️</span>
+              <span className="tab-icon"><TerminalIcon size="sm" /></span>
               <span className="tab-name">Terminal {index + 1}</span>
               <button
                 className="tab-action close"
@@ -436,7 +437,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
             onClick={handleAddTerminal}
             title="Add new terminal"
           >
-            <span className="tab-icon">➕</span>
+            <span className="tab-icon"><PlusIcon size="sm" /></span>
           </div>
         </div>
 
@@ -482,7 +483,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
                 onClick={toggleTaskSidebar}
                 title={isTaskSidebarCollapsed ? 'Expand task sidebar' : 'Collapse task sidebar'}
               >
-                {isTaskSidebarCollapsed ? '◀' : '▶'}
+                {isTaskSidebarCollapsed ? <ChevronRightIcon size="sm" /> : <ChevronLeftIcon size="sm" />}
               </button>
               <div className="task-sidebar-header">
                 <h3>Tasks ({agent.taskInvocations?.length || 0})</h3>

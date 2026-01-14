@@ -3,6 +3,20 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ProjectPicker from './ProjectPicker'
 import MissionDropdown from './MissionDropdown'
 import { extractBranchName } from '../utils/branchUtils'
+import {
+  BotIcon,
+  CrownIcon,
+  HomeIcon,
+  ChevronRightIcon,
+  ChevronLeftIcon,
+  ChevronDownIcon,
+  WarningIcon,
+  SyncIcon,
+  PlusCircleIcon,
+  HourglassIcon,
+  CheckIcon,
+  XIcon
+} from './icons'
 import './Sidebar.css'
 
 interface AgentInfo {
@@ -434,10 +448,10 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   /**
    * Get the appropriate icon for agent type.
    */
-  const getAgentTypeIcon = (agent: AgentSession): string => {
-    if (agent.isSuperMinion) return '👑'
-    if (agent.isBaseBranchAgent) return '🏠'
-    return '🍌'
+  const getAgentTypeIcon = (agent: AgentSession): React.ReactNode => {
+    if (agent.isSuperMinion) return <CrownIcon size="sm" />
+    if (agent.isBaseBranchAgent) return <HomeIcon size="sm" />
+    return <BotIcon size="sm" />
   }
 
   /**
@@ -530,7 +544,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                   onClick={handleCollapseClick}
                   title="Toggle child agents"
                 >
-                  ▼
+                  <ChevronDownIcon size="sm" />
                 </span>
               ) : (
                 <span className="chevron-placeholder" aria-hidden="true"></span>
@@ -540,13 +554,13 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             {getAgentDisplayName(agent)}
             {hasTeleportFailure && (
               <div className="failure-badge-container">
-                <div className="failure-badge" title={`Failed to resume: ${teleportFailure.reason}`}>⚠</div>
+                <div className="failure-badge" title={`Failed to resume: ${teleportFailure.reason}`}><WarningIcon size="sm" /></div>
                 <div className="failure-actions">
                   <button className="retry-btn" title="Retry resuming session" onClick={handleRetryClick}>
-                    🔄
+                    <SyncIcon size="sm" />
                   </button>
                   <button className="start-fresh-btn" title="Start fresh session (abandon old session)" onClick={handleStartFreshClick}>
-                    🆕
+                    <PlusCircleIcon size="sm" />
                   </button>
                 </div>
               </div>
@@ -571,14 +585,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
         onClick={onToggleCollapse}
         title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
-        <span className="collapse-icon">{isCollapsed ? '▶' : '◀'}</span>
+        <span className="collapse-icon">{isCollapsed ? <ChevronRightIcon size="sm" /> : <ChevronLeftIcon size="sm" />}</span>
       </button>
       <div className="sidebar-nav">
         <div
           className={`nav-item ${isHomeActive ? 'active' : ''}`}
           onClick={() => handleNavigate('/workspace')}
         >
-          <span className="nav-icon">🏠</span>
+          <span className="nav-icon"><HomeIcon size="md" /></span>
           <span className="nav-label">Home</span>
         </div>
         <div className="dropdown-container">
@@ -631,7 +645,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     localStorage.setItem('lastSelectedProjectPath', project.path)
                   }}
                 >
-                  <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
+                  <span className="collapse-icon">{isCollapsed ? <ChevronRightIcon size="sm" /> : <ChevronDownIcon size="sm" />}</span>
                   <span className="project-name-sidebar">{project.name}</span>
                 </div>
                 <div
@@ -666,7 +680,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                         setOpenSubmenuProject(null)
                       }}
                     >
-                      🍌 New Minion
+                      <BotIcon size="sm" /> New Minion
                     </div>
                   </div>
                 </div>
@@ -695,7 +709,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     })
 
                     const renderTaskItem = (task: TaskInvocation, depth: number) => {
-                      const statusIcon = task.status === 'running' ? '⏳' : task.status === 'completed' ? '✓' : '✗'
+                      const statusIcon = task.status === 'running' ? <HourglassIcon size="xs" /> : task.status === 'completed' ? <CheckIcon size="xs" /> : <XIcon size="xs" />
                       const statusClass = task.status === 'running' ? 'running' : task.status === 'completed' ? 'completed' : 'failed'
                       return (
                         <div

@@ -18,27 +18,30 @@ describe('PlanApproval', () => {
   ]
 
   it('renders plans correctly', () => {
-    render(<PlanApproval plans={mockPlans} onApprove={() => {}} onReject={() => {}} />)
-    
+    const { container } = render(<PlanApproval plans={mockPlans} onApprove={() => {}} onReject={() => {}} />)
+
     expect(screen.getByText('Proposed Plans (1)')).toBeInTheDocument()
-    expect(screen.getByText('📋 fix-login')).toBeInTheDocument()
+    expect(screen.getByText('fix-login')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="clipboard-icon"]')).toBeInTheDocument()
     expect(screen.getByText('Fix login bug')).toBeInTheDocument()
     expect(screen.getByText('small')).toBeInTheDocument()
   })
 
   it('calls onApprove when approve button is clicked', () => {
     const handleApprove = vi.fn()
-    render(<PlanApproval plans={mockPlans} onApprove={handleApprove} onReject={() => {}} />)
-    
-    fireEvent.click(screen.getByText('✓ Approve'))
+    const { container } = render(<PlanApproval plans={mockPlans} onApprove={handleApprove} onReject={() => {}} />)
+
+    const approveButton = container.querySelector('.approve-btn')
+    fireEvent.click(approveButton!)
     expect(handleApprove).toHaveBeenCalledWith('plan-1')
   })
 
   it('calls onReject when reject button is clicked', () => {
     const handleReject = vi.fn()
-    render(<PlanApproval plans={mockPlans} onApprove={() => {}} onReject={handleReject} />)
-    
-    fireEvent.click(screen.getByText('✗ Reject'))
+    const { container } = render(<PlanApproval plans={mockPlans} onApprove={() => {}} onReject={handleReject} />)
+
+    const rejectButton = container.querySelector('.reject-btn')
+    fireEvent.click(rejectButton!)
     expect(handleReject).toHaveBeenCalledWith('plan-1')
   })
 

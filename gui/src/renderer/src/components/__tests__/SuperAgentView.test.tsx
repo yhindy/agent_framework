@@ -67,7 +67,7 @@ describe('SuperAgentView', () => {
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText('👑 master-coordination')).toBeInTheDocument()
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
     })
 
     // Check if details are displayed
@@ -93,7 +93,7 @@ describe('SuperAgentView', () => {
   })
 
   it('renders consolidated header with mission badge', async () => {
-    render(
+    const { container } = render(
       <TestWrapper initialEntries={['/workspace/super/super-1']}>
         <Routes>
           <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
@@ -102,7 +102,8 @@ describe('SuperAgentView', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('👑 master-coordination')).toBeInTheDocument()
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
+      expect(container.querySelector('[data-testid="crown-icon"]')).toBeInTheDocument()
       expect(screen.getByText('Tasks: 0')).toBeInTheDocument()
       expect(screen.getByText('Mission:')).toBeInTheDocument()
       expect(screen.getByText('Master feature')).toBeInTheDocument()
@@ -348,7 +349,7 @@ describe('SuperAgentView Task Sidebar Collapse', () => {
 
     await waitFor(() => {
       const expandButton = screen.getByTitle('Expand task sidebar')
-      expect(expandButton.textContent).toContain('◀')
+      expect(expandButton.querySelector('[data-testid="chevron-right-icon"]')).toBeInTheDocument()
     })
   })
 
@@ -363,7 +364,7 @@ describe('SuperAgentView Task Sidebar Collapse', () => {
 
     await waitFor(() => {
       const collapseButton = screen.getByTitle('Collapse task sidebar')
-      expect(collapseButton.textContent).toContain('▶')
+      expect(collapseButton.querySelector('[data-testid="chevron-left-icon"]')).toBeInTheDocument()
     })
   })
 

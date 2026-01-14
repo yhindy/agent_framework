@@ -1,24 +1,25 @@
-import React, { useState } from 'react'
+import React, { useState, ReactNode } from 'react'
 import './TaskStatusCard.css'
 import { TaskInvocation } from '../../../main/services/ClaudeSessionInfoService'
+import { HammerIcon, SearchIcon, ClipboardIcon, BugIcon, TerminalIcon } from './icons'
 
 interface TaskStatusCardProps {
   task: TaskInvocation
 }
 
-const PERSONA_ICONS: Record<string, string> = {
-  'general-purpose': '🔨',
-  'Explore': '🔍',
-  'Plan': '📋',
-  'debugger': '🐛',
-  'Bash': '⌨️'
+const PERSONA_ICONS: Record<string, ReactNode> = {
+  'general-purpose': <HammerIcon size="sm" />,
+  'Explore': <SearchIcon size="sm" />,
+  'Plan': <ClipboardIcon size="sm" />,
+  'debugger': <BugIcon size="sm" />,
+  'Bash': <TerminalIcon size="sm" />
 }
 
 const TaskStatusCard: React.FC<TaskStatusCardProps> = ({ task }) => {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const getPersonaIcon = (subagentType: string): string => {
-    return PERSONA_ICONS[subagentType] || '🔨'
+  const getPersonaIcon = (subagentType: string): ReactNode => {
+    return PERSONA_ICONS[subagentType] || <HammerIcon size="sm" />
   }
 
   const getStatusClass = (status: string): string => {

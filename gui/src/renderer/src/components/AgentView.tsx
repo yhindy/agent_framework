@@ -5,6 +5,7 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
+import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon } from './icons'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
@@ -444,7 +445,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
   return (
     <div className="agent-view">
       <AgentHeader
-        icon="🍌"
+        icon={<BotIcon size="md" />}
         title={extractBranchName(assignment?.branch) || agentId || 'Unknown'}
         typeLabel="Minion"
         agentId={agentId || ''}
@@ -459,7 +460,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
       {teleportFailure && (
         <div className="teleport-failure-banner">
           <div className="teleport-failure-content">
-            <div className="teleport-failure-icon">⚠</div>
+            <div className="teleport-failure-icon"><WarningIcon size="md" /></div>
             <div className="teleport-failure-message">
               <div className="teleport-failure-title">Failed to Resume Teleported Session</div>
               <div className="teleport-failure-reason">{teleportFailure.reason}</div>
@@ -492,7 +493,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
             className={`unified-tab ${activeTab === 'agent' ? 'active' : ''}`}
             onClick={() => setActiveTab('agent')}
           >
-            <span className="tab-icon">🍌</span>
+            <span className="tab-icon"><BotIcon size="sm" /></span>
             <span className="tab-name">
               {assignment?.tool === 'cursor' && !isRunning ? 'Cursor IDE' : 'Minion Terminal'}
             </span>
@@ -505,7 +506,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
               className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
               onClick={() => setActiveTab(terminalId)}
             >
-              <span className="tab-icon">⌨️</span>
+              <span className="tab-icon"><TerminalIcon size="sm" /></span>
               <span className="tab-name">Terminal {index + 1}</span>
               {plainTerminals.length > 1 && (
                 <button 
@@ -532,24 +533,24 @@ function AgentView({ activeProjects }: AgentViewProps) {
                 <span className="tab-name">{cmd.name}</span>
                 {cmd.port && <span className="tab-port">:{cmd.port}</span>}
                 {isRunning ? (
-                  <button 
+                  <button
                     className="tab-action stop"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleStopTestEnv(cmd.id)
                     }}
                   >
-                    ⬛
+                    <StopIcon size="sm" />
                   </button>
                 ) : (
-                  <button 
+                  <button
                     className="tab-action start"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleStartTestEnv(cmd.id)
                     }}
                   >
-                    ▶
+                    <PlayIcon size="sm" />
                   </button>
                 )}
               </div>
@@ -562,7 +563,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
             onClick={handleAddTerminal}
             title="Add new terminal"
           >
-            <span className="tab-icon">➕</span>
+            <span className="tab-icon"><PlusIcon size="sm" /></span>
           </div>
         </div>
 
@@ -570,7 +571,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
           {activeTab === 'agent' && (
             assignment?.tool === 'cursor' && !isRunning ? (
               <div className="placeholder">
-                <div className="placeholder-icon">🍌</div>
+                <div className="placeholder-icon"><BotIcon size="lg" /></div>
                 <div className="placeholder-text">
                   <p>This minion uses Cursor IDE.</p>
                   <p>Click "Open in Cursor" to start working.</p>

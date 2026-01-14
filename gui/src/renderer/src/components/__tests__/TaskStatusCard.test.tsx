@@ -46,30 +46,30 @@ describe('TaskStatusCard', () => {
   })
 
   it('renders running task correctly', () => {
-    render(<TaskStatusCard task={mockRunningTask} />)
+    const { container } = render(<TaskStatusCard task={mockRunningTask} />)
 
     expect(screen.getByText('Implement user authentication')).toBeInTheDocument()
     expect(screen.getByText('Running')).toBeInTheDocument()
     expect(screen.getByText('general-purpose')).toBeInTheDocument()
-    expect(screen.getByText('🔨')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="hammer-icon"]')).toBeInTheDocument()
   })
 
   it('renders completed task correctly', () => {
-    render(<TaskStatusCard task={mockCompletedTask} />)
+    const { container } = render(<TaskStatusCard task={mockCompletedTask} />)
 
     expect(screen.getByText('Explore codebase structure')).toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
     expect(screen.getByText('Explore')).toBeInTheDocument()
-    expect(screen.getByText('🔍')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="search-icon"]')).toBeInTheDocument()
   })
 
   it('renders failed task correctly', () => {
-    render(<TaskStatusCard task={mockFailedTask} />)
+    const { container } = render(<TaskStatusCard task={mockFailedTask} />)
 
     expect(screen.getByText('Run bash command')).toBeInTheDocument()
     expect(screen.getByText('Failed')).toBeInTheDocument()
     expect(screen.getByText('Bash')).toBeInTheDocument()
-    expect(screen.getByText('⌨️')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="terminal-icon"]')).toBeInTheDocument()
   })
 
   it('shows expand hint when task has result summary but is collapsed', () => {
@@ -112,9 +112,9 @@ describe('TaskStatusCard', () => {
       ...mockRunningTask,
       subagentType: 'custom-unknown-type'
     }
-    render(<TaskStatusCard task={customTask} />)
+    const { container } = render(<TaskStatusCard task={customTask} />)
 
-    expect(screen.getByText('🔨')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="hammer-icon"]')).toBeInTheDocument()
   })
 
   it('shows Plan icon for Plan subagent type', () => {
@@ -122,9 +122,9 @@ describe('TaskStatusCard', () => {
       ...mockRunningTask,
       subagentType: 'Plan'
     }
-    render(<TaskStatusCard task={planTask} />)
+    const { container } = render(<TaskStatusCard task={planTask} />)
 
-    expect(screen.getByText('📋')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="clipboard-icon"]')).toBeInTheDocument()
   })
 
   it('does not show expand hint when task has no result summary', () => {

@@ -116,7 +116,7 @@ describe('Sidebar Collapse', () => {
     )
 
     const collapseButton = screen.getByTitle('Expand sidebar')
-    expect(collapseButton.textContent).toContain('▶')
+    expect(collapseButton.querySelector('[data-testid="chevron-right-icon"]')).toBeInTheDocument()
   })
 
   it('shows correct icon when expanded', async () => {
@@ -134,7 +134,7 @@ describe('Sidebar Collapse', () => {
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
-    expect(collapseButton.textContent).toContain('◀')
+    expect(collapseButton.querySelector('[data-testid="chevron-left-icon"]')).toBeInTheDocument()
   })
 })
 
@@ -194,7 +194,7 @@ describe('Sidebar Integration', () => {
     const superItem = screen.getByText('super-1').closest('.agent-item')
     const leadingIcons = superItem?.querySelector('.agent-leading-icons')
     expect(leadingIcons).toBeInTheDocument()
-    expect(leadingIcons).toContainHTML('👑')
+    expect(leadingIcons?.querySelector('[data-testid="crown-icon"]')).toBeInTheDocument()
   })
 
   it('toggles children when super minion chevron is clicked', async () => {
@@ -1245,7 +1245,7 @@ describe('Sidebar icon alignment', () => {
     expect(leadingIcons?.querySelector('.collapse-chevron')).not.toBeInTheDocument()
   })
 
-  it('should render banana indicator for normal minions', async () => {
+  it('should render bot icon for normal minions', async () => {
     const mockAgents = [
       {
         id: 'normal-1',
@@ -1279,7 +1279,7 @@ describe('Sidebar icon alignment', () => {
     const typeIcon = normalItem?.querySelector('.agent-type-icon')
 
     expect(typeIcon).toBeInTheDocument()
-    expect(typeIcon?.textContent).toBe('🍌')
+    expect(typeIcon?.querySelector('[data-testid="bot-icon"]')).toBeInTheDocument()
   })
 
   it('should render correct icon for each agent type', async () => {
@@ -1331,23 +1331,23 @@ describe('Sidebar icon alignment', () => {
 
     await waitFor(() => {
       expect(screen.getByText('super-1')).toBeInTheDocument()
-      expect(screen.getByText(/\(Base\)/)).toBeInTheDocument()
+      expect(screen.getByText('Base')).toBeInTheDocument()
       expect(screen.getByText('normal-1')).toBeInTheDocument()
     })
 
-    // Super minion → 👑
+    // Super minion - crown icon
     const superItem = screen.getByText('super-1').closest('.agent-item')
     const superIcon = superItem?.querySelector('.agent-type-icon')
-    expect(superIcon?.textContent).toBe('👑')
+    expect(superIcon?.querySelector('[data-testid="crown-icon"]')).toBeInTheDocument()
 
-    // Base branch → 🏠
-    const baseItem = screen.getByText(/\(Base\)/).closest('.agent-item')
+    // Base branch - home icon
+    const baseItem = screen.getByText('Base').closest('.agent-item')
     const baseIcon = baseItem?.querySelector('.agent-type-icon')
-    expect(baseIcon?.textContent).toBe('🏠')
+    expect(baseIcon?.querySelector('[data-testid="home-icon"]')).toBeInTheDocument()
 
-    // Normal minion → 🍌
+    // Normal minion - bot icon
     const normalItem = screen.getByText('normal-1').closest('.agent-item')
     const normalIcon = normalItem?.querySelector('.agent-type-icon')
-    expect(normalIcon?.textContent).toBe('🍌')
+    expect(normalIcon?.querySelector('[data-testid="bot-icon"]')).toBeInTheDocument()
   })
 })

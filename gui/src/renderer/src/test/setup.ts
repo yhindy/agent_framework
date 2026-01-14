@@ -62,6 +62,11 @@ Object.defineProperty(window, 'electronAPI', {
     getProjects: vi.fn().mockResolvedValue([]),
     createSuperAssignment: vi.fn().mockResolvedValue({ agentId: 'super-agent-123' }),
     selectProject: vi.fn().mockResolvedValue(null),
+    onTeleportValidationFailed: vi.fn(() => vi.fn()),
+    onTeleportResumeFailed: vi.fn(() => vi.fn()),
+    validateTeleport: vi.fn().mockResolvedValue({ success: true }),
+    retryResumeAgent: vi.fn().mockResolvedValue(undefined),
+    startFreshSession: vi.fn().mockResolvedValue(undefined),
   }
 })
 
