@@ -5,6 +5,7 @@ export interface Snackbar {
   title: string
   messages: string[]
   rotationInterval?: number
+  autoDismiss?: number // Auto-dismiss after X milliseconds (0 = no auto-dismiss)
 }
 
 interface SnackbarContextType {
@@ -22,7 +23,16 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
 
   const addSnackbar = useCallback((snackbar: Omit<Snackbar, 'id'>) => {
     const id = `snackbar-${++snackbarIdCounter}`
-    setSnackbars((prev) => [...prev, { ...snackbar, id }])
+    const autoDismiss = snackbar.autoDismiss ?? 3000 // Default 3 seconds auto-dismiss
+    setSnackbars((prev) => [...prev, { ...snackbar, id, autoDismiss }])
+
+    // Auto-dismiss if enabled
+    if (autoDismiss > 0) {
+      setTimeout(() => {
+        setSnackbars((prev) => prev.filter((s) => s.id !== id))
+      }, autoDismiss)
+    }
+
     return id
   }, [])
 
