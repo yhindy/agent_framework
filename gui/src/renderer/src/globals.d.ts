@@ -117,6 +117,11 @@ declare global {
 
       // Migration APIs
       migrateProject: (projectPath: string) => Promise<any>
+
+      // Archive APIs
+      listArchivedAgents: (projectPath?: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent[]>
+      getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent | null>
+      restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').AgentInfo>
     }
   }
 }

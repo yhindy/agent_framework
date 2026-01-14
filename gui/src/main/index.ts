@@ -961,6 +961,15 @@ function setupIPC(): void {
     return services!.agent.getArchivedAgent(projectPath, archiveId)
   })
 
+  ipcMain.handle('archive:restore', async (_event, projectPath: string, archiveId: string) => {
+    if (!projectPath || !archiveId) {
+      throw new Error('Project path and archive ID are required')
+    }
+    const agent = await services!.agent.restoreArchivedAgent(projectPath, archiveId)
+    mainWindow?.webContents.send('agents:updated')
+    return agent
+  })
+
   // Test Environment handlers
   ipcMain.handle('testEnv:getConfig', async (_event, agentId?: string) => {
     let projectPath: string | null = null

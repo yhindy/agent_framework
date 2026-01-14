@@ -59,3 +59,6 @@ export {
   RefreshIcon,
   PlusCircleIcon
 } from './ActionIcons'
+
+// Archive icons
+export { ClockIcon } from './ArchiveIcons'

@@ -39,12 +39,7 @@ declare const api: {
     updateAssignment: (assignmentId: string, updates: any) => Promise<any>;
     createPullRequest: (assignmentId: string, autoCommit?: boolean) => Promise<any>;
     checkPullRequestStatus: (assignmentId: string) => Promise<any>;
-    detectPullRequest: (assignmentId: string, force?: boolean) => Promise<{
-        found: boolean;
-        prUrl?: string;
-        prStatus?: string;
-        createdAt?: string;
-    } | null>;
+    detectPullRequest: (assignmentId: string, force?: boolean) => Promise<any>;
     startPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
     stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
     stopAllPRPolling: (subscriberId: string) => Promise<any>;
@@ -58,9 +53,9 @@ declare const api: {
     onAgentResumedWork: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
     getClaudeSessionInfo: (agentId: string) => Promise<any>;
     onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
-    getSettings: () => Promise<import('../shared/types/settings').AppSettings>;
-    updateSettings: (updates: Partial<import('../shared/types/settings').AppSettings>) => Promise<import('../shared/types/settings').AppSettings>;
-    openFeedback: () => Promise<void>;
+    getSettings: () => Promise<any>;
+    updateSettings: (updates: any) => Promise<any>;
+    openFeedback: () => Promise<any>;
     getTestEnvConfig: (agentId?: string) => Promise<any>;
     getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any>;
     startTestEnv: (agentId: string, commandId?: string) => Promise<any>;
@@ -95,6 +90,7 @@ declare const api: {
     // Archive APIs
     listArchivedAgents: (projectPath?: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent[]>;
     getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').ArchivedAgent | null>;
+    restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../main/services/types/ProjectConfig').AgentInfo>;
 };
 export type ElectronAPI = typeof api;
 export {};
