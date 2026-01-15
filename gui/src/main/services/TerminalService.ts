@@ -173,8 +173,18 @@ export class TerminalService {
    * @returns true if tmux mode should be used for agent terminals
    */
   private shouldUseTmux(): boolean {
-    const terminalMode = this.settingsService?.getSettings()?.terminal?.terminalMode ?? 'tabs'
-    return terminalMode === 'tmux' && this.isTmuxAvailable()
+    const settings = this.settingsService?.getSettings()
+    const terminalMode = settings?.terminal?.terminalMode ?? 'tabs'
+    const tmuxAvailable = this.isTmuxAvailable()
+
+    log.debug('shouldUseTmux check', {
+      hasSettingsService: !!this.settingsService,
+      terminalMode,
+      tmuxAvailable,
+      result: terminalMode === 'tmux' && tmuxAvailable
+    })
+
+    return terminalMode === 'tmux' && tmuxAvailable
   }
 
   private generateSessionId(agentId: string, worktreePath: string): string {
@@ -799,15 +809,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
         log.debug(`Wrote tmux command script to ${scriptPath}`)
 
-        // Create tmux session and run the script
-        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} 'bash ${scriptPath}' Enter\r`)
+        // Create tmux session with two windows:
+        // Window 0 (default) - runs the agent command
+        // Window 1 "shell" - bare terminal for manual work (created with -d to not switch to it)
+        const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
+        terminal.write(`${tmuxCmd}\r`)
       } catch (err) {
         log.error('Failed to write command script, falling back to direct command', err)
         // Fallback: try direct command with escaping
         const escapedCommand = rawCommand
           .replace(/'/g, "'\\''")
           .replace(/\n/g, ' ')
-        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
+        // Create tmux session with two windows (fallback version, -d to not switch to shell window)
+        const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
+        terminal.write(`${tmuxCmd}\r`)
       }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
@@ -1117,6 +1132,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const session = this.terminals.get(agentId)
     if (session) {
       session.pty.resize(cols, rows)
+
+      // Notify tmux of the resize if using tmux mode
+      if (session.tmuxSession) {
+        try {
+          // Resize all windows in the session to match the new PTY size
+          // rows - 1 accounts for the tmux status bar
+          const adjustedRows = Math.max(1, rows - 1)
+          execSync(`tmux resize-window -t ${session.tmuxSession}:0 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
+          execSync(`tmux resize-window -t ${session.tmuxSession}:1 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
+        } catch {
+          // Session may not exist yet or tmux not available - ignore
+          log.debug(`Failed to resize tmux windows for ${session.tmuxSession}`)
+        }
+      }
     }
   }
 

@@ -321,9 +321,9 @@ describe('TerminalService Tmux Integration', () => {
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
 
-      // Should contain the tmux command with -t target for send-keys
+      // Should contain the tmux command with session name and send-keys
       expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
-      expect(firstWrite).toContain('send-keys -t minion-agent-1')
+      expect(firstWrite).toContain('send-keys')
 
       // Should reference the script file, not inline command
       expect(firstWrite).toContain('.minion-cmd.sh')
@@ -460,5 +460,151 @@ describe('Plain Terminal with Tmux Mode', () => {
     expect(pty.spawn).toHaveBeenCalled()
     // Plain terminals don't write any commands to PTY (they just open a shell)
     expect(mockPty.write).not.toHaveBeenCalled()
+  })
+})
+
+describe('TerminalService resize with tmux', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(createMockAgentService())
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  it('notifies tmux via resize-window when resizing session with tmuxSession', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Start agent in tmux mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Clear previous calls from startAgent/isTmuxAvailable
+    vi.mocked(execSync).mockClear()
+    vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+
+    // Resize the terminal
+    terminalService.resize('agent-1', 120, 40)
+
+    // Should have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+
+    // Should have called tmux resize-window for both windows (rows - 1 for status bar)
+    expect(execSync).toHaveBeenCalledWith(
+      'tmux resize-window -t minion-agent-1:0 -x 120 -y 39 2>/dev/null || true',
+      { encoding: 'utf8' }
+    )
+    expect(execSync).toHaveBeenCalledWith(
+      'tmux resize-window -t minion-agent-1:1 -x 120 -y 39 2>/dev/null || true',
+      { encoding: 'utf8' }
+    )
+  })
+
+  it('does NOT call tmux resize-window when resizing session without tmuxSession (tabs mode)', async () => {
+    // tmux is available but we use tabs mode
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Change settings to tabs mode
+    mockSettingsService.getSettings.mockReturnValue({
+      terminal: { terminalMode: 'tabs' }
+    })
+
+    // Start agent in tabs mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Clear previous calls from startAgent/isTmuxAvailable
+    vi.mocked(execSync).mockClear()
+
+    // Resize the terminal
+    terminalService.resize('agent-1', 120, 40)
+
+    // Should have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+
+    // Should NOT have called tmux resize-window (no tmux session)
+    expect(execSync).not.toHaveBeenCalled()
+  })
+
+  it('silently handles tmux resize-window failure', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Start agent in tmux mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Make resize-window fail (e.g., session doesn't exist yet)
+    vi.mocked(execSync).mockClear()
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('no server running')
+    })
+
+    // Resize should not throw
+    expect(() => terminalService.resize('agent-1', 120, 40)).not.toThrow()
+
+    // Should still have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+  })
+})
+
+describe('TerminalService tmux two windows', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(createMockAgentService())
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  it('creates two tmux windows: agent (window 0) and shell (window 1, detached)', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Get the tmux command that was written
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+    const tmuxCommand = writeCalls[0][0]
+
+    // Should create a new window named "shell" with -d flag (detached, doesn't switch focus)
+    expect(tmuxCommand).toContain('new-window -d -n shell')
+
+    // Should NOT have select-window (using -d flag instead)
+    expect(tmuxCommand).not.toContain('select-window')
+  })
+
+  it('creates shell window after agent window in tmux command order', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    const tmuxCommand = mockPty.write.mock.calls[0][0]
+
+    // The order should be: new-session -> send-keys (agent command) -> new-window -d
+    const newSessionIndex = tmuxCommand.indexOf('new-session')
+    const sendKeysIndex = tmuxCommand.indexOf('send-keys')
+    const newWindowIndex = tmuxCommand.indexOf('new-window -d -n shell')
+
+    expect(newSessionIndex).toBeLessThan(sendKeysIndex)
+    expect(sendKeysIndex).toBeLessThan(newWindowIndex)
   })
 })
