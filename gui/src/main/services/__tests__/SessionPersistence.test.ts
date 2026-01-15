@@ -48,7 +48,8 @@ describe('Session Persistence', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY

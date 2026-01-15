@@ -141,22 +141,16 @@ export class TerminalService {
   /**
    * Kill a tmux session if it exists.
    *
-   * Called during:
-   * - Agent stop (stopAgent method)
-   * - Agent teardown (teardown.sh also handles this as a fallback)
-   * - App cleanup (cleanup method)
-   *
-   * Silently ignores if the session doesn't exist or tmux is not available.
+   * Called during agent stop, teardown, and app cleanup.
+   * Silently ignores if the session doesn't exist or tmux is unavailable.
    */
   killTmuxSession(agentId: string): void {
     const sessionName = this.getTmuxSessionName(agentId)
 
     try {
-      // kill-session exits with error if session doesn't exist, which we catch
       execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
       log.debug(`Killed tmux session: ${sessionName}`)
     } catch {
-      // Session doesn't exist or tmux not available - ignore
       log.debug(`Tmux session ${sessionName} does not exist or already killed`)
     }
   }
@@ -357,7 +351,81 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       this.agentService.updateAgentInfo(worktreePath, updates)
     } catch (error) {
       log.error('Failed to update agent info', error)
+      throw error
     }
+  }
+
+  /**
+   * Safely dispose of a resource with error suppression.
+   * Used for cleanup operations where failures should not propagate.
+   */
+  private safeDispose(disposeFn: () => void, resourceName: string, context: string): void {
+    try {
+      disposeFn()
+    } catch (error) {
+      log.debug(`Failed to dispose ${resourceName} for ${context}`, error)
+    }
+  }
+
+  /**
+   * Safely send IPC message with error suppression.
+   * Used in cleanup paths where IPC failures should not propagate.
+   */
+  private safeSendIPC(channel: string, ...args: unknown[]): void {
+    try {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, ...args)
+      }
+    } catch (error) {
+      log.debug(`Failed to send IPC on ${channel}`, error)
+    }
+  }
+
+  /**
+   * Update agent info and notify UI on success.
+   * Logs error on failure without throwing.
+   */
+  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>): Promise<void> {
+    try {
+      await this.updateAgentInfo(worktreePath, updates)
+      this.safeSendIPC('agents:updated')
+    } catch (error) {
+      log.error('Failed to update agent info', error)
+    }
+  }
+
+  /**
+   * Clean up all resources for a terminal session.
+   * Safely disposes idle detector, polling intervals, tmux sessions, and PTY.
+   */
+  private cleanupTerminalSession(agentId: string, session: TerminalSession, tool: string, effectiveSessionId?: string): void {
+    const { idleDetector, statePollingInterval, tmuxSession, pty } = session
+
+    this.safeDispose(() => idleDetector?.dispose(), 'idle detector', agentId)
+    this.safeDispose(() => statePollingInterval && clearInterval(statePollingInterval), 'polling interval', agentId)
+
+    if (tool === 'claude' && effectiveSessionId) {
+      this.safeDispose(
+        () => this.claudeSessionInfoService?.unwatchSession(effectiveSessionId),
+        'session watcher',
+        agentId
+      )
+    }
+
+    if (tmuxSession) {
+      this.killTmuxSession(agentId)
+    }
+
+    this.safeDispose(() => pty.kill(), 'PTY', agentId)
+  }
+
+  /**
+   * Clean up a plain terminal session.
+   * Safely disposes idle detector and PTY.
+   */
+  private cleanupPlainTerminalSession(terminalId: string, session: PlainTerminalSession): void {
+    this.safeDispose(() => session.idleDetector?.dispose(), 'idle detector', terminalId)
+    this.safeDispose(() => session.pty.kill(), 'PTY', terminalId)
   }
 
   // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
@@ -616,9 +684,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
             displayName = `${projectName}: ${branchSuffix}`
 
-            this.updateAgentInfo(worktreePath, { displayBranchName: detectedBranch })
-              .then(() => this.mainWindow.webContents.send('agents:updated'))
-              .catch(err => log.error('Failed to update branch name', err))
+            this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch })
           } catch (err) {
             // Silently ignore errors - branch detection is optional
           }
@@ -631,35 +697,33 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
       // Handle state transition and persist updates
       const handleStateTransition = (newState: 'working' | 'waiting', previousState: 'working' | 'waiting' | 'unknown'): void => {
-        this.mainWindow.webContents.send('agent:stateChanged', agentId, newState)
+        this.safeSendIPC('agent:stateChanged', agentId, newState)
 
         if (newState === 'waiting') {
-          this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+          this.safeSendIPC('agent:waitingForInput', agentId, 'Claude is waiting for input')
           this.notificationService?.notify({
             title: 'Input Required',
             body: `${displayName} is waiting for your input`,
             agentId
           })
-          this.updateAgentInfo(worktreePath, {
+          this.updateAgentInfoAndNotify(worktreePath, {
             isWaitingForInput: true,
             claudeState: 'waiting',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: new Date().toISOString()
-          }).then(() => this.mainWindow.webContents.send('agents:updated'))
-            .catch(err => log.error('Failed to update agent info', err))
+          })
         } else {
           log.debug(`${agentId} is working`)
           if (previousState === 'waiting') {
             this.notificationService?.clearCooldown(agentId)
           }
-          this.mainWindow.webContents.send('agent:resumedWork', agentId)
-          this.updateAgentInfo(worktreePath, {
+          this.safeSendIPC('agent:resumedWork', agentId)
+          this.updateAgentInfoAndNotify(worktreePath, {
             isWaitingForInput: false,
             claudeState: 'working',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: undefined
-          }).then(() => this.mainWindow.webContents.send('agents:updated'))
-            .catch(err => log.error('Failed to update agent info', err))
+          })
         }
       }
 
@@ -685,7 +749,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             .join('|')
           if (currentHash !== lastTaskHash) {
             lastTaskHash = currentHash
-            this.mainWindow.webContents.send('agents:updated')
+            this.safeSendIPC('agents:updated')
           }
         }
       }
@@ -741,22 +805,19 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         },
         {
           onWaitingForInput: (_context: string) => {
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Waiting for input')
-            // Send desktop notification
+            this.safeSendIPC('agent:waitingForInput', agentId, 'Waiting for input')
             this.notificationService?.notify({
               title: 'Input Required',
               body: `${displayName} is waiting for your input`,
               agentId
             })
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: true
-            }).catch(err => log.error('Failed to update agent info', err))
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: true })
+              .catch(err => log.error('Failed to update agent info', err))
           },
           onResumedWork: () => {
-            this.mainWindow.webContents.send('agent:resumedWork', agentId)
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: false
-            }).catch(err => log.error('Failed to update agent info', err))
+            this.safeSendIPC('agent:resumedWork', agentId)
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: false })
+              .catch(err => log.error('Failed to update agent info', err))
           }
         }
       )
@@ -856,32 +917,22 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }
     }
 
-    // Handle output
     terminal.onData((data) => {
       this.handleOutput(agentId, data)
     })
 
     terminal.onExit((data) => {
-      const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
-      log.info(`Terminal exited for ${agentId} - ${exitInfo}`)
+      log.info(`Terminal exited for ${agentId} - ${data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'}`)
 
-      // Clean up resources
-      session.idleDetector?.dispose()
-      if (session.statePollingInterval) {
-        clearInterval(session.statePollingInterval)
-      }
-      if (tool === 'claude' && effectiveSessionId) {
-        this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
-      }
+      this.cleanupTerminalSession(agentId, session, tool, effectiveSessionId)
 
-      // Mark Claude session as inactive
-      if (tool === 'claude' && worktreePath) {
+      if (tool === 'claude') {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
           .catch(err => log.error('Failed to mark session inactive', err))
       }
 
       this.terminals.delete(agentId)
-      this.mainWindow.webContents.send('agents:updated')
+      this.safeSendIPC('agents:updated')
     })
   }
 
@@ -1004,119 +1055,86 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const session = this.terminals.get(agentId)
     if (!session) return
 
-    // Send raw data to renderer for terminal display
-    this.mainWindow.webContents.send('terminal:output', agentId, data)
+    this.safeSendIPC('terminal:output', agentId, data)
 
-    // Check for cloud session ID in output (for teleport support)
-    // Pattern: https://claude.ai/code/session_xxx or --teleport session_xxx
     const stripped = stripAnsi(data)
     this.detectAndStoreCloudSessionId(session, stripped)
-    if ((session as any)._attemptingResume && (
-      stripped.includes('Session not found') ||
-      stripped.includes('Could not resume') ||
-      stripped.includes('Error resuming session')
-    )) {
-      log.warn(`Resume failed for ${agentId}, attempting fresh start...`)
 
-      // Mark that we're not resuming anymore
-      ;(session as any)._attemptingResume = false
+    if (this.handleResumeFailure(session, agentId, stripped)) return
 
-      // Clear session state
-      if (session.worktreePath) {
-        this.updateAgentInfo(session.worktreePath, {
-          claudeSessionActive: false,
-          claudeSessionId: undefined
-        }).catch(err => log.error('Failed to clear session', err))
-      }
-
-      // Kill current PTY and restart fresh
-      session.idleDetector?.dispose()
-      session.pty.kill()
-      this.terminals.delete(agentId)
-
-      // Restart without resume (use stored values)
-      if (session.projectPath) {
-        this.startAgent(
-          session.projectPath,
-          agentId,
-          session.tool,
-          session.mode,
-          session.prompt,
-          session.model,
-          session.yolo
-        ).catch(err => log.error(`Failed to restart agent ${agentId}`, err))
-      }
-
-      return
-    }
-
-    // Delegate idle detection to IdleDetector (if present)
     session.idleDetector?.processOutput(data)
   }
 
   /**
+   * Handle resume failure detection and recovery.
+   * Returns true if resume failure was detected and handled.
+   */
+  private handleResumeFailure(session: TerminalSession, agentId: string, strippedOutput: string): boolean {
+    if (!(session as any)._attemptingResume) return false
+
+    const resumeFailurePatterns = ['Session not found', 'Could not resume', 'Error resuming session']
+    const hasFailure = resumeFailurePatterns.some(pattern => strippedOutput.includes(pattern))
+
+    if (!hasFailure) return false
+
+    log.warn(`Resume failed for ${agentId}, attempting fresh start...`)
+    ;(session as any)._attemptingResume = false
+
+    if (session.worktreePath) {
+      this.updateAgentInfo(session.worktreePath, {
+        claudeSessionActive: false,
+        claudeSessionId: undefined
+      }).catch(err => log.error('Failed to clear session', err))
+    }
+
+    this.safeDispose(() => session.idleDetector?.dispose(), 'idle detector', agentId)
+    this.safeDispose(() => session.pty.kill(), 'PTY', agentId)
+    this.terminals.delete(agentId)
+
+    if (session.projectPath) {
+      this.startAgent(
+        session.projectPath,
+        agentId,
+        session.tool,
+        session.mode,
+        session.prompt,
+        session.model,
+        session.yolo
+      ).catch(err => log.error(`Failed to restart agent ${agentId}`, err))
+    }
+
+    return true
+  }
+
+  /**
    * Detect cloud session ID from Claude CLI output and store it in agent info.
-   * This enables the "Teleport to Cloud" feature by capturing the session ID
-   * when Claude outputs messages like:
-   *   - https://claude.ai/code/session_01CVbxtiJWp387FoCSvAiS2B
-   *   - --teleport session_01CVbxtiJWp387FoCSvAiS2B
+   * Enables "Teleport to Cloud" by capturing session_xxx from CLI output.
    */
   private detectAndStoreCloudSessionId(session: TerminalSession, strippedOutput: string): void {
-    // Only check for cloud session IDs for Claude tool
     if (session.tool !== 'claude') return
 
-    // Pattern to match cloud session ID from various contexts:
-    // - URL: https://claude.ai/code/session_xxx
-    // - CLI flag: --teleport session_xxx
-    // - Plain mention: session_xxx
-    const cloudSessionPattern = /session_[a-zA-Z0-9]+/g
-    const matches = strippedOutput.match(cloudSessionPattern)
+    const matches = strippedOutput.match(/session_[a-zA-Z0-9]+/g)
+    if (!matches?.length) return
 
-    if (!matches || matches.length === 0) return
-
-    // Use the first match found
     const cloudSessionId = matches[0]
 
-    // Read current agent info to check if we need to update
-    this.readAgentInfo(session.worktreePath).then((agentInfo) => {
-      // Don't overwrite if cloudSessionId is already set (e.g., from teleport)
-      // This prevents conversation history mentioning other session IDs from overwriting the correct one
-      if (agentInfo?.cloudSessionId) {
-        return // Already has a cloud session ID, don't overwrite
-      }
+    this.readAgentInfo(session.worktreePath)
+      .then(async (agentInfo) => {
+        if (agentInfo?.cloudSessionId) return
 
-      log.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
-
-      this.updateAgentInfo(session.worktreePath, {
-        cloudSessionId
-      }).then(() => {
-        // Broadcast update so UI can refresh (enables Teleport to Cloud button)
-        this.mainWindow.webContents.send('agents:updated')
-      }).catch((err) => {
-        log.error('Failed to store cloud session ID', err)
+        log.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+        await this.updateAgentInfoAndNotify(session.worktreePath, { cloudSessionId })
       })
-    }).catch((err) => {
-      log.error('Failed to read agent info for cloud session detection', err)
-    })
+      .catch(err => log.error('Failed to detect/store cloud session ID', err))
   }
 
   stopAgent(agentId: string): void {
     const session = this.terminals.get(agentId)
     if (!session) return
 
-    session.idleDetector?.dispose()
-    if (session.statePollingInterval) {
-      clearInterval(session.statePollingInterval)
-    }
-
-    // Kill tmux session if it exists
-    if (session.tmuxSession) {
-      this.killTmuxSession(agentId)
-    }
-
-    session.pty.kill()
+    this.cleanupTerminalSession(agentId, session, session.tool)
     this.terminals.delete(agentId)
-    this.mainWindow.webContents.send('agents:updated')
+    this.safeSendIPC('agents:updated')
   }
 
   sendInput(agentId: string, data: string): void {
@@ -1130,31 +1148,42 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
   resize(agentId: string, cols: number, rows: number): void {
     const session = this.terminals.get(agentId)
-    if (session) {
-      session.pty.resize(cols, rows)
+    if (!session) return
 
-      // Notify tmux of the resize if using tmux mode
-      if (session.tmuxSession) {
-        try {
-          // Resize all windows in the session to match the new PTY size
-          // rows - 1 accounts for the tmux status bar
-          const adjustedRows = Math.max(1, rows - 1)
-          execSync(`tmux resize-window -t ${session.tmuxSession}:0 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
-          execSync(`tmux resize-window -t ${session.tmuxSession}:1 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
-        } catch {
-          // Session may not exist yet or tmux not available - ignore
-          log.debug(`Failed to resize tmux windows for ${session.tmuxSession}`)
-        }
-      }
+    session.pty.resize(cols, rows)
+
+    if (session.tmuxSession) {
+      this.resizeTmuxWindows(session.tmuxSession, cols, rows)
+    }
+  }
+
+  private resizeTmuxWindows(sessionName: string, cols: number, rows: number): void {
+    try {
+      const adjustedRows = Math.max(1, rows - 1)
+      execSync(`tmux resize-window -t ${sessionName}:0 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
+      execSync(`tmux resize-window -t ${sessionName}:1 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
+    } catch {
+      log.debug(`Failed to resize tmux windows for ${sessionName}`)
     }
   }
 
   cleanup(): void {
-    for (const [agentId, _session] of this.terminals) {
-      this.stopAgent(agentId)
+    for (const [agentId, session] of this.terminals) {
+      try {
+        this.cleanupTerminalSession(agentId, session, session.tool)
+        this.terminals.delete(agentId)
+      } catch (error) {
+        log.error(`Cleanup failed for agent ${agentId}`, error)
+      }
     }
-    for (const [terminalId, _session] of this.plainTerminals) {
-      this.stopPlainTerminal(terminalId)
+
+    for (const [terminalId, session] of this.plainTerminals) {
+      try {
+        this.cleanupPlainTerminalSession(terminalId, session)
+        this.plainTerminals.delete(terminalId)
+      } catch (error) {
+        log.error(`Cleanup failed for plain terminal ${terminalId}`, error)
+      }
     }
   }
 
@@ -1229,10 +1258,10 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       },
       {
         onWaitingForInput: (_context: string) => {
-          this.mainWindow.webContents.send('plainTerminal:waitingForInput', fullTerminalId, 'Terminal is waiting for input')
+          this.safeSendIPC('plainTerminal:waitingForInput', fullTerminalId, 'Terminal is waiting for input')
         },
         onResumedWork: () => {
-          this.mainWindow.webContents.send('plainTerminal:resumedWork', fullTerminalId)
+          this.safeSendIPC('plainTerminal:resumedWork', fullTerminalId)
         }
       }
     )
@@ -1245,27 +1274,23 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     }
     this.plainTerminals.set(fullTerminalId, session)
 
-    // Handle output
     terminal.onData((data) => {
-      this.mainWindow.webContents.send('plainTerminal:output', fullTerminalId, data)
-      // Delegate idle detection to IdleDetector
+      this.safeSendIPC('plainTerminal:output', fullTerminalId, data)
       idleDetector.processOutput(data)
     })
 
-    // Handle exit
     terminal.onExit(() => {
-      idleDetector.dispose()
+      this.cleanupPlainTerminalSession(fullTerminalId, session)
       this.plainTerminals.delete(fullTerminalId)
     })
   }
 
   stopPlainTerminal(terminalId: string): void {
     const session = this.plainTerminals.get(terminalId)
-    if (session) {
-      session.idleDetector?.dispose()
-      session.pty.kill()
-      this.plainTerminals.delete(terminalId)
-    }
+    if (!session) return
+
+    this.cleanupPlainTerminalSession(terminalId, session)
+    this.plainTerminals.delete(terminalId)
   }
 
   sendPlainInput(terminalId: string, data: string): void {
@@ -1330,71 +1355,76 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   async retryResumeSession(projectPath: string, agentId: string): Promise<void> {
     const worktreePath = this.getWorktreePath(projectPath, agentId)
     const agentInfo = await this.getAgentInfoOrThrow(worktreePath)
-
     const resumeAttempts = agentInfo.resumeAttempts || 0
-    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
-    // Check if max attempts reached
     if (resumeAttempts >= this.MAX_RESUME_ATTEMPTS) {
-      const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
-      log.error(failureMessage)
-
-      if (this.agentService) {
-        await this.agentService.markAgentAsFailed(worktreePath, failureMessage)
-      }
-
-      this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)
-      this.mainWindow.webContents.send('agent:retryFailed', agentId, {
-        reason: failureMessage,
-        attempts: resumeAttempts
-      })
-
-      throw new Error(failureMessage)
+      await this.handleMaxRetriesReached(worktreePath, agentId, projectPath, agentInfo)
+      throw new Error(`Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached`)
     }
 
-    // Calculate exponential backoff delay: 2^attempt * 1000ms
+    await this.attemptResumeWithBackoff(projectPath, agentId, worktreePath, agentInfo, resumeAttempts)
+  }
+
+  private async handleMaxRetriesReached(worktreePath: string, agentId: string, projectPath: string, agentInfo: AgentInfo): Promise<void> {
+    const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
+    log.error(failureMessage)
+
+    await this.agentService?.markAgentAsFailed(worktreePath, failureMessage)
+
+    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
+    this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)
+    this.safeSendIPC('agent:retryFailed', agentId, {
+      reason: failureMessage,
+      attempts: this.MAX_RESUME_ATTEMPTS
+    })
+  }
+
+  private async attemptResumeWithBackoff(projectPath: string, agentId: string, worktreePath: string, agentInfo: AgentInfo, resumeAttempts: number): Promise<void> {
     const currentAttempt = resumeAttempts + 1
     const delayMs = Math.pow(2, resumeAttempts) * 1000
+    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
     log.info(`Retrying resume for ${agentId}, attempt ${currentAttempt}/${this.MAX_RESUME_ATTEMPTS}, delay: ${delayMs}ms`)
 
-    // Update agent info with new attempt count
     await this.updateAgentInfo(worktreePath, {
       resumeAttempts: currentAttempt,
       lastResumeAttempt: new Date().toISOString()
     })
 
-    // Notify UI and desktop
-    this.mainWindow.webContents.send('agent:retryingResume', agentId, {
+    this.safeSendIPC('agent:retryingResume', agentId, {
       attempt: currentAttempt,
       maxAttempts: this.MAX_RESUME_ATTEMPTS,
       delayMs
     })
     this.notificationService?.notifySessionResumeRetrying(displayName, currentAttempt, this.MAX_RESUME_ATTEMPTS)
 
-    // Wait for backoff delay
     await new Promise(resolve => setTimeout(resolve, delayMs))
 
     try {
       await this.startAgentFromInfo(projectPath, agentId, agentInfo)
-
-      // Success - clear failure state
-      await this.updateAgentInfo(worktreePath, {
-        failureReason: undefined,
-        resumeAttempts: 0,
-        claudeSessionActive: true
-      })
-
-      this.notificationService?.notifySessionResumeSuccess(agentId, displayName)
-      this.mainWindow.webContents.send('agent:retrySuccess', agentId)
-      this.mainWindow.webContents.send('agents:updated')
+      await this.handleResumeSuccess(worktreePath, agentId, displayName)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      log.error(`Retry ${currentAttempt} failed for ${agentId}`, errorMessage)
-
-      await this.updateAgentInfo(worktreePath, { failureReason: errorMessage })
+      await this.handleResumeError(worktreePath, agentId, currentAttempt, error)
       throw error
     }
+  }
+
+  private async handleResumeSuccess(worktreePath: string, agentId: string, displayName: string): Promise<void> {
+    await this.updateAgentInfo(worktreePath, {
+      failureReason: undefined,
+      resumeAttempts: 0,
+      claudeSessionActive: true
+    })
+
+    this.notificationService?.notifySessionResumeSuccess(agentId, displayName)
+    this.safeSendIPC('agent:retrySuccess', agentId)
+    this.safeSendIPC('agents:updated')
+  }
+
+  private async handleResumeError(worktreePath: string, agentId: string, currentAttempt: number, error: unknown): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error(`Retry ${currentAttempt} failed for ${agentId}`, errorMessage)
+    await this.updateAgentInfo(worktreePath, { failureReason: errorMessage })
   }
 
   /**
@@ -1407,7 +1437,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     log.info(`Starting fresh session for ${agentId}`)
 
-    // Clear all session-related state
     await this.updateAgentInfo(worktreePath, {
       claudeSessionId: undefined,
       cloudSessionId: undefined,
@@ -1420,7 +1449,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     await this.startAgentFromInfo(projectPath, agentId, agentInfo)
 
-    this.mainWindow.webContents.send('agent:freshSessionStarted', agentId)
-    this.mainWindow.webContents.send('agents:updated')
+    this.safeSendIPC('agent:freshSessionStarted', agentId)
+    this.safeSendIPC('agents:updated')
   }
 }
