@@ -112,3 +112,8 @@ export const CURSOR_CLI_MODEL_DISPLAY_NAMES: Record<CursorCLIModel, string> = {
   'gpt-5.1-codex-max-high': 'GPT 5.1 Codex Max High',
   grok: 'Grok'
 }
+
+export const TERMINAL_MODE_DISPLAY_NAMES: Record<TerminalMode, string> = {
+  tmux: 'Tmux (recommended)',
+  tabs: 'Tabs (legacy)'
+}

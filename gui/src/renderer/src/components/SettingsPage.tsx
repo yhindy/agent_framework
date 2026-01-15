@@ -4,7 +4,8 @@ import {
   DEFAULT_SETTINGS,
   TOOL_DISPLAY_NAMES,
   CLAUDE_MODEL_DISPLAY_NAMES,
-  CURSOR_CLI_MODEL_DISPLAY_NAMES
+  CURSOR_CLI_MODEL_DISPLAY_NAMES,
+  TERMINAL_MODE_DISPLAY_NAMES
 } from '../../../shared/types/settings'
 import WorkflowSettings from './WorkflowSettings'
 import './SettingsPage.css'
@@ -48,6 +49,7 @@ function SettingsPage(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [tmuxAvailable, setTmuxAvailable] = useState<boolean | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -63,6 +65,9 @@ function SettingsPage(): JSX.Element {
       }
     }
     loadSettings()
+
+    // Check tmux availability
+    window.electronAPI.checkTmuxAvailable().then(setTmuxAvailable).catch(() => setTmuxAvailable(false))
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
@@ -128,6 +133,16 @@ function SettingsPage(): JSX.Element {
     updateSettings((prev) => ({
       ...prev,
       defaultAgent: { ...prev.defaultAgent, [key]: value }
+    }))
+  }
+
+  function updateTerminal<K extends keyof AppSettings['terminal']>(
+    key: K,
+    value: AppSettings['terminal'][K]
+  ): void {
+    updateSettings((prev) => ({
+      ...prev,
+      terminal: { ...prev.terminal, [key]: value }
     }))
   }
 
@@ -318,6 +333,35 @@ function SettingsPage(): JSX.Element {
                 </div>
               </label>
             </div>
+          </div>
+        </section>
+
+        {/* Terminal Section */}
+        <section className="settings-section">
+          <h2 className="section-title">Terminal</h2>
+          <div className="settings-card">
+            <SettingSelect
+              label="Terminal mode"
+              value={settings.terminal?.terminalMode || 'tmux'}
+              options={TERMINAL_MODE_DISPLAY_NAMES}
+              onChange={(mode) => updateTerminal('terminalMode', mode)}
+            />
+            <div className="setting-item">
+              <div className="setting-text">
+                <span className="setting-description">
+                  {settings.terminal?.terminalMode === 'tmux'
+                    ? 'Agent terminals run inside tmux sessions. Use Ctrl+B for tmux commands.'
+                    : 'Agent terminals use traditional GUI tabs.'}
+                </span>
+              </div>
+            </div>
+            {settings.terminal?.terminalMode === 'tmux' && tmuxAvailable === false && (
+              <div className="setting-item">
+                <div className="setting-warning">
+                  ⚠️ tmux is not installed. Will automatically fall back to tabs mode.
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

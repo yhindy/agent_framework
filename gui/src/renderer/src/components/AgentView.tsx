@@ -59,7 +59,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [terminalCounter, setTerminalCounter] = useState(1)
   const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
-  const [isTmuxMode, setIsTmuxMode] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
@@ -92,24 +91,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
     enabled: assignment?.status === 'pr_open' || false
   })
-
-  // Check if tmux mode is enabled (settings + availability)
-  useEffect(() => {
-    async function checkTmuxMode(): Promise<void> {
-      try {
-        const [settings, tmuxAvailable] = await Promise.all([
-          window.electronAPI.getSettings(),
-          window.electronAPI.checkTmuxAvailable()
-        ])
-        const terminalMode = settings?.terminal?.terminalMode || 'tabs'
-        setIsTmuxMode(terminalMode === 'tmux' && tmuxAvailable)
-      } catch (error) {
-        console.error('Failed to check tmux mode:', error)
-        setIsTmuxMode(false)
-      }
-    }
-    checkTmuxMode()
-  }, [])
 
   useEffect(() => {
     if (!agentId) return
