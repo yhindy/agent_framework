@@ -43,7 +43,8 @@ describe('TerminalService Input Detection', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -226,7 +227,8 @@ describe('PlainTerminal Detection', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -384,7 +386,8 @@ describe('TerminalService Model Handling', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -509,7 +512,7 @@ describe('TerminalService Cloud Session ID Detection', () => {
 
   it('stores cloudSessionId when teleporting', async () => {
     const mockWebContents = { send: vi.fn() }
-    const mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    const mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     const mockPty = {
       write: vi.fn(),
@@ -555,7 +558,7 @@ describe('TerminalService Cloud Session ID Detection', () => {
 
   it('includes --dangerously-skip-permissions flag for teleport to bypass interactive prompts', async () => {
     const mockWebContents = { send: vi.fn() }
-    const mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    const mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     const mockPty = {
       write: vi.fn(),
@@ -655,7 +658,7 @@ describe('Super Minion System Prompt', () => {
 
   beforeEach(() => {
     const mockWebContents = { send: vi.fn() }
-    mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     mockPty = {
       write: vi.fn(),
@@ -781,7 +784,8 @@ describe('TerminalService Codex CLI', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -919,7 +923,8 @@ describe('Teleport Session Retry Mechanism', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     mockPty = {
@@ -1186,7 +1191,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     mockPty = {
@@ -1504,5 +1510,196 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // After 1 second, parsing should have been called
     await vi.advanceTimersByTimeAsync(1000)
     expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
+  })
+})
+
+describe('PTY Cleanup Error Handling', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+
+  beforeEach(() => {
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
+    } as unknown as BrowserWindow
+
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+      mode: 0o755
+    } as any)
+
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should handle PTY kill errors in stopAgent gracefully', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Mock pty.kill to throw an error (simulating process already dead)
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Should not throw - errors are caught and logged
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+
+    // Verify terminal was cleaned up despite error
+    expect(terminalService.hasActiveTerminal('agent-1')).toBe(false)
+  })
+
+  it('should handle PTY kill errors in stopPlainTerminal gracefully', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    // Mock pty.kill to throw an error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Should not throw - errors are caught and logged
+    expect(() => terminalService.stopPlainTerminal('agent-1-shell-1')).not.toThrow()
+  })
+
+  it('should continue cleanup when one PTY fails in cleanup method', async () => {
+    // Start multiple agents
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+    await terminalService.startAgent('/path/to/project', 'agent-2', 'claude', 'dev')
+
+    // Get the PTY instances for each agent
+    const pty1 = vi.mocked(pty.spawn).mock.results[0].value
+    const pty2 = vi.mocked(pty.spawn).mock.results[1].value
+
+    // First PTY throws error, second should still be cleaned
+    pty1.kill.mockImplementation(() => {
+      throw new Error('First PTY error')
+    })
+    pty2.kill.mockImplementation(() => {
+      // This should still be called even if first fails
+    })
+
+    // Should not throw - cleanup continues
+    expect(() => terminalService.cleanup()).not.toThrow()
+
+    // Both should have been attempted
+    expect(pty1.kill).toHaveBeenCalled()
+    expect(pty2.kill).toHaveBeenCalled()
+  })
+
+  it('should handle dispose errors on idle detector', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'cursor-cli', // Uses IdleDetector
+      'dev',
+      'Test prompt'
+    )
+
+    // Get the terminal session and mock dispose to throw
+    const mockIdleDetector = {
+      dispose: vi.fn().mockImplementation(() => {
+        throw new Error('Dispose error')
+      }),
+      processOutput: vi.fn(),
+      recordInput: vi.fn()
+    }
+
+    // Replace the idle detector in the session
+    const session = (terminalService as any).terminals.get('agent-1')
+    session.idleDetector = mockIdleDetector
+
+    // Should not throw - errors are caught
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+    expect(mockIdleDetector.dispose).toHaveBeenCalled()
+  })
+
+  it('should handle clearInterval errors gracefully', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Get session and set invalid interval
+    const session = (terminalService as any).terminals.get('agent-1')
+    session.statePollingInterval = {} as any // Invalid interval object
+
+    // Should not throw - errors are caught
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+  })
+
+  it('should handle PTY kill error during resume recovery', async () => {
+    // Start agent
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Get the data handler
+    const dataHandler = mockPty.onData.mock.calls[0][0]
+
+    // Mock pty.kill to throw error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('Process already exited')
+    })
+
+    // Trigger resume failure recovery by simulating "Session not found" output
+    const session = (terminalService as any).terminals.get('agent-1')
+    session._attemptingResume = true
+    session.projectPath = '/path/to/project'
+
+    // Should handle the error gracefully
+    expect(() => dataHandler('Session not found\n')).not.toThrow()
+  })
+
+  it('should send IPC updates even when PTY cleanup fails', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Mock pty.kill to throw error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Clear previous IPC calls
+    mockWebContents.send.mockClear()
+
+    // Stop agent
+    terminalService.stopAgent('agent-1')
+
+    // Should still send IPC update
+    expect(mockWebContents.send).toHaveBeenCalledWith('agents:updated')
   })
 })

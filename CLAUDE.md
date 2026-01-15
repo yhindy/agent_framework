@@ -52,6 +52,21 @@ This document provides essential context for AI assistants working with the Agen
 - If you break something, acknowledge it and fix it before moving on.
 - When encountering unexpected behavior, investigate before making changes.
 
+#### PTY and Process Cleanup Safety Pattern
+When cleaning up resources (especially in terminal services and app shutdown):
+- **Wrap cleanup operations in try-catch blocks** to handle processes that are already dead
+  - PTY kill operations may fail if the process has already exited
+  - Interval/timer clearing can fail if already cleared
+  - Tmux session killing may fail if the session doesn't exist
+- **Check window state before IPC sends** during shutdown to prevent crashes
+  - Use `mainWindow.isDestroyed()` before calling `webContents.send()`
+  - Handle cases where the main window is being closed while cleanup is still happening
+- **Continue cleanup even if individual operations fail** - aggregate errors after all operations complete
+  - Log failures at appropriate levels (debug for expected failures, error for unexpected ones)
+  - Delete resources from tracking maps even if cleanup partially fails
+- **Apply this pattern in**: `stopAgent()`, `cleanup()`, `terminal.onExit()`, and app shutdown handlers
+  - See `TerminalService` for examples: `stopAgent()` (line 1129), `cleanup()` (line 1203), `stopPlainTerminal()` (line 1372)
+
 ---
 
 ## Project Overview
@@ -623,7 +638,7 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
 | `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
-| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration |
+| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |

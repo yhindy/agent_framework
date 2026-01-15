@@ -43,35 +43,14 @@ export class TestEnvService {
    * Load test environment configuration from minions.json (new format) or minions/config.json (legacy)
    */
   loadConfig(projectPath: string): TestEnvConfig {
-    // Check new format first (minions.json at project root)
-    const newConfigPath = join(projectPath, 'minions.json')
-    const legacyConfigPath = join(projectPath, 'minions', 'config.json')
-
-    let configPath: string
-    let isNewFormat: boolean
-
-    if (existsSync(newConfigPath)) {
-      configPath = newConfigPath
-      isNewFormat = true
-      log.debug('Loading config from:', configPath, '(new format)')
-    } else if (existsSync(legacyConfigPath)) {
-      configPath = legacyConfigPath
-      isNewFormat = false
-      log.debug('Loading config from:', configPath, '(legacy format)')
-    } else {
-      log.debug('No config file found at:', newConfigPath, 'or', legacyConfigPath)
-      // Return empty config if neither file exists
+    const configPath = this.findConfigPath(projectPath)
+    if (!configPath) {
       return { defaultCommands: [] }
     }
 
     try {
-      const content = readFileSync(configPath, 'utf-8')
-      const config = JSON.parse(content)
-
-      // Both formats store testEnvironments in the same location
-      // New format: minions.json may have setup.testEnvironments or root testEnvironments
-      // Legacy format: minions/config.json has testEnvironments at root
-      const testEnvs = isNewFormat
+      const config = JSON.parse(readFileSync(configPath.path, 'utf-8'))
+      const testEnvs = configPath.isNewFormat
         ? (config.setup?.testEnvironments || config.testEnvironments || [])
         : (config.testEnvironments || [])
 
@@ -82,16 +61,29 @@ export class TestEnvService {
     }
   }
 
+  private findConfigPath(projectPath: string): { path: string; isNewFormat: boolean } | null {
+    const newConfigPath = join(projectPath, 'minions.json')
+    const legacyConfigPath = join(projectPath, 'minions', 'config.json')
+
+    if (existsSync(newConfigPath)) {
+      log.debug('Loading config from:', newConfigPath, '(new format)')
+      return { path: newConfigPath, isNewFormat: true }
+    }
+
+    if (existsSync(legacyConfigPath)) {
+      log.debug('Loading config from:', legacyConfigPath, '(legacy format)')
+      return { path: legacyConfigPath, isNewFormat: false }
+    }
+
+    log.debug('No config file found at:', newConfigPath, 'or', legacyConfigPath)
+    return null
+  }
+
   /**
    * Get commands from config, with optional per-assignment overrides
    */
   getCommands(projectPath: string, assignmentOverrides?: TestEnvCommand[]): TestEnvCommand[] {
-    if (assignmentOverrides && assignmentOverrides.length > 0) {
-      return assignmentOverrides
-    }
-
-    const config = this.loadConfig(projectPath)
-    return config.defaultCommands
+    return assignmentOverrides?.length ? assignmentOverrides : this.loadConfig(projectPath).defaultCommands
   }
 
   /**
@@ -103,25 +95,15 @@ export class TestEnvService {
     worktreePath: string,
     command: TestEnvCommand
   ): Promise<void> {
-    // Get or create agent's process map
-    if (!this.processes.has(agentId)) {
-      this.processes.set(agentId, new Map())
-    }
-    const agentProcesses = this.processes.get(agentId)!
+    const agentProcesses = this.getOrCreateProcessMap(agentId)
 
-    // Stop existing process for this command if any
     if (agentProcesses.has(command.id)) {
       this.stopCommand(agentId, command.id)
     }
 
-    // Determine working directory
-    const cwd = command.cwd 
-      ? join(worktreePath, command.cwd)
-      : worktreePath
-
-    // Spawn PTY
+    const cwd = command.cwd ? join(worktreePath, command.cwd) : worktreePath
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
-    
+
     const terminal = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: 80,
@@ -130,7 +112,6 @@ export class TestEnvService {
       env: process.env as any
     })
 
-    // Store process info
     const processInfo: TestEnvProcess = {
       pty: terminal,
       commandId: command.id,
@@ -140,23 +121,36 @@ export class TestEnvService {
     }
     agentProcesses.set(command.id, processInfo)
 
-    // Send the command to the terminal
     terminal.write(`${command.command}\r`)
 
-    // Handle output
     terminal.onData((data) => {
-      this.mainWindow.webContents.send('testEnv:output', agentId, command.id, data)
+      this.safeSendIPC('testEnv:output', agentId, command.id, data)
     })
 
-    // Handle exit
     terminal.onExit((exitCode) => {
       log.debug(`Test env process ${command.name} exited with code ${exitCode.exitCode}`)
       processInfo.isRunning = false
-      this.mainWindow.webContents.send('testEnv:exited', agentId, command.id, exitCode.exitCode)
+      this.safeSendIPC('testEnv:exited', agentId, command.id, exitCode.exitCode)
     })
 
-    // Notify frontend that process started
-    this.mainWindow.webContents.send('testEnv:started', agentId, command.id)
+    this.safeSendIPC('testEnv:started', agentId, command.id)
+  }
+
+  private getOrCreateProcessMap(agentId: string): Map<string, TestEnvProcess> {
+    if (!this.processes.has(agentId)) {
+      this.processes.set(agentId, new Map())
+    }
+    return this.processes.get(agentId)!
+  }
+
+  private safeSendIPC(channel: string, ...args: unknown[]): void {
+    try {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, ...args)
+      }
+    } catch (error) {
+      log.debug(`Failed to send IPC on ${channel}`, error)
+    }
   }
 
   /**
@@ -179,16 +173,18 @@ export class TestEnvService {
    * Stop a specific test environment command
    */
   stopCommand(agentId: string, commandId: string): void {
-    const agentProcesses = this.processes.get(agentId)
-    if (!agentProcesses) return
+    const process = this.processes.get(agentId)?.get(commandId)
+    if (!process) return
 
-    const process = agentProcesses.get(commandId)
-    if (process) {
+    try {
       process.pty.kill()
-      process.isRunning = false
-      agentProcesses.delete(commandId)
-      this.mainWindow.webContents.send('testEnv:stopped', agentId, commandId)
+    } catch (error) {
+      log.debug(`Failed to kill PTY for test env ${commandId} (likely already exited)`, error)
     }
+
+    process.isRunning = false
+    this.processes.get(agentId)?.delete(commandId)
+    this.safeSendIPC('testEnv:stopped', agentId, commandId)
   }
 
   /**
@@ -223,30 +219,20 @@ export class TestEnvService {
    * Send input to a specific test environment terminal
    */
   sendInput(agentId: string, commandId: string, data: string): void {
-    const agentProcesses = this.processes.get(agentId)
-    if (!agentProcesses) return
-
-    const process = agentProcesses.get(commandId)
-    if (process) {
-      process.pty.write(data)
-    }
+    this.processes.get(agentId)?.get(commandId)?.pty.write(data)
   }
 
   /**
    * Resize a test environment terminal
    */
   resize(agentId: string, commandId: string, cols: number, rows: number): void {
-    const agentProcesses = this.processes.get(agentId)
-    if (!agentProcesses) return
+    const process = this.processes.get(agentId)?.get(commandId)
+    if (!process?.isRunning) return
 
-    const process = agentProcesses.get(commandId)
-    if (process && process.isRunning) {
-      try {
-        process.pty.resize(cols, rows)
-      } catch (error) {
-        // Silently ignore resize errors - terminal may have exited
-        log.warn(` Failed to resize terminal ${commandId}:`, error)
-      }
+    try {
+      process.pty.resize(cols, rows)
+    } catch (error) {
+      log.warn(`Failed to resize terminal ${commandId}:`, error)
     }
   }
 
