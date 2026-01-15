@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, crashReporter } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ProjectService } from './services/ProjectService'
 import { AgentService } from './services/AgentService'
@@ -23,6 +24,18 @@ const log = createLogger('Main')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+
+function getCurrentBranch(): string {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: join(__dirname, '../../'),
+      encoding: 'utf-8'
+    }).trim()
+    return branch
+  } catch {
+    return 'unknown'
+  }
+}
 
 let mainWindow: BrowserWindow | null = null
 let services: {
@@ -47,6 +60,8 @@ function createWindow(): void {
   // Always use PNG for BrowserWindow icon (cross-platform compatibility)
   const resourcesPath = join(__dirname, '../../resources')
   const iconPath = join(resourcesPath, 'icon.png')
+  const branch = getCurrentBranch()
+  const windowTitle = branch && branch !== 'unknown' ? `Minion Laboratory -- ${branch}` : 'Minion Laboratory'
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -60,6 +75,11 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  })
+
+  // Set title after page loads (HTML <title> would otherwise overwrite it)
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.setTitle(windowTitle)
   })
 
   // Update window reference in services if they exist (handling reopen)
@@ -1207,7 +1227,9 @@ app.whenReady().then(() => {
     })
   }
 
-  app.setName('Minion Laboratory')
+  const branch = getCurrentBranch()
+  const appName = branch && branch !== 'unknown' ? `Minion Laboratory -- ${branch}` : 'Minion Laboratory'
+  app.setName(appName)
   electronApp.setAppUserModelId('com.minion-laboratory.app')
 
   // Set app icon for menu bar/dock on macOS
