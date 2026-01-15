@@ -435,23 +435,134 @@
 }
 
 /* =============================================================================
-   COPY FLASH ANIMATION
+   COPY CONFIRMATION TOOLTIP - Bold, unmistakable feedback
+   ============================================================================= */
+
+.copy-tooltip {
+  position: fixed;
+  transform: translate(-50%, 0%);
+  margin-top: 12px;
+  z-index: 10000;
+  pointer-events: none;
+
+  /* Layout */
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+
+  /* Visual styling - high contrast, bold */
+  background: linear-gradient(135deg, #0dbc79 0%, #0a9962 100%);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 4px 20px rgba(13, 188, 121, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+
+  /* Animation */
+  animation: copy-tooltip-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.copy-tooltip-icon {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-black);
+  color: white;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.copy-tooltip-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: white;
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+
+/* Arrow pointing up to source */
+.copy-tooltip-arrow {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid #0dbc79;
+  filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Entrance animation - spring down with overshoot */
+@keyframes copy-tooltip-enter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20%) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, 10%) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0%) scale(1);
+  }
+}
+
+/* =============================================================================
+   COPY FLASH ANIMATION - Enhanced with sustained glow
    ============================================================================= */
 
 .header-copy-flash {
-  animation: header-copy-flash-keyframe var(--transition-slow) ease-out;
+  animation: header-copy-flash-keyframe 1.5s ease-out;
 }
 
 @keyframes header-copy-flash-keyframe {
   0% {
-    background: transparent;
+    color: var(--text-secondary);
   }
-  50% {
-    background: var(--color-success-bright-dim);
+  20% {
+    color: var(--color-success-bright);
+    text-shadow: 0 0 12px var(--color-success-bright-glow);
+  }
+  80% {
+    color: var(--color-success-bright);
     text-shadow: 0 0 8px var(--color-success-bright-glow);
   }
   100% {
-    background: transparent;
+    color: var(--text-secondary);
+    text-shadow: none;
+  }
+}
+
+/* Badge-level flash animation - sustained highlight */
+.header-badge-flash {
+  animation: header-badge-flash-keyframe 1.5s ease-out;
+}
+
+@keyframes header-badge-flash-keyframe {
+  0% {
+    transform: scale(1);
+    box-shadow: none;
+  }
+  15% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px var(--color-success-bright-dim), 0 0 20px var(--color-success-bright-glow);
+  }
+  20% {
+    background: var(--color-success-bright-dim);
+    border-color: var(--color-success-bright);
+  }
+  80% {
+    transform: scale(1.02);
+    background: var(--color-success-bright-dim);
+    border-color: var(--color-success-bright);
+    box-shadow: 0 0 0 1px var(--color-success-bright-dim), 0 0 12px var(--color-success-bright-glow);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: none;
   }
 }
 
