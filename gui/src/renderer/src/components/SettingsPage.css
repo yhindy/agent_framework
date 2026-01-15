@@ -138,6 +138,15 @@
   line-height: 1.5;
 }
 
+.setting-warning {
+  font-size: 13px;
+  color: #dcdcaa;
+  background: rgba(220, 220, 170, 0.1);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #dcdcaa;
+}
+
 /* Custom Checkbox Styles */
 .checkbox-setting {
   display: flex;

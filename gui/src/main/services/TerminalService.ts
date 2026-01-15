@@ -788,9 +788,27 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     // Send the command to the terminal
     // If tmux mode is enabled, wrap in tmux session
     if (useTmux && tmuxSessionName) {
-      // Create or attach to tmux session, then send the command
-      // The -A flag attaches if session exists, creates if not
-      terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${command} ${args.join(' ')}' Enter\r`)
+      // For tmux mode, write command to a temp script file to avoid escaping issues
+      // This is especially important for super minion prompts which are very long
+      // and contain special characters, quotes, and newlines
+      const rawCommand = `${command} ${args.join(' ')}`
+      const scriptPath = join(worktreePath, '.minion-cmd.sh')
+
+      try {
+        // Write the command to a script file
+        writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
+        log.debug(`Wrote tmux command script to ${scriptPath}`)
+
+        // Create tmux session and run the script
+        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} 'bash ${scriptPath}' Enter\r`)
+      } catch (err) {
+        log.error('Failed to write command script, falling back to direct command', err)
+        // Fallback: try direct command with escaping
+        const escapedCommand = rawCommand
+          .replace(/'/g, "'\\''")
+          .replace(/\n/g, ' ')
+        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
+      }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
     }

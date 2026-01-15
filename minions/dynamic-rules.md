@@ -24,8 +24,8 @@ Architecture and design planning - creates technical specifications
 
 Run these agents simultaneously:
 
-- **Reviewer**: Review the engineering design for technical correctness and best practices
-- **Reviewer**: Review the design against acceptance criteria and requirements
+- **Reviewer**: Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.
+- **Reviewer**: Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.
 
 ### Step 4: Implementation
 
@@ -40,8 +40,8 @@ Full implementation following TDD - writes tests first, then code
 Run these agents simultaneously:
 
 - **Simplifier**: Code simplification - refactors, removes duplication, improves clarity
-- **Tester**: Test execution and validation - runs tests, checks coverage
-- **Reviewer**: Final code review before merge
+- **Tester**: Run all tests and verify they pass. Report any failures.
+- **Reviewer**: Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.
 - **Documenter**: Documentation updates - writes READMEs, API docs, code comments
 
 ---

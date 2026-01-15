@@ -241,6 +241,97 @@ describe('TerminalService Tmux Integration', () => {
       const hasTerminal = terminalService.hasActiveTerminal('agent-1')
       expect(hasTerminal).toBe(true)
     })
+
+    it('writes command to temp script file for tmux mode', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt contains single quotes (common in super minion prompts like "Claude Code's Task tool")
+      const promptWithQuotes = "Use Claude Code's Task tool"
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithQuotes
+      )
+
+      // Verify script file was written
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        '/path/to/project-agent-1/.minion-cmd.sh',
+        expect.stringContaining('#!/bin/bash'),
+        expect.any(Object)
+      )
+
+      // Verify terminal command runs the script
+      const writeCalls = mockPty.write.mock.calls
+      const firstWrite = writeCalls[0][0]
+      expect(firstWrite).toContain('bash /path/to/project-agent-1/.minion-cmd.sh')
+    })
+
+    it('script file contains the full command with special characters', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt with newlines and quotes
+      const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
+
+## Mission
+
+1. **Step one**`
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        complexPrompt
+      )
+
+      // Get the content written to the script file
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).endsWith('.minion-cmd.sh')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
+
+      // Script should contain the raw prompt with quotes and newlines preserved
+      expect(scriptContent).toContain("Claude Code's Task tool")
+      expect(scriptContent).toContain('## Mission')
+    })
+
+    it('handles complex super minion prompts via script file', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Simulate a real super minion prompt with both issues
+      const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
+
+## Mission
+
+1. **Step one**
+2. **Step two**`
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        complexPrompt
+      )
+
+      const writeCalls = mockPty.write.mock.calls
+      const firstWrite = writeCalls[0][0]
+
+      // Should contain the tmux command with -t target for send-keys
+      expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
+      expect(firstWrite).toContain('send-keys -t minion-agent-1')
+
+      // Should reference the script file, not inline command
+      expect(firstWrite).toContain('.minion-cmd.sh')
+
+      // Terminal write should be simple - no complex escaping needed
+      const beforeCarriageReturn = firstWrite.split('\r')[0]
+      expect(beforeCarriageReturn).not.toContain('\n')
+    })
   })
 
   describe('stopAgent with tmux mode', () => {

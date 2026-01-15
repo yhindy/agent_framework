@@ -512,10 +512,11 @@ When in tmux mode, use these keybindings (default prefix is `Ctrl+B`):
 5. **App Exit**: All tmux sessions are cleaned up when the app closes
 
 **UI Changes in Tmux Mode:**
-- "Add Terminal" button is hidden (use `Ctrl+B c` to create new windows instead)
-- Plain terminal tabs are hidden (tmux manages windows internally via its status bar)
+- "Add Terminal" button remains visible (creates a separate GUI terminal tab)
+- Plain terminal tabs remain visible (these run outside the main tmux session)
 - Test environment tabs remain visible (these run outside tmux)
 - The main terminal shows the tmux session; tmux status bar appears at the bottom
+- You can also create tmux windows inside the main session with `Ctrl+B c`
 
 ### Tool Selection
 

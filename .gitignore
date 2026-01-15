@@ -2,6 +2,7 @@
 .agent-info
 .minions-base-info
 .minions/
+.minion-cmd.sh
 *.bak
 .engineering-design.md
 
