@@ -141,6 +141,9 @@ const api = {
   updateSettings: (updates: any) => ipcRenderer.invoke('settings:update', updates),
   openFeedback: () => ipcRenderer.invoke('settings:openFeedback'),
 
+  // Terminal APIs (system capabilities)
+  checkTmuxAvailable: () => ipcRenderer.invoke('terminal:checkTmux'),
+
   // Test Environment APIs
   getTestEnvConfig: (agentId?: string) => ipcRenderer.invoke('testEnv:getConfig', agentId),
   getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => 

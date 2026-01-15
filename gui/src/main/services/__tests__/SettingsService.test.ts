@@ -250,5 +250,48 @@ describe('SettingsService', () => {
       // (set is only called during migration, not initialization)
       expect(mockStore.set).not.toHaveBeenCalled()
     })
+
+    it('migrates from version 1 to version 2 adding terminal settings', () => {
+      // Simulate version 1 settings (without terminal settings)
+      const v1Settings = {
+        notifications: {
+          enabled: true,
+          cooldownSeconds: 30
+        },
+        defaultTool: {
+          tool: 'claude',
+          claudeModel: 'opusplan',
+          cursorCLIModel: 'auto'
+        },
+        defaultAgent: {
+          workflowMode: 'planning',
+          yoloMode: true,
+          chromeIntegration: true
+        },
+        version: 1
+      }
+
+      const storeState: Record<string, unknown> = {
+        settings: v1Settings
+      }
+      mockStore.get.mockImplementation((key: string) => storeState[key])
+      mockStore.set.mockImplementation((key: string, value: unknown) => {
+        storeState[key] = value
+      })
+
+      // Recreate service to trigger migration
+      settingsService = new SettingsService()
+
+      // Should have migrated to version 2 with terminal settings
+      expect(mockStore.set).toHaveBeenCalledWith(
+        'settings',
+        expect.objectContaining({
+          terminal: {
+            terminalMode: 'tmux'
+          },
+          version: 2
+        })
+      )
+    })
   })
 })

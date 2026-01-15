@@ -456,6 +456,67 @@ When an agent is deleted, its metadata is preserved in an archive for historical
   - `archive:get` - Returns a specific archived agent by ID
 - **Behavior**: The git worktree is still deleted during teardown, but the archive preserves agent metadata for future reference and audit trails.
 
+### Terminal Mode (Tmux Integration)
+
+The framework supports two terminal modes for agent terminals:
+
+| Mode | Description | Multiple Terminals | Window Management |
+|------|-------------|-------------------|-------------------|
+| **tmux** (default) | Agent runs inside tmux session | Use tmux keybindings | Tmux manages windows |
+| **tabs** (legacy) | Each terminal is a separate PTY | "Add Terminal" button in GUI | GUI manages tabs |
+
+**Configuration:**
+- Setting: `terminal.terminalMode` in AppSettings (Settings screen in GUI)
+- Default: `tmux` (with automatic fallback to `tabs` if tmux is not installed)
+- IPC: `terminal:checkTmux` returns whether tmux is available
+
+**Automatic Fallback:**
+When `tmux` mode is configured but tmux is not installed on the system, the framework automatically falls back to `tabs` mode. The availability check runs once on startup and caches the result.
+
+**Tmux Mode Benefits:**
+- Session persistence: Detach/reattach without losing state
+- Native window management: Use familiar tmux keybindings
+- Respects user's `~/.tmux.conf` configuration
+- Single session per agent named `minion-{agentId}`
+- Consistent experience for users already familiar with tmux
+
+**Essential Tmux Keybindings:**
+When in tmux mode, use these keybindings (default prefix is `Ctrl+B`):
+
+| Keybinding | Action |
+|------------|--------|
+| `Ctrl+B c` | Create new window |
+| `Ctrl+B n` | Next window |
+| `Ctrl+B p` | Previous window |
+| `Ctrl+B 0-9` | Switch to window by number |
+| `Ctrl+B w` | List all windows |
+| `Ctrl+B d` | Detach from session (agent continues running) |
+| `Ctrl+B %` | Split pane vertically |
+| `Ctrl+B "` | Split pane horizontally |
+| `Ctrl+B x` | Close current pane |
+| `Ctrl+B [` | Enter scroll/copy mode (use arrows, `q` to exit) |
+
+**Note:** If you have customized your tmux prefix key in `~/.tmux.conf`, use your custom prefix instead of `Ctrl+B`.
+
+**Tmux Session Naming:**
+- Pattern: `minion-{sanitizedAgentId}`
+- Special characters (`.`, `:`, `/`, `\`) are replaced with underscores
+- Example: `agent-123` becomes `minion-agent-123`
+- Example with project prefix: `myproject-5` becomes `minion-myproject-5`
+
+**Lifecycle:**
+1. **Session creation**: On agent start, tmux session is created via `tmux new-session -A -s <name>` (creates or attaches)
+2. **Running**: Agent CLI command is sent to the tmux session
+3. **Stop/Delete**: Session is killed via `tmux kill-session -t <name>`
+4. **Teardown**: `teardown.sh` includes tmux cleanup before worktree removal
+5. **App Exit**: All tmux sessions are cleaned up when the app closes
+
+**UI Changes in Tmux Mode:**
+- "Add Terminal" button is hidden (use `Ctrl+B c` to create new windows instead)
+- Plain terminal tabs are hidden (tmux manages windows internally via its status bar)
+- Test environment tabs remain visible (these run outside tmux)
+- The main terminal shows the tmux session; tmux status bar appears at the bottom
+
 ### Tool Selection
 
 The GUI allows selecting from three agent tools when creating an assignment:
@@ -561,7 +622,8 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
 | `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
-| `gui/src/main/services/TerminalService.ts` | PTY management |
+| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration |
+| `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |

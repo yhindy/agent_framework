@@ -108,6 +108,9 @@ declare global {
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>
       openFeedback: () => Promise<void>
 
+      // Terminal Capability APIs
+      checkTmuxAvailable: () => Promise<boolean>
+
       // Workflow APIs
       getWorkflowConfig: () => Promise<{ workflows: import('../../main/services/types/WorkflowTypes').WorkflowConfig[] }>
       getSubagentTypes: () => Promise<import('../../main/services/types/WorkflowTypes').SubagentType[]>
