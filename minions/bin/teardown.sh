@@ -106,6 +106,16 @@ echo -e "${BLUE}🗑️  Retiring minion $AGENT_ID${NC}"
 echo "   Path: $WORKTREE_PATH"
 echo ""
 
+# Kill tmux session if it exists (cleanup before worktree removal)
+# Session name follows the pattern minion-{agentId} with special chars replaced by underscores
+TMUX_SESSION_NAME="minion-$(echo "$AGENT_ID" | sed 's/[.:/\\]/_/g')"
+if command -v tmux &> /dev/null; then
+    if tmux has-session -t "$TMUX_SESSION_NAME" 2>/dev/null; then
+        echo -e "${BLUE}🔌 Killing tmux session: $TMUX_SESSION_NAME${NC}"
+        tmux kill-session -t "$TMUX_SESSION_NAME"
+    fi
+fi
+
 # Check if worktree exists
 if [ ! -d "$WORKTREE_PATH" ]; then
     echo -e "${YELLOW}⚠️  Worktree does not exist at $WORKTREE_PATH${NC}"

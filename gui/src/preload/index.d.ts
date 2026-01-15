@@ -56,6 +56,8 @@ declare const api: {
     getSettings: () => Promise<any>;
     updateSettings: (updates: any) => Promise<any>;
     openFeedback: () => Promise<any>;
+    // Terminal capabilities
+    checkTmuxAvailable: () => Promise<boolean>;
     getTestEnvConfig: (agentId?: string) => Promise<any>;
     getTestEnvCommands: (agentId?: string, assignmentOverrides?: any[]) => Promise<any>;
     startTestEnv: (agentId: string, commandId?: string) => Promise<any>;

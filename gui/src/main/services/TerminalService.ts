@@ -2,12 +2,14 @@ import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
 import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
+import { execSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo, isSuperMinion } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
 import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import { NotificationService } from './NotificationService'
 import { WorkflowService } from './WorkflowService'
+import { SettingsService } from './SettingsService'
 import {
   IdleDetector,
   CLAUDE_WORKING_PATTERNS,
@@ -39,6 +41,7 @@ interface TerminalSession {
   chrome?: boolean            // Store for restart
   idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
   statePollingInterval?: NodeJS.Timeout // JSONL-based unified polling for Claude (state + tasks)
+  tmuxSession?: string        // Tmux session name (if tmux mode is enabled)
 }
 
 interface PlainTerminalSession {
@@ -55,9 +58,13 @@ export class TerminalService {
   private claudeSessionInfoService?: ClaudeSessionInfoService
   private notificationService?: NotificationService
   private workflowService: WorkflowService | null = null
+  private settingsService?: SettingsService
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
+
+  // Cached tmux availability check result
+  private tmuxAvailable: boolean | null = null
 
   constructor(mainWindow: BrowserWindow, notificationService?: NotificationService) {
     this.terminals = new Map()
@@ -80,6 +87,94 @@ export class TerminalService {
 
   setWorkflowService(service: WorkflowService): void {
     this.workflowService = service
+  }
+
+  setSettingsService(service: SettingsService): void {
+    this.settingsService = service
+  }
+
+  /**
+   * Check if tmux is available on the system.
+   * Result is cached after first check for performance.
+   *
+   * When tmux mode is enabled in settings but tmux is not installed,
+   * the framework automatically falls back to tabs mode.
+   *
+   * @returns true if tmux is installed and accessible via PATH
+   */
+  isTmuxAvailable(): boolean {
+    if (this.tmuxAvailable !== null) {
+      return this.tmuxAvailable
+    }
+
+    try {
+      execSync('which tmux', { encoding: 'utf8' })
+      this.tmuxAvailable = true
+      log.debug('tmux is available')
+    } catch {
+      this.tmuxAvailable = false
+      log.debug('tmux is not available')
+    }
+
+    return this.tmuxAvailable
+  }
+
+  /**
+   * Generate a sanitized tmux session name from an agentId.
+   *
+   * Tmux session names cannot contain periods, colons, slashes, or backslashes.
+   * These characters are replaced with underscores to create a valid session name.
+   *
+   * Naming convention: minion-{sanitizedAgentId}
+   *
+   * @example
+   * getTmuxSessionName('agent-1') // returns 'minion-agent-1'
+   * getTmuxSessionName('myproject-5') // returns 'minion-myproject-5'
+   * getTmuxSessionName('agent/with:special.chars') // returns 'minion-agent_with_special_chars'
+   */
+  getTmuxSessionName(agentId: string): string {
+    // Replace characters not allowed in tmux session names with underscores
+    const sanitized = agentId.replace(/[.:/\\]/g, '_')
+    return `minion-${sanitized}`
+  }
+
+  /**
+   * Kill a tmux session if it exists.
+   *
+   * Called during:
+   * - Agent stop (stopAgent method)
+   * - Agent teardown (teardown.sh also handles this as a fallback)
+   * - App cleanup (cleanup method)
+   *
+   * Silently ignores if the session doesn't exist or tmux is not available.
+   */
+  killTmuxSession(agentId: string): void {
+    const sessionName = this.getTmuxSessionName(agentId)
+
+    try {
+      // kill-session exits with error if session doesn't exist, which we catch
+      execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
+      log.debug(`Killed tmux session: ${sessionName}`)
+    } catch {
+      // Session doesn't exist or tmux not available - ignore
+      log.debug(`Tmux session ${sessionName} does not exist or already killed`)
+    }
+  }
+
+  /**
+   * Check if tmux mode should be used based on settings and availability.
+   *
+   * Tmux mode is used when BOTH conditions are met:
+   * 1. Settings have terminal.terminalMode set to 'tmux'
+   * 2. Tmux is installed and available on the system
+   *
+   * If either condition is not met, falls back to tabs mode.
+   *
+   * @returns true if tmux mode should be used for agent terminals
+   */
+  private shouldUseTmux(): boolean {
+    const terminalMode = this.settingsService?.getSettings()?.terminal?.terminalMode ?? 'tabs'
+    return terminalMode === 'tmux' && this.isTmuxAvailable()
   }
 
   private generateSessionId(agentId: string, worktreePath: string): string {
@@ -657,6 +752,15 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       )
     }
 
+    // Determine if tmux mode should be used
+    const useTmux = this.shouldUseTmux()
+    let tmuxSessionName: string | undefined
+
+    if (useTmux) {
+      tmuxSessionName = this.getTmuxSessionName(agentId)
+      log.debug(`Using tmux mode with session: ${tmuxSessionName}`)
+    }
+
     // Store terminal session
     const session: TerminalSession = {
       pty: terminal,
@@ -670,7 +774,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       yolo,
       chrome,
       idleDetector,
-      statePollingInterval
+      statePollingInterval,
+      tmuxSession: tmuxSessionName
     }
 
     // Mark if we're attempting to resume (for error detection)
@@ -681,7 +786,14 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     this.terminals.set(agentId, session)
 
     // Send the command to the terminal
-    terminal.write(`${command} ${args.join(' ')}\r`)
+    // If tmux mode is enabled, wrap in tmux session
+    if (useTmux && tmuxSessionName) {
+      // Create or attach to tmux session, then send the command
+      // The -A flag attaches if session exists, creates if not
+      terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${command} ${args.join(' ')}' Enter\r`)
+    } else {
+      terminal.write(`${command} ${args.join(' ')}\r`)
+    }
 
     // Persist session ID and flags immediately
     if (tool === 'claude') {
@@ -963,6 +1075,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     if (session.statePollingInterval) {
       clearInterval(session.statePollingInterval)
     }
+
+    // Kill tmux session if it exists
+    if (session.tmuxSession) {
+      this.killTmuxSession(agentId)
+    }
+
     session.pty.kill()
     this.terminals.delete(agentId)
     this.mainWindow.webContents.send('agents:updated')

@@ -117,6 +117,7 @@ function initializeServices(): void {
   // Set service references in TerminalService
   terminalService.setAgentService(agentService)
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
+  terminalService.setSettingsService(settingsService)
 
   // WorkflowService will be set after services object is created (below)
 
@@ -1095,6 +1096,11 @@ function setupIPC(): void {
     const { shell } = require('electron')
     const feedbackUrl = 'https://github.com/yhindy/agent_framework/issues/new'
     await shell.openExternal(feedbackUrl)
+  })
+
+  // Terminal handlers
+  ipcMain.handle('terminal:checkTmux', async () => {
+    return services!.terminal.isTmuxAvailable()
   })
 
   // Claude Session Info APIs

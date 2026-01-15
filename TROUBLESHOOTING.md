@@ -10,6 +10,7 @@ This guide covers common issues and their solutions when using the Minion Framew
 - [Native Module Issues](#native-module-issues)
 - [Claude Session Detection](#claude-session-detection)
 - [Codex Tool Issues](#codex-tool-issues)
+- [Tmux Terminal Mode Issues](#tmux-terminal-mode-issues)
 - [Build and CI Issues](#build-and-ci-issues)
 - [E2E Test Issues](#e2e-test-issues)
 - [Git Worktree Issues](#git-worktree-issues)
@@ -168,6 +169,92 @@ codex --model gpt-5.2-codex "test prompt"
 ### Model Selection Not Available
 
 This is expected behavior. Codex always uses the `gpt-5.2-codex` model, which is hardcoded in the TerminalService. Model selection in the GUI is disabled for Codex.
+
+---
+
+## Tmux Terminal Mode Issues
+
+The framework supports tmux mode for terminal management. If you're experiencing issues with tmux mode, follow these troubleshooting steps.
+
+### Tmux Not Available / Fallback to Tabs Mode
+
+If the framework is falling back to tabs mode when you expected tmux mode:
+
+```bash
+# Check if tmux is installed
+which tmux
+
+# If not found, install it:
+# macOS
+brew install tmux
+
+# Ubuntu/Debian
+sudo apt-get install tmux
+
+# Fedora/RHEL
+sudo dnf install tmux
+```
+
+After installing tmux, restart the Agent Orchestrator app for the change to take effect (tmux availability is cached on startup).
+
+### Orphaned Tmux Sessions
+
+If tmux sessions aren't being cleaned up properly:
+
+```bash
+# List all tmux sessions
+tmux list-sessions
+
+# Kill a specific minion session
+tmux kill-session -t minion-agent-1
+
+# Kill all minion sessions (careful!)
+tmux list-sessions | grep '^minion-' | cut -d: -f1 | xargs -I{} tmux kill-session -t {}
+```
+
+### Session Already Exists Error
+
+If you see errors about a session already existing:
+
+```bash
+# Check if the session exists
+tmux has-session -t minion-agent-1 2>/dev/null && echo "exists" || echo "not found"
+
+# Kill and retry
+tmux kill-session -t minion-agent-1
+```
+
+### Terminal Not Responding in Tmux Mode
+
+If the terminal appears frozen or not responding:
+
+1. **Check if you're in scroll mode**: Press `q` to exit scroll/copy mode
+2. **Check tmux status bar**: The status bar at the bottom shows the current window and session
+3. **Try switching windows**: Press `Ctrl+B n` to cycle through windows
+4. **Detach and reattach**: Press `Ctrl+B d` to detach, then restart the agent
+
+### Switching Between Tmux and Tabs Mode
+
+To change the terminal mode:
+
+1. Open Settings in the GUI
+2. Navigate to Terminal settings
+3. Select "tmux" or "tabs" mode
+4. Restart any running agents for the change to take effect
+
+**Note**: Existing agents will continue using their current mode until restarted.
+
+### Custom Tmux Configuration Not Working
+
+The framework respects your `~/.tmux.conf` configuration. If your settings aren't being applied:
+
+1. Verify your config is valid: `tmux source-file ~/.tmux.conf`
+2. Check for syntax errors in your config
+3. Restart the Agent Orchestrator after config changes
+
+### Tmux Keybindings Reference
+
+See [Terminal Mode (Tmux Integration)](CLAUDE.md#terminal-mode-tmux-integration) in CLAUDE.md for a complete list of tmux keybindings.
 
 ---
 

@@ -1,6 +1,7 @@
 // Shared settings types for both main and renderer processes
 
 export type AgentTool = 'claude' | 'cursor' | 'cursor-cli' | 'codex'
+export type TerminalMode = 'tmux' | 'tabs'
 export type ClaudeModel = 'haiku' | 'sonnet' | 'opus' | 'opusplan'
 export type CursorCLIModel =
   | 'composer-1'
@@ -42,10 +43,15 @@ export interface DefaultAgentSettings {
   chromeIntegration: boolean // Default Chrome/browser automation
 }
 
+export interface TerminalSettings {
+  terminalMode: TerminalMode // tmux (default) or tabs (legacy)
+}
+
 export interface AppSettings {
   notifications: NotificationSettings
   defaultTool: DefaultToolSettings
   defaultAgent: DefaultAgentSettings
+  terminal: TerminalSettings
   version: number // Schema version for migrations
 }
 
@@ -65,7 +71,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     yoloMode: true,
     chromeIntegration: true
   },
-  version: 1
+  terminal: {
+    terminalMode: 'tmux'
+  },
+  version: 2
 }
 
 // Display name mappings for UI dropdowns
