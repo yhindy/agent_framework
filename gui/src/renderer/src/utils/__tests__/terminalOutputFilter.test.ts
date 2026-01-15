@@ -55,6 +55,55 @@ describe('filterTerminalQueryResponses', () => {
     })
   })
 
+  describe('Orphaned DA responses (PTY split sequences)', () => {
+    it('should filter orphaned DA1 response at start of chunk: [?1;2c', () => {
+      const input = '[?1;2c'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+
+    it('should filter orphaned DA1 response with different params: [?64;1;2;6;9;15;18;21;22c', () => {
+      const input = '[?64;1;2;6;9;15;18;21;22c'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+
+    it('should filter orphaned DA2 response at start of chunk: [>0;276;0c', () => {
+      const input = '[>0;276;0c'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+
+    it('should NOT filter bracket sequences that appear mid-text (not orphaned)', () => {
+      const input = 'Some text [?1;2c more text'
+      expect(filterTerminalQueryResponses(input)).toBe('Some text [?1;2c more text')
+    })
+
+    it('should filter orphaned response followed by normal output', () => {
+      const input = '[?1;2cHello World'
+      expect(filterTerminalQueryResponses(input)).toBe('Hello World')
+    })
+
+    it('should handle orphaned response that is just the minimal pattern', () => {
+      const input = '[?c'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+  })
+
+  describe('Minion command script filtering', () => {
+    it('should filter bash .minion-cmd.sh command', () => {
+      const input = 'bash /Users/test/project/.minion-cmd.sh'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+
+    it('should filter minion-cmd.sh embedded in output', () => {
+      const input = 'Starting agent... bash /path/to/.minion-cmd.sh\nRunning...'
+      expect(filterTerminalQueryResponses(input)).toBe('Starting agent... \nRunning...')
+    })
+
+    it('should filter minion-cmd.sh with various paths', () => {
+      const input = 'bash   /Users/yhindy/code/agent_framework-30qijhy/.minion-cmd.sh'
+      expect(filterTerminalQueryResponses(input)).toBe('')
+    })
+  })
+
   describe('Edge cases', () => {
     it('should handle empty string', () => {
       expect(filterTerminalQueryResponses('')).toBe('')
@@ -63,6 +112,11 @@ describe('filterTerminalQueryResponses', () => {
     it('should handle string with no escape sequences', () => {
       const input = 'Plain text without escapes'
       expect(filterTerminalQueryResponses(input)).toBe(input)
+    })
+
+    it('should preserve text with brackets that is not a DA response', () => {
+      const input = '[INFO] Starting application'
+      expect(filterTerminalQueryResponses(input)).toBe('[INFO] Starting application')
     })
   })
 })
