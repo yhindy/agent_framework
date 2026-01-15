@@ -790,7 +790,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     if (useTmux && tmuxSessionName) {
       // Create or attach to tmux session, then send the command
       // The -A flag attaches if session exists, creates if not
-      terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${command} ${args.join(' ')}' Enter\r`)
+      //
+      // IMPORTANT: The command string may contain:
+      // 1. Single quotes (e.g., "Claude Code's Task tool") - must escape for shell
+      // 2. Literal newlines in prompts - must replace with spaces for send-keys
+      //
+      // Escaping for single-quoted shell context:
+      // - Replace ' with '\'' (end quote, escaped quote, start quote)
+      // - Replace newlines with spaces (send-keys doesn't handle literal newlines)
+      const rawCommand = `${command} ${args.join(' ')}`
+      const escapedCommand = rawCommand
+        .replace(/'/g, "'\\''")  // Escape single quotes for shell
+        .replace(/\n/g, ' ')     // Replace newlines with spaces
+      // Must specify -t target for send-keys to know which session to send to
+      terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
     }

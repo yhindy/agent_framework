@@ -241,6 +241,86 @@ describe('TerminalService Tmux Integration', () => {
       const hasTerminal = terminalService.hasActiveTerminal('agent-1')
       expect(hasTerminal).toBe(true)
     })
+
+    it('escapes single quotes in prompts for tmux send-keys', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt contains single quotes (common in super minion prompts like "Claude Code's Task tool")
+      const promptWithQuotes = "Use Claude Code's Task tool"
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithQuotes
+      )
+
+      const writeCalls = mockPty.write.mock.calls
+      const firstWrite = writeCalls[0][0]
+
+      // Single quotes should be escaped as '\'' for shell
+      expect(firstWrite).toContain("'\\''")
+      // The original unescaped single quote should NOT appear inside send-keys
+      expect(firstWrite).not.toMatch(/send-keys '[^']*Code's[^']*'/)
+    })
+
+    it('replaces newlines with spaces in prompts for tmux send-keys', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt contains literal newlines (common in super minion workflow prompts)
+      const promptWithNewlines = "Step 1\nStep 2\nStep 3"
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithNewlines
+      )
+
+      const writeCalls = mockPty.write.mock.calls
+      const firstWrite = writeCalls[0][0]
+
+      // Newlines should be replaced with spaces
+      // The command should be on a single line (no literal newlines before the final \r)
+      const beforeCarriageReturn = firstWrite.split('\r')[0]
+      expect(beforeCarriageReturn).not.toContain('\n')
+    })
+
+    it('handles complex super minion prompts with quotes and newlines', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Simulate a real super minion prompt with both issues
+      const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
+
+## Mission
+
+1. **Step one**
+2. **Step two**`
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        complexPrompt
+      )
+
+      const writeCalls = mockPty.write.mock.calls
+      const firstWrite = writeCalls[0][0]
+
+      // Should contain the tmux command with -t target for send-keys
+      expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
+      expect(firstWrite).toContain('send-keys -t minion-agent-1')
+
+      // Should be properly escaped - no raw newlines before carriage return
+      const beforeCarriageReturn = firstWrite.split('\r')[0]
+      expect(beforeCarriageReturn).not.toContain('\n')
+
+      // Single quotes should be escaped
+      expect(firstWrite).toContain("'\\''")
+    })
   })
 
   describe('stopAgent with tmux mode', () => {

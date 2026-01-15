@@ -518,8 +518,8 @@ function AgentView({ activeProjects }: AgentViewProps) {
             </span>
           </div>
 
-          {/* Plain Terminal Tabs (hidden in tmux mode - tmux manages windows internally) */}
-          {!isTmuxMode && plainTerminals.map((terminalId, index) => (
+          {/* Plain Terminal Tabs (shown in both modes - users can still create separate terminals) */}
+          {plainTerminals.map((terminalId, index) => (
             <div
               key={terminalId}
               className={`unified-tab ${activeTab === terminalId ? 'active' : ''}`}
@@ -576,16 +576,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
             )
           })}
 
-          {/* Add Terminal Button (hidden in tmux mode - use tmux commands to create windows) */}
-          {!isTmuxMode && (
-            <div
-              className="unified-tab add-tab"
-              onClick={handleAddTerminal}
-              title="Add new terminal"
-            >
-              <span className="tab-icon"><PlusIcon size="sm" /></span>
-            </div>
-          )}
+          {/* Add Terminal Button (shown in both modes) */}
+          <div
+            className="unified-tab add-tab"
+            onClick={handleAddTerminal}
+            title="Add new terminal"
+          >
+            <span className="tab-icon"><PlusIcon size="sm" /></span>
+          </div>
         </div>
 
         <div className="unified-terminal-container">
