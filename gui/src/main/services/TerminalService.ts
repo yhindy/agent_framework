@@ -788,22 +788,27 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     // Send the command to the terminal
     // If tmux mode is enabled, wrap in tmux session
     if (useTmux && tmuxSessionName) {
-      // Create or attach to tmux session, then send the command
-      // The -A flag attaches if session exists, creates if not
-      //
-      // IMPORTANT: The command string may contain:
-      // 1. Single quotes (e.g., "Claude Code's Task tool") - must escape for shell
-      // 2. Literal newlines in prompts - must replace with spaces for send-keys
-      //
-      // Escaping for single-quoted shell context:
-      // - Replace ' with '\'' (end quote, escaped quote, start quote)
-      // - Replace newlines with spaces (send-keys doesn't handle literal newlines)
+      // For tmux mode, write command to a temp script file to avoid escaping issues
+      // This is especially important for super minion prompts which are very long
+      // and contain special characters, quotes, and newlines
       const rawCommand = `${command} ${args.join(' ')}`
-      const escapedCommand = rawCommand
-        .replace(/'/g, "'\\''")  // Escape single quotes for shell
-        .replace(/\n/g, ' ')     // Replace newlines with spaces
-      // Must specify -t target for send-keys to know which session to send to
-      terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
+      const scriptPath = join(worktreePath, '.minion-cmd.sh')
+
+      try {
+        // Write the command to a script file
+        writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
+        log.debug(`Wrote tmux command script to ${scriptPath}`)
+
+        // Create tmux session and run the script
+        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} 'bash ${scriptPath}' Enter\r`)
+      } catch (err) {
+        log.error('Failed to write command script, falling back to direct command', err)
+        // Fallback: try direct command with escaping
+        const escapedCommand = rawCommand
+          .replace(/'/g, "'\\''")
+          .replace(/\n/g, ' ')
+        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
+      }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
     }

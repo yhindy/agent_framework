@@ -242,7 +242,7 @@ describe('TerminalService Tmux Integration', () => {
       expect(hasTerminal).toBe(true)
     })
 
-    it('escapes single quotes in prompts for tmux send-keys', async () => {
+    it('writes command to temp script file for tmux mode', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
 
       // Prompt contains single quotes (common in super minion prompts like "Claude Code's Task tool")
@@ -256,39 +256,50 @@ describe('TerminalService Tmux Integration', () => {
         promptWithQuotes
       )
 
+      // Verify script file was written
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        '/path/to/project-agent-1/.minion-cmd.sh',
+        expect.stringContaining('#!/bin/bash'),
+        expect.any(Object)
+      )
+
+      // Verify terminal command runs the script
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
-
-      // Single quotes should be escaped as '\'' for shell
-      expect(firstWrite).toContain("'\\''")
-      // The original unescaped single quote should NOT appear inside send-keys
-      expect(firstWrite).not.toMatch(/send-keys '[^']*Code's[^']*'/)
+      expect(firstWrite).toContain('bash /path/to/project-agent-1/.minion-cmd.sh')
     })
 
-    it('replaces newlines with spaces in prompts for tmux send-keys', async () => {
+    it('script file contains the full command with special characters', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
 
-      // Prompt contains literal newlines (common in super minion workflow prompts)
-      const promptWithNewlines = "Step 1\nStep 2\nStep 3"
+      // Prompt with newlines and quotes
+      const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
+
+## Mission
+
+1. **Step one**`
 
       await terminalService.startAgent(
         '/path/to/project',
         'agent-1',
         'claude',
         'dev',
-        promptWithNewlines
+        complexPrompt
       )
 
-      const writeCalls = mockPty.write.mock.calls
-      const firstWrite = writeCalls[0][0]
+      // Get the content written to the script file
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).endsWith('.minion-cmd.sh')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
 
-      // Newlines should be replaced with spaces
-      // The command should be on a single line (no literal newlines before the final \r)
-      const beforeCarriageReturn = firstWrite.split('\r')[0]
-      expect(beforeCarriageReturn).not.toContain('\n')
+      // Script should contain the raw prompt with quotes and newlines preserved
+      expect(scriptContent).toContain("Claude Code's Task tool")
+      expect(scriptContent).toContain('## Mission')
     })
 
-    it('handles complex super minion prompts with quotes and newlines', async () => {
+    it('handles complex super minion prompts via script file', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
 
       // Simulate a real super minion prompt with both issues
@@ -314,12 +325,12 @@ describe('TerminalService Tmux Integration', () => {
       expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
       expect(firstWrite).toContain('send-keys -t minion-agent-1')
 
-      // Should be properly escaped - no raw newlines before carriage return
+      // Should reference the script file, not inline command
+      expect(firstWrite).toContain('.minion-cmd.sh')
+
+      // Terminal write should be simple - no complex escaping needed
       const beforeCarriageReturn = firstWrite.split('\r')[0]
       expect(beforeCarriageReturn).not.toContain('\n')
-
-      // Single quotes should be escaped
-      expect(firstWrite).toContain("'\\''")
     })
   })
 
