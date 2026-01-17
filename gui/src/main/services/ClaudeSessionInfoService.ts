@@ -469,13 +469,22 @@ export class ClaudeSessionInfoService {
                 const textContent = content.find(c => c.type === 'text')?.text || ''
                 const trimmedText = textContent.trim()
 
-                if (trimmedText.endsWith(':')) {
+                // CRITICAL: Check for running Task subagents BEFORE applying colon heuristic
+                // Super minions may send text-only messages between Task invocations
+                // that don't end with colon, but they're still working if tasks are running
+                const hasRunningTasks = Array.from(taskInvocationsMap.values())
+                  .some(task => task.status === 'running')
+
+                if (hasRunningTasks) {
+                  // Super minion still has running Task subagents - definitely working
+                  state = 'working'
+                } else if (trimmedText.endsWith(':')) {
                   // Messages ending with colon are ALWAYS status updates (100% accurate)
                   // e.g., "Let me search for that:", "Now I'll read the file:"
                   // These indicate more work is coming (tool_use follows)
                   state = 'working'
                 } else {
-                  // Text not ending with colon - likely a completion message
+                  // Text not ending with colon AND no running tasks - likely a completion message
                   // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
                   state = 'waiting'
                 }
@@ -537,6 +546,16 @@ export class ClaudeSessionInfoService {
   /**
    * Get session state from the JSONL file with smart caching.
    * This is a lighter-weight operation that only reads the last few entries.
+   *
+   * LIMITATION: This method does NOT track Task tool invocations because it only
+   * reads the tail of the file for performance. For super minions with running
+   * Task subagents, use parseSessionInfo() which properly tracks running tasks
+   * and avoids false "waiting" states between Task invocations.
+   *
+   * This is generally safe because:
+   * 1. The caching mechanism means if parseSessionInfo() was called first (which
+   *    it is during normal polling), this method returns the cached state.
+   * 2. The main notification flow uses parseSessionInfo() which has the fix.
    */
   getSessionState(sessionId: string, worktreePath: string): 'working' | 'waiting' | 'unknown' {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)

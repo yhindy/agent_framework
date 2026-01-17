@@ -733,6 +733,48 @@ not valid json
 
       expect(result!.taskInvocations[0].resultSummary).toHaveLength(500)
     })
+
+    it('should return working state when super minion has text-only message but running Task invocations', () => {
+      // REGRESSION TEST: Super minions should NOT trigger "waiting for input" notifications
+      // between Task invocations. When a Task subagent is running, the super minion
+      // is still working, even if it sends a text-only message not ending with colon.
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Help me implement both frontend and backend"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"I'll spawn two subagents to work on this in parallel."},{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Implement frontend","subagent_type":"general-purpose","prompt":"Create the React components..."}},{"type":"tool_use","id":"toolu_task_002","name":"Task","input":{"description":"Implement backend","subagent_type":"general-purpose","prompt":"Create the API endpoints..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Frontend completed successfully."}]},"timestamp":"2026-01-07T10:05:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"The frontend task is complete. I'm still waiting for the backend task to finish."}],"stop_reason":null},"timestamp":"2026-01-07T10:05:05.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      // Should be 'working' because toolu_task_002 is still running
+      // NOT 'waiting' even though the text doesn't end with colon
+      expect(result!.state).toBe('working')
+      expect(result!.taskInvocations).toHaveLength(2)
+      expect(result!.taskInvocations[0].status).toBe('completed')
+      expect(result!.taskInvocations[1].status).toBe('running')
+    })
+
+    it('should return waiting state when all Task invocations are completed and text does not end with colon', () => {
+      // When all tasks are done and super minion sends completion message, it SHOULD be waiting
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(`
+{"type":"user","message":{"role":"user","content":"Help me implement both frontend and backend"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"I'll spawn two subagents."},{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Implement frontend","subagent_type":"general-purpose","prompt":"Create components..."}},{"type":"tool_use","id":"toolu_task_002","name":"Task","input":{"description":"Implement backend","subagent_type":"general-purpose","prompt":"Create API..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Frontend done."}]},"timestamp":"2026-01-07T10:05:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_002","content":"Backend done."}]},"timestamp":"2026-01-07T10:06:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","content":[{"type":"text","text":"Both tasks are now complete. Let me know if you need anything else."}],"stop_reason":null},"timestamp":"2026-01-07T10:06:05.000Z"}
+      `.trim())
+
+      const result = service.parseSessionInfo('test', '/Users/test/project')
+
+      // Should be 'waiting' because all tasks are complete and message doesn't end with colon
+      expect(result!.state).toBe('waiting')
+      expect(result!.taskInvocations).toHaveLength(2)
+      expect(result!.taskInvocations[0].status).toBe('completed')
+      expect(result!.taskInvocations[1].status).toBe('completed')
+    })
   })
 
   describe('extractGitBranch', () => {
