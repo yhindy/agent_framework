@@ -8,6 +8,7 @@ import {
   TERMINAL_MODE_DISPLAY_NAMES
 } from '../../../shared/types/settings'
 import WorkflowSettings from './WorkflowSettings'
+import ImportedAgentsSettings from './ImportedAgentsSettings'
 import './SettingsPage.css'
 
 interface SettingSelectProps<T extends string> {
@@ -367,6 +368,9 @@ function SettingsPage(): JSX.Element {
 
         {/* Workflow Templates Section */}
         <WorkflowSettings />
+
+        {/* Imported Agents Section */}
+        <ImportedAgentsSettings />
 
         {/* Feedback Section */}
         <section className="settings-section">

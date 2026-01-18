@@ -138,9 +138,19 @@ declare global {
       migrateProject: (projectPath: string) => Promise<any>
 
       // Archive APIs
-      listArchivedAgents: (projectPath?: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent[]>
-      getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').ArchivedAgent | null>
-      restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../../main/services/types/ProjectConfig').AgentInfo>
+      listArchivedAgents: (projectPath?: string) => Promise<import('../../main/services/types/ProjectConfig').ArchivedAgent[]>
+      getArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../main/services/types/ProjectConfig').ArchivedAgent | null>
+      restoreArchivedAgent: (projectPath: string, archiveId: string) => Promise<import('../../main/services/types/ProjectConfig').AgentInfo>
+
+      // Claude Config APIs
+      checkClaudeCode: () => Promise<boolean>
+      scanClaudeConfig: () => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult>
+      refreshClaudeConfig: () => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult>
+      getClaudeConfigEnabled: () => Promise<boolean>
+      getClaudeConfigSettings: () => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>
+      setClaudeConfigEnabled: (updates: Partial<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>) => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>
+      getClaudeConfigScanResult: () => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult>
+      onClaudeConfigUpdated: (callback: (result: import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult) => void) => () => void
     }
   }
 }

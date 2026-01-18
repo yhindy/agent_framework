@@ -19,6 +19,8 @@ import { createLogger } from './services/logger'
 import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowTypes'
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
+import { ClaudeConfigService } from './services/ClaudeConfigService'
+import type { ClaudeConfigSettings } from '../shared/types/settings'
 
 const log = createLogger('Main')
 
@@ -53,6 +55,7 @@ let services: {
   workflow: WorkflowService
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
+  claudeConfig: ClaudeConfigService
 } | null = null
 
 
@@ -147,6 +150,10 @@ function initializeServices(): void {
   // Create SetupWizardService (depends on other services)
   const setupWizardService = new SetupWizardService(agentService, terminalService, minionsConfigService)
 
+  // Create ClaudeConfigService for importing Claude Code plugins
+  const claudeConfigService = new ClaudeConfigService()
+  claudeConfigService.setWindow(mainWindow)
+
   services = {
     project: projectService,
     agent: agentService,
@@ -161,11 +168,29 @@ function initializeServices(): void {
     teleportMetadata: new TeleportMetadataService(),
     workflow: new WorkflowService(),
     setupWizard: setupWizardService,
-    minionsConfig: minionsConfigService
+    minionsConfig: minionsConfigService,
+    claudeConfig: claudeConfigService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
   terminalService.setWorkflowService(services.workflow)
+
+  // Wire up ClaudeConfigService to WorkflowService for imported agents
+  services.workflow.setClaudeConfigService(services.claudeConfig)
+
+  // Initialize Claude config settings from saved settings
+  const savedSettings = settingsService.getSettings()
+  if (savedSettings.claudeConfig) {
+    services.claudeConfig.updateSettings(savedSettings.claudeConfig)
+  }
+
+  // Start watching for Claude config changes if auto-refresh is enabled
+  if (savedSettings.claudeConfig?.autoRefresh !== false) {
+    services.claudeConfig.startWatching()
+  }
+
+  // Do initial scan of Claude plugins
+  services.claudeConfig.scanConfigs()
 
   // Migrate existing assignments from config.json to .agent-info files
   const activeProjects = services.project.getActiveProjects()
@@ -1216,6 +1241,49 @@ function setupIPC(): void {
   ipcMain.handle('project:migrate', async (_event, projectPath: string) => {
     return services!.minionsConfig.migrateFromLegacy(projectPath)
   })
+
+  // Claude Config handlers
+  ipcMain.handle('claudeConfig:check', async () => {
+    return services!.claudeConfig.isClaudeCodeInstalled()
+  })
+
+  ipcMain.handle('claudeConfig:scan', async () => {
+    return services!.claudeConfig.scanConfigs()
+  })
+
+  ipcMain.handle('claudeConfig:refresh', async () => {
+    return services!.claudeConfig.refresh()
+  })
+
+  ipcMain.handle('claudeConfig:getEnabled', async () => {
+    return services!.claudeConfig.getEnabledImports()
+  })
+
+  ipcMain.handle('claudeConfig:getSettings', async () => {
+    return services!.claudeConfig.getSettings()
+  })
+
+  ipcMain.handle('claudeConfig:setEnabled', async (_event, updates: Partial<ClaudeConfigSettings>) => {
+    const updatedSettings = services!.claudeConfig.updateSettings(updates)
+
+    // Persist to settings service
+    await services!.settings.updateSettings({ claudeConfig: updatedSettings })
+
+    // Update watching state based on autoRefresh setting
+    if (updates.autoRefresh !== undefined) {
+      if (updates.autoRefresh) {
+        services!.claudeConfig.startWatching()
+      } else {
+        services!.claudeConfig.stopWatching()
+      }
+    }
+
+    return updatedSettings
+  })
+
+  ipcMain.handle('claudeConfig:getScanResult', async () => {
+    return services!.claudeConfig.getScanResult()
+  })
 }
 
 app.whenReady().then(() => {
@@ -1259,6 +1327,7 @@ app.on('window-all-closed', () => {
   if (services) {
     services.terminal.cleanup()
     services.testEnv.cleanup()
+    services.claudeConfig.cleanup()
   }
   if (process.platform !== 'darwin') {
     app.quit()
