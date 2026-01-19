@@ -57,8 +57,7 @@ function ImportedAgentsSettings(): JSX.Element {
     }
   }
 
-  const handleUpdateSetting = async (updates: Partial<ClaudeConfigSettings>) => {
-    if (!settings) return
+  const updateSettings = async (updates: Partial<ClaudeConfigSettings>): Promise<void> => {
     try {
       const updated = await window.electronAPI.setClaudeConfigEnabled(updates)
       setSettings(updated)
@@ -67,63 +66,50 @@ function ImportedAgentsSettings(): JSX.Element {
     }
   }
 
-  const handleTogglePlugin = async (pluginId: string, enabled: boolean) => {
+  const handleUpdateSetting = (updates: Partial<ClaudeConfigSettings>): void => {
+    if (settings) updateSettings(updates)
+  }
+
+  const handleTogglePlugin = (pluginId: string, enabled: boolean): void => {
     if (!settings) return
+
+    // When all plugins are enabled (empty array), enabling a specific one is a no-op
+    if (enabled && settings.enabledPlugins.length === 0) return
 
     const allPluginIds = scanResult?.plugins.map(p => p.id) || []
     const currentEnabled = settings.enabledPlugins.length === 0 ? allPluginIds : settings.enabledPlugins
-
-    // Enabling when all enabled - no change needed
-    if (enabled && settings.enabledPlugins.length === 0) return
-
     const newEnabledPlugins = enabled
       ? [...currentEnabled, pluginId]
       : currentEnabled.filter(id => id !== pluginId)
 
-    try {
-      const updated = await window.electronAPI.setClaudeConfigEnabled({
-        enabledPlugins: newEnabledPlugins
-      })
-      setSettings(updated)
-    } catch (error) {
-      console.error('Failed to update plugin settings:', error)
-    }
+    updateSettings({ enabledPlugins: newEnabledPlugins })
   }
 
-  const handleToggleAgent = async (agentId: string, enabled: boolean) => {
+  const handleToggleAgent = (agentId: string, enabled: boolean): void => {
     if (!settings) return
 
     const newDisabledAgentIds = enabled
       ? settings.disabledAgentIds.filter(id => id !== agentId)
       : [...settings.disabledAgentIds, agentId]
 
-    try {
-      const updated = await window.electronAPI.setClaudeConfigEnabled({
-        disabledAgentIds: newDisabledAgentIds
-      })
-      setSettings(updated)
-    } catch (error) {
-      console.error('Failed to update agent settings:', error)
-    }
+    updateSettings({ disabledAgentIds: newDisabledAgentIds })
   }
 
-  const togglePluginExpanded = (pluginId: string) => {
+  const togglePluginExpanded = (pluginId: string): void => {
     setExpandedPlugins(prev => {
       const next = new Set(prev)
-      if (next.has(pluginId)) {
-        next.delete(pluginId)
-      } else {
-        next.add(pluginId)
-      }
+      next.has(pluginId) ? next.delete(pluginId) : next.add(pluginId)
       return next
     })
   }
 
-  const isPluginEnabled = (pluginId: string): boolean =>
-    !settings || settings.enabledPlugins.length === 0 || settings.enabledPlugins.includes(pluginId)
+  const isPluginEnabled = (pluginId: string): boolean => {
+    const enabledPlugins = settings?.enabledPlugins ?? []
+    return enabledPlugins.length === 0 || enabledPlugins.includes(pluginId)
+  }
 
   const isAgentEnabled = (agentId: string): boolean =>
-    !settings || !settings.disabledAgentIds.includes(agentId)
+    !settings?.disabledAgentIds.includes(agentId)
 
   if (isLoading) {
     return (

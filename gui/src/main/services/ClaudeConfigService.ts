@@ -6,7 +6,6 @@ import { BrowserWindow } from 'electron'
 import { createLogger } from './logger'
 import {
   ImportedSubagentType,
-  ImportSource,
   AgentConflict,
   ClaudeConfigScanResult,
   ClaudeConfigSettings,
@@ -23,6 +22,26 @@ const log = createLogger('ClaudeConfigService')
 
 const DESCRIPTION_MAX_LENGTH = 200
 const DEBOUNCE_MS = 1000
+
+/** Get subdirectories of a given path. */
+function getSubdirectories(dirPath: string): string[] {
+  return readdirSync(dirPath).filter(name => {
+    const fullPath = join(dirPath, name)
+    return statSync(fullPath).isDirectory()
+  })
+}
+
+/** Built-in agent display names. */
+const BUILT_IN_NAMES: Record<string, string> = {
+  explore: 'Explorer',
+  plan: 'Planner',
+  review: 'Reviewer',
+  implement: 'Implementer',
+  test: 'Tester',
+  debug: 'Debugger',
+  document: 'Documenter',
+  simplify: 'Simplifier'
+}
 
 /**
  * Service for reading Claude Code configuration and plugins.
@@ -92,13 +111,7 @@ export class ClaudeConfigService {
 
     // Scan marketplace directories
     try {
-      const marketplaces = readdirSync(cachePath)
-        .filter(name => {
-          const path = join(cachePath, name)
-          return statSync(path).isDirectory()
-        })
-
-      for (const marketplace of marketplaces) {
+      for (const marketplace of getSubdirectories(cachePath)) {
         const marketplacePath = join(cachePath, marketplace)
         this.scanMarketplace(marketplacePath, marketplace, plugins, importedTypes, errors)
       }
@@ -111,11 +124,8 @@ export class ClaudeConfigService {
   }
 
   private createScanError(type: ScanError['type'], path: string, error: unknown): ScanError {
-    return {
-      type,
-      path,
-      message: error instanceof Error ? error.message : String(error)
-    }
+    const message = error instanceof Error ? error.message : String(error)
+    return { type, path, message }
   }
 
   private scanMarketplace(
@@ -126,13 +136,7 @@ export class ClaudeConfigService {
     errors: ScanError[]
   ): void {
     try {
-      const pluginNames = readdirSync(marketplacePath)
-        .filter(name => {
-          const path = join(marketplacePath, name)
-          return statSync(path).isDirectory()
-        })
-
-      for (const pluginName of pluginNames) {
+      for (const pluginName of getSubdirectories(marketplacePath)) {
         const pluginPath = join(marketplacePath, pluginName)
         this.scanPlugin(pluginPath, pluginName, marketplace, plugins, importedTypes, errors)
       }
@@ -151,25 +155,14 @@ export class ClaudeConfigService {
     errors: ScanError[]
   ): void {
     try {
-      // Get all version directories
-      const versions = readdirSync(pluginPath)
-        .filter(name => {
-          const path = join(pluginPath, name)
-          return statSync(path).isDirectory()
-        })
-        .sort((a, b) => {
-          // Sort versions descending (latest first)
-          return b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })
-        })
+      // Get latest version directory (sorted descending)
+      const versions = getSubdirectories(pluginPath)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
 
-      // Use the latest version
-      if (versions.length === 0) {
-        return
-      }
+      if (versions.length === 0) return
 
-      const latestVersion = versions[0]
-      const versionPath = join(pluginPath, latestVersion)
-      this.scanPluginVersion(versionPath, pluginName, latestVersion, marketplace, plugins, importedTypes, errors)
+      const versionPath = join(pluginPath, versions[0])
+      this.scanPluginVersion(versionPath, pluginName, versions[0], marketplace, plugins, importedTypes, errors)
     } catch (error) {
       log.error(`Failed to scan plugin ${pluginName}:`, error)
       errors.push(this.createScanError('read', pluginPath, error))
@@ -240,30 +233,26 @@ export class ClaudeConfigService {
     const agents: ImportedSubagentType[] = []
 
     try {
-      const files = readdirSync(agentsDir).filter(f => f.endsWith('.md'))
+      const mdFiles = readdirSync(agentsDir).filter(f => f.endsWith('.md'))
 
-      for (const file of files) {
+      for (const file of mdFiles) {
         const filePath = join(agentsDir, file)
         try {
           const content = readFileSync(filePath, 'utf-8')
           const { frontmatter, body } = this.parseMarkdownFrontmatter<AgentFrontmatter>(content)
-
           const agentName = frontmatter?.name || basename(file, '.md')
-          const agentId = `imported:${pluginInfo.id}:${this.slugify(agentName)}`
-
-          const source: ImportSource = {
-            type: 'plugin-agent',
-            pluginId: pluginInfo.id,
-            pluginName: pluginInfo.name,
-            pluginVersion: pluginInfo.version,
-            marketplace: pluginInfo.marketplace
-          }
 
           agents.push({
-            id: agentId,
+            id: `imported:${pluginInfo.id}:${this.slugify(agentName)}`,
             name: agentName,
             description: frontmatter?.description || this.extractFirstParagraph(body),
-            source,
+            source: {
+              type: 'plugin-agent',
+              pluginId: pluginInfo.id,
+              pluginName: pluginInfo.name,
+              pluginVersion: pluginInfo.version,
+              marketplace: pluginInfo.marketplace
+            },
             filePath,
             promptContent: body
           })
@@ -288,39 +277,25 @@ export class ClaudeConfigService {
     const skills: ImportedSubagentType[] = []
 
     try {
-      const dirs = readdirSync(skillsDir).filter(name => {
-        const path = join(skillsDir, name)
-        return statSync(path).isDirectory()
-      })
-
-      for (const skillName of dirs) {
-        const skillPath = join(skillsDir, skillName)
-        const skillMdPath = join(skillPath, 'SKILL.md')
-
-        if (!existsSync(skillMdPath)) {
-          continue
-        }
+      for (const skillName of getSubdirectories(skillsDir)) {
+        const skillMdPath = join(skillsDir, skillName, 'SKILL.md')
+        if (!existsSync(skillMdPath)) continue
 
         try {
           const content = readFileSync(skillMdPath, 'utf-8')
           const { frontmatter, body } = this.parseMarkdownFrontmatter<SkillFrontmatter>(content)
 
-          const displayName = frontmatter?.name || skillName
-          const skillId = `imported:${pluginInfo.id}:skill:${this.slugify(skillName)}`
-
-          const source: ImportSource = {
-            type: 'plugin-skill',
-            pluginId: pluginInfo.id,
-            pluginName: pluginInfo.name,
-            pluginVersion: pluginInfo.version,
-            marketplace: pluginInfo.marketplace
-          }
-
           skills.push({
-            id: skillId,
-            name: displayName,
+            id: `imported:${pluginInfo.id}:skill:${this.slugify(skillName)}`,
+            name: frontmatter?.name || skillName,
             description: frontmatter?.description || this.extractFirstParagraph(body),
-            source,
+            source: {
+              type: 'plugin-skill',
+              pluginId: pluginInfo.id,
+              pluginName: pluginInfo.name,
+              pluginVersion: pluginInfo.version,
+              marketplace: pluginInfo.marketplace
+            },
             filePath: skillMdPath,
             promptContent: body
           })
@@ -465,17 +440,7 @@ export class ClaudeConfigService {
   }
 
   private getBuiltInName(id: string): string {
-    const names: Record<string, string> = {
-      explore: 'Explorer',
-      plan: 'Planner',
-      review: 'Reviewer',
-      implement: 'Implementer',
-      test: 'Tester',
-      debug: 'Debugger',
-      document: 'Documenter',
-      simplify: 'Simplifier'
-    }
-    return names[id] || id
+    return BUILT_IN_NAMES[id] || id
   }
 
   getScanResult(): ClaudeConfigScanResult {
@@ -548,24 +513,16 @@ export class ClaudeConfigService {
       }
     })
 
-    this.watcher.on('add', (path) => {
-      log.debug('File added in plugins cache:', path)
+    const handleChange = (event: string) => (path: string) => {
+      log.debug(`File ${event} in plugins cache:`, path)
       this.handleConfigChange()
-    })
+    }
 
-    this.watcher.on('change', (path) => {
-      log.debug('File changed in plugins cache:', path)
-      this.handleConfigChange()
-    })
-
-    this.watcher.on('unlink', (path) => {
-      log.debug('File removed from plugins cache:', path)
-      this.handleConfigChange()
-    })
-
-    this.watcher.on('error', (error) => {
-      log.error('Watcher error:', error)
-    })
+    this.watcher
+      .on('add', handleChange('added'))
+      .on('change', handleChange('changed'))
+      .on('unlink', handleChange('removed'))
+      .on('error', (error) => log.error('Watcher error:', error))
   }
 
   private handleConfigChange(): void {
