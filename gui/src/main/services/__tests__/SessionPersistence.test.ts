@@ -298,8 +298,8 @@ describe('Session Persistence', () => {
         taskInvocations: []
       } as any)
 
-      // Advance timer to trigger JSONL polling (1 second interval with unified polling)
-      vi.advanceTimersByTime(1100)
+      // Advance timer to trigger JSONL polling (2 second interval with unified polling)
+      vi.advanceTimersByTime(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),
@@ -320,8 +320,8 @@ describe('Session Persistence', () => {
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
-      // Advance timer to establish initial waiting state (1 second interval with unified polling)
-      vi.advanceTimersByTime(1100)
+      // Advance timer to establish initial waiting state (2 second interval with unified polling)
+      vi.advanceTimersByTime(2100)
 
       // Clear mock to see new calls
       vi.mocked(agentService.updateAgentInfo).mockClear()
@@ -333,8 +333,8 @@ describe('Session Persistence', () => {
         taskInvocations: []
       } as any)
 
-      // Advance timer to trigger JSONL polling (1 second interval with unified polling)
-      vi.advanceTimersByTime(1100)
+      // Advance timer to trigger JSONL polling (2 second interval with unified polling)
+      vi.advanceTimersByTime(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),
@@ -369,7 +369,7 @@ describe('Session Persistence', () => {
 
     it('clears waiting state when user sends input', async () => {
       // Setup: Mock parseSessionInfo to simulate state transitions (unified polling)
-      // Account for: 1 immediate call + polling every 1000ms
+      // Account for: 1 immediate call + polling every 2000ms
       let callCount = 0
       vi.mocked(claudeSessionInfoService.parseSessionInfo).mockImplementation(() => {
         callCount++
@@ -381,8 +381,8 @@ describe('Session Persistence', () => {
       await terminalService.startAgent('/path/to/worktree', 'agent-1', 'claude', 'dev')
 
       // Immediate call happens on start (returns unknown)
-      // Advance 1000ms to trigger first poll (returns waiting, transitions from unknown -> waiting)
-      vi.advanceTimersByTime(1000)
+      // Advance 2000ms to trigger first poll (returns waiting, transitions from unknown -> waiting)
+      vi.advanceTimersByTime(2000)
 
       // Verify waiting state was detected (Claude uses agent:stateChanged event)
       expect(mockWebContents.send).toHaveBeenCalledWith(
@@ -394,8 +394,8 @@ describe('Session Persistence', () => {
       // Clear mock to see new calls
       mockWebContents.send.mockClear()
 
-      // Advance another 1000ms to trigger next poll (returns working, transitions from waiting -> working)
-      vi.advanceTimersByTime(1000)
+      // Advance another 2000ms to trigger next poll (returns working, transitions from waiting -> working)
+      vi.advanceTimersByTime(2000)
 
       // Claude uses agent:stateChanged event for state transitions
       expect(mockWebContents.send).toHaveBeenCalledWith('agent:stateChanged', 'agent-1', 'working')
