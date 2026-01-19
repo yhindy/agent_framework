@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
+import { tmpdir } from 'os'
 import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
 import { execSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
@@ -863,7 +864,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // This is especially important for super minion prompts which are very long
       // and contain special characters, quotes, and newlines
       const rawCommand = `${command} ${args.join(' ')}`
-      const scriptPath = join(worktreePath, '.minion-cmd.sh')
+      // Write to temp directory to avoid dirtying git worktree (critical for --teleport)
+      const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
+      const scriptPath = join(tmpdir(), `.minion-cmd-${sanitizedAgentId}.sh`)
 
       try {
         // Write the command to a script file

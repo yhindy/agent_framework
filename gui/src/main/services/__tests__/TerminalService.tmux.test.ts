@@ -256,17 +256,17 @@ describe('TerminalService Tmux Integration', () => {
         promptWithQuotes
       )
 
-      // Verify script file was written
+      // Verify script file was written to temp directory with agent ID suffix
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        '/path/to/project-agent-1/.minion-cmd.sh',
+        expect.stringMatching(/\.minion-cmd-agent-1\.sh$/),
         expect.stringContaining('#!/bin/bash'),
         expect.any(Object)
       )
 
-      // Verify terminal command runs the script
+      // Verify terminal command runs the script from temp directory
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
-      expect(firstWrite).toContain('bash /path/to/project-agent-1/.minion-cmd.sh')
+      expect(firstWrite).toContain('.minion-cmd-agent-1.sh')
     })
 
     it('script file contains the full command with special characters', async () => {
@@ -287,9 +287,9 @@ describe('TerminalService Tmux Integration', () => {
         complexPrompt
       )
 
-      // Get the content written to the script file
+      // Get the content written to the script file (now in temp dir with agent ID suffix)
       const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-        call => String(call[0]).endsWith('.minion-cmd.sh')
+        call => String(call[0]).includes('.minion-cmd-')
       )
       expect(writeCall).toBeDefined()
       const scriptContent = writeCall![1] as string
@@ -325,8 +325,8 @@ describe('TerminalService Tmux Integration', () => {
       expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
       expect(firstWrite).toContain('send-keys')
 
-      // Should reference the script file, not inline command
-      expect(firstWrite).toContain('.minion-cmd.sh')
+      // Should reference the script file, not inline command (now with agent ID suffix)
+      expect(firstWrite).toContain('.minion-cmd-agent-1.sh')
 
       // Terminal write should be simple - no complex escaping needed
       const beforeCarriageReturn = firstWrite.split('\r')[0]

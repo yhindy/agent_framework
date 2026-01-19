@@ -132,6 +132,15 @@ else
     git worktree add -f "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"
 fi
 
+# Add .minion-cmd.sh to git exclude to prevent dirty worktree issues with --teleport
+GIT_EXCLUDE="$REPO_ROOT/.git/info/exclude"
+if [ -f "$GIT_EXCLUDE" ]; then
+    if ! grep -q "^\.minion-cmd\.sh$" "$GIT_EXCLUDE" 2>/dev/null; then
+        echo ".minion-cmd.sh" >> "$GIT_EXCLUDE"
+        echo "   Added .minion-cmd.sh to git exclude"
+    fi
+fi
+
 # Copy environment files
 echo -e "${BLUE}📋 Copying environment files...${NC}"
 python3 << PYTHON_SCRIPT |
