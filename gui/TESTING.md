@@ -1,8 +1,54 @@
 # Testing Guide for Minion Orchestrator GUI
 
-This guide walks you through testing all the features of the Minion Orchestrator GUI.
+This guide covers both automated and manual testing for the Minion Orchestrator GUI.
 
-## Prerequisites
+## Automated Testing
+
+The project has comprehensive automated tests. This is the preferred way to verify functionality.
+
+### Running Unit Tests
+
+```bash
+# RECOMMENDED: Run only tests affected by your changes (fast, memory-efficient)
+npm run test:changed
+
+# Run all unit tests
+npm test
+
+# Run specific test file
+npm test -- src/main/services/__tests__/AgentService.test.ts
+
+# Run with coverage
+npm test -- --coverage
+```
+
+### Running E2E Tests
+
+E2E tests use Playwright to test the actual Electron application.
+
+```bash
+# Run all E2E tests
+npm run test:e2e
+
+# Run with visible browser (debugging)
+npm run test:e2e:headed
+
+# Run specific tests by name
+npm run test:e2e -- --grep "project selection"
+
+# View HTML report after running
+npm run test:e2e:report
+```
+
+See `CLAUDE.md` for more details on the test infrastructure.
+
+---
+
+## Manual Testing
+
+Manual testing is useful for exploratory testing and UX verification.
+
+### Prerequisites
 
 1. Install dependencies:
    ```bash
@@ -10,33 +56,27 @@ This guide walks you through testing all the features of the Minion Orchestrator
    npm install
    ```
 
-2. Create test data:
+2. Start the app:
    ```bash
-   # From project root
-   node minions/bin/migrate-assignments.js
+   npm run dev
    ```
 
 ## Test 1: Project Selection
 
 **Objective**: Verify project picker and recent projects.
 
-1. Start the app:
-   ```bash
-   npm run dev
-   ```
+1. You should see the Project Picker screen on first launch.
 
-2. You should see the Project Picker screen.
+2. Click "Select Project Folder" and navigate to a git repository.
 
-3. Click "Select Project Folder" and navigate to this repository root.
-
-4. **Expected Result**: 
+3. **Expected Result**:
    - App loads the project successfully
-   - You're redirected to the Dashboard
+   - If project doesn't have `minions.json`, setup wizard is offered
    - Project name appears in sidebar
 
-5. Close and reopen the app.
+4. Close and reopen the app.
 
-6. **Expected Result**:
+5. **Expected Result**:
    - Project appears in "Recent Projects"
    - Clicking it loads the project immediately
 
@@ -48,33 +88,34 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 **Objective**: Verify mission display and creation.
 
-### Part A: View Assignments
+### Part A: View Agents
 
 1. Navigate to Home (if not already there).
 
 2. **Expected Result**:
-   - Four columns: Pending, In Progress, Review, Completed
-   - Mission cards show minion ID, feature name, branch, tool, mode
+   - Dashboard shows existing agents
+   - Agent cards show ID, branch, tool, status
 
-### Part B: Create Mission
+### Part B: Create Agent
 
-1. Click "+ New Mission" button.
+1. Click "+" button to create new agent.
 
 2. Fill in the form:
-   - Minion ID: `agent-1`
-   - Feature: `Test Feature` (or any description)
+   - Branch name: `test-feature`
+   - Prompt: `Test task description`
    - Tool: `claude`
-   - Note: Branch name is auto-generated
+   - Model: Select a model
 
 3. Click "Create Mission".
 
 4. **Expected Result**:
    - Modal closes
-   - New assignment appears in "Pending" column
-   - `assignments.json` file updated
-   - (Optionally) `setup.sh` runs and creates worktree
+   - New agent appears in sidebar
+   - `minions.json` file updated (if using new format)
+   - `.minions/agents/{id}.json` created (if using new format)
+   - Git worktree created
 
-**✅ Pass Criteria**: Assignments display correctly, new missions can be created.
+**✅ Pass Criteria**: Agents display correctly, new agents can be created.
 
 ---
 
@@ -174,12 +215,12 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 1. Keep the GUI open with a project loaded.
 
-2. In a terminal, edit `minions/assignments.json`:
-   - Change a feature name
-   - Change a status
+2. In a terminal, edit agent state files:
+   - For new format: Edit `.minions/agents/{id}.json`
+   - For legacy format: Edit `.agent-info` file
 
 3. **Expected Result**:
-   - Dashboard updates automatically within 1-2 seconds
+   - Sidebar updates automatically within 1-2 seconds
    - No need to refresh
 
 4. Create a new agent worktree manually:
@@ -210,26 +251,25 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 ---
 
-## Test 8: Test Script Workflow
+## Test 8: Signal Workflow
 
-**Objective**: Run a complete simulated workflow.
+**Objective**: Test the signal protocol end-to-end.
 
-1. In GUI, create or select a minion.
+1. In GUI, create or select an agent.
 
-2. Set:
-   - Tool: `cursor-cli` (or just run in external terminal)
-   - Mode: `planning`
-
-3. In the agent's worktree directory, run:
+2. In the agent's terminal, manually echo signals to test detection:
    ```bash
-   ../../minions/bin/test_signal.sh
+   echo "===SIGNAL:PLAN_READY==="
+   sleep 2
+   echo "===SIGNAL:WORKING==="
+   sleep 2
+   echo "===SIGNAL:DEV_COMPLETED==="
    ```
 
-4. **Expected Result**:
-   - Terminal shows animated workflow
-   - `===SIGNAL:PLAN_READY===` appears → GUI shows notification
-   - `===SIGNAL:WORKING===` appears → GUI shows "working"
-   - `===SIGNAL:DEV_COMPLETED===` appears → GUI shows "completed"
+3. **Expected Result**:
+   - `===SIGNAL:PLAN_READY===` → GUI shows notification
+   - `===SIGNAL:WORKING===` → GUI shows "working" status
+   - `===SIGNAL:DEV_COMPLETED===` → GUI shows "completed" status
 
 **✅ Pass Criteria**: Full signal workflow works end-to-end.
 
@@ -274,12 +314,13 @@ This guide walks you through testing all the features of the Minion Orchestrator
 
 ## Common Issues
 
-### "Minion not found" error
+### "Agent not found" error
 - Run `setup.sh` to create the worktree first
-- Check that `.agent-info` file exists in worktree
+- For new format: Check that `.minions/agents/{id}.json` exists
+- For legacy format: Check that `.agent-info` file exists in worktree
 
 ### Terminal not showing output
-- Verify the tool (`claude`, `cursor`) is installed
+- Verify the tool (`claude`, `cursor`, `codex`) is installed
 - Check PATH environment variable
 - Look at Electron dev console for errors (Cmd+Option+I / Ctrl+Shift+I)
 
@@ -289,30 +330,14 @@ This guide walks you through testing all the features of the Minion Orchestrator
 - Verify TerminalService is running (check console logs)
 
 ### File watcher not updating
-- Check file permissions on `minions/`
-- Try manually triggering: touch `assignments.json`
+- Check file permissions on project directory
+- For new format: Try `touch .minions/agents/{id}.json`
+- For legacy format: Try `touch minions/config.json`
 
----
-
-## Automated Testing (Future)
-
-To add automated tests:
-
-1. **Unit tests**: Test services in isolation
-   ```bash
-   npm install --save-dev vitest
-   # Add tests in src/main/services/*.test.ts
-   ```
-
-2. **Integration tests**: Test IPC communication
-   ```bash
-   npm install --save-dev @electron/playwright
-   ```
-
-3. **E2E tests**: Test full UI flows
-   ```bash
-   npm install --save-dev playwright
-   ```
+### Tmux issues
+- Verify tmux is installed: `which tmux`
+- Check terminal mode in Settings (can fall back to tabs mode)
+- If tmux session is stuck: `tmux kill-session -t minion-{agentId}`
 
 ---
 
