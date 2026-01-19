@@ -412,6 +412,7 @@ Main Process (Node.js)
     ├── TerminalService     # PTY management, Claude sessions
     ├── ProjectService      # Multi-project workspace management
     ├── ClaudeSessionInfoService  # Parse Claude JSONL files
+    ├── ClaudeConfigService # Import plugins from ~/.claude/
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
     ├── MinionsConfigService  # Read/write minions.json config
@@ -426,7 +427,8 @@ Preload Script (contextBridge)
 Renderer Process (React)
     ├── Dashboard           # Main view
     ├── AgentView           # Agent details + terminal
-    └── PlanApproval        # Super minion plan review
+    ├── PlanApproval        # Super minion plan review
+    └── ImportedAgentsSettings  # Claude Code plugin imports UI
 ```
 
 ### Configuration Management
@@ -556,6 +558,70 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
 
+### Claude Code Config Import
+
+The framework can import agents and skills from Claude Code plugins to use as workflow subagent types. This allows reusing Claude Code's plugin ecosystem within the Agent Framework.
+
+**What it does:**
+- Discovers installed Claude Code plugins from `~/.claude/plugins/cache/`
+- Extracts agent definitions (`.md` files in `agents/` directories)
+- Extracts skill definitions (`SKILL.md` files in `skills/` directories)
+- Makes them available as subagent types in workflows
+- Detects naming conflicts with built-in agents and auto-renames
+
+**How it works:**
+
+1. **ClaudeConfigService** scans the Claude Code plugins cache directory
+2. For each plugin, it reads the plugin manifest (`plugin.json`) and discovers agent/skill files
+3. Agent/skill `.md` files are parsed for YAML frontmatter (name, description) and prompt content
+4. File watching via `chokidar` detects plugin changes and auto-refreshes
+5. Results are cached and sent to the renderer via IPC events
+
+**Plugin Discovery Path:**
+```
+~/.claude/
+└── plugins/
+    └── cache/
+        └── {marketplace}/          # e.g., 'anthropic', 'community'
+            └── {plugin-name}/
+                └── {version}/      # Uses latest version
+                    └── .claude-plugin/
+                        ├── plugin.json
+                        ├── agents/
+                        │   └── *.md
+                        └── skills/
+                            └── {skill-name}/
+                                └── SKILL.md
+```
+
+**Configuration (ClaudeConfigSettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `enabled` | boolean | `true` | Master toggle for imports |
+| `enabledPlugins` | string[] | `[]` | Plugin IDs to enable (empty = all) |
+| `disabledAgentIds` | string[] | `[]` | Specific agent IDs to skip |
+| `autoRefresh` | boolean | `true` | Watch for config changes |
+| `refreshIntervalMs` | number | `30000` | Polling interval (ms) |
+
+**IPC Handlers:**
+- `claudeConfig:getScanResult` - Get cached scan result
+- `claudeConfig:refresh` - Force a rescan
+- `claudeConfig:getSettings` - Get current settings
+- `claudeConfig:setEnabled` - Update settings
+- `claudeConfig:updated` (event) - Notifies renderer of changes
+
+**Conflict Resolution:**
+When an imported agent name conflicts with a built-in agent (e.g., `test`, `review`, `implement`), the imported agent is automatically renamed with an `-imported` suffix to avoid collisions.
+
+**UI Access:**
+Settings are accessible via the Settings screen under "Imported Agents" section. Users can:
+- Toggle imports on/off globally
+- Enable/disable individual plugins
+- Enable/disable specific agents within plugins
+- Toggle auto-refresh behavior
+- Manually trigger a refresh
+
 ## CI/CD Pipeline
 
 GitHub Actions workflow (`.github/workflows/ci.yml`):
@@ -642,9 +708,12 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
+| `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
+| `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
 | `gui/playwright.config.ts` | E2E test configuration |
 | `gui/e2e/fixtures.ts` | E2E test fixtures and helpers |
 | `gui/e2e/electron-app.ts` | Electron app launch utilities |

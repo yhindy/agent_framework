@@ -47,11 +47,22 @@ export interface TerminalSettings {
   terminalMode: TerminalMode // tmux (default) or tabs (legacy)
 }
 
+/**
+ * Settings for Claude Code config import feature.
+ */
+export interface ClaudeConfigSettings {
+  enabled: boolean               // Master toggle for imports
+  enabledPlugins: string[]       // List of enabled plugin IDs (empty = all enabled)
+  disabledAgentIds: string[]     // Specific agent IDs to skip
+  autoRefresh: boolean           // Watch for config changes
+}
+
 export interface AppSettings {
   notifications: NotificationSettings
   defaultTool: DefaultToolSettings
   defaultAgent: DefaultAgentSettings
   terminal: TerminalSettings
+  claudeConfig: ClaudeConfigSettings // Claude Code plugin import settings
   version: number // Schema version for migrations
 }
 
@@ -74,7 +85,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminal: {
     terminalMode: 'tmux'
   },
-  version: 2
+  claudeConfig: {
+    enabled: true,
+    enabledPlugins: [],
+    disabledAgentIds: [],
+    autoRefresh: true
+  },
+  version: 3
 }
 
 // Display name mappings for UI dropdowns

@@ -282,14 +282,20 @@ describe('SettingsService', () => {
       // Recreate service to trigger migration
       settingsService = new SettingsService()
 
-      // Should have migrated to version 2 with terminal settings
+      // Should have migrated to version 3 with terminal and claudeConfig settings
       expect(mockStore.set).toHaveBeenCalledWith(
         'settings',
         expect.objectContaining({
           terminal: {
             terminalMode: 'tmux'
           },
-          version: 2
+          claudeConfig: {
+            enabled: true,
+            enabledPlugins: [],
+            disabledAgentIds: [],
+            autoRefresh: true
+          },
+          version: 3
         })
       )
     })

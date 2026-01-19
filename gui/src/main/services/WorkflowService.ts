@@ -8,6 +8,7 @@ import {
   DEFAULT_WORKFLOW,
   DEBUG_WORKFLOW
 } from './types/WorkflowTypes'
+import type { ClaudeConfigService } from './ClaudeConfigService'
 
 const log = createLogger('WorkflowService')
 
@@ -25,18 +26,53 @@ function generateId(prefix: string): string {
 export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
   private activeWorkflows: Map<string, WorkflowConfig> = new Map()
+  private claudeConfigService: ClaudeConfigService | null = null
 
   constructor() {
     this.workflows.set(DEFAULT_WORKFLOW.id, DEFAULT_WORKFLOW)
     this.workflows.set(DEBUG_WORKFLOW.id, DEBUG_WORKFLOW)
   }
 
+  /**
+   * Set the ClaudeConfigService for accessing imported agents.
+   */
+  setClaudeConfigService(service: ClaudeConfigService): void {
+    this.claudeConfigService = service
+  }
+
+  /**
+   * Get imported subagent types from Claude Code plugins.
+   */
+  getImportedSubagentTypes(): SubagentType[] {
+    if (!this.claudeConfigService) {
+      return []
+    }
+
+    return this.claudeConfigService.getEnabledImports().map(({ id, name, description }) => ({
+      id,
+      name,
+      description
+    }))
+  }
+
   getSubagentTypes(): SubagentType[] {
-    return DEFAULT_SUBAGENT_TYPES
+    const builtIn = DEFAULT_SUBAGENT_TYPES
+    const imported = this.getImportedSubagentTypes()
+
+    // Combine built-in and imported, with built-ins first
+    return [...builtIn, ...imported]
   }
 
   getSubagentType(id: string): SubagentType | undefined {
-    return DEFAULT_SUBAGENT_TYPES.find(t => t.id === id)
+    // First check built-in types
+    const builtIn = DEFAULT_SUBAGENT_TYPES.find(t => t.id === id)
+    if (builtIn) {
+      return builtIn
+    }
+
+    // Then check imported types
+    const imported = this.getImportedSubagentTypes()
+    return imported.find(t => t.id === id)
   }
 
   getActiveWorkflow(projectPath: string): WorkflowConfig {
@@ -206,8 +242,21 @@ export class WorkflowService {
     lines.push('')
     lines.push('## Available Agents')
     lines.push('')
+
+    // Include built-in agents
+    lines.push('### Built-in Agents')
     for (const agent of DEFAULT_SUBAGENT_TYPES) {
       lines.push(`- **${agent.name}** (\`${agent.id}\`): ${agent.description}`)
+    }
+
+    // Include imported agents if any
+    const importedAgents = this.getImportedSubagentTypes()
+    if (importedAgents.length > 0) {
+      lines.push('')
+      lines.push('### Imported Agents')
+      for (const agent of importedAgents) {
+        lines.push(`- **${agent.name}** (\`${agent.id}\`): ${agent.description}`)
+      }
     }
 
     return lines.join('\n')

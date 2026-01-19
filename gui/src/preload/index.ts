@@ -253,7 +253,23 @@ const api = {
   getArchivedAgent: (projectPath: string, archiveId: string) =>
     ipcRenderer.invoke('archive:get', projectPath, archiveId),
   restoreArchivedAgent: (projectPath: string, archiveId: string) =>
-    ipcRenderer.invoke('archive:restore', projectPath, archiveId)
+    ipcRenderer.invoke('archive:restore', projectPath, archiveId),
+
+  // Claude Config APIs
+  checkClaudeCode: () => ipcRenderer.invoke('claudeConfig:check'),
+  scanClaudeConfig: () => ipcRenderer.invoke('claudeConfig:scan'),
+  refreshClaudeConfig: () => ipcRenderer.invoke('claudeConfig:refresh'),
+  getClaudeConfigEnabled: () => ipcRenderer.invoke('claudeConfig:getEnabled'),
+  getClaudeConfigSettings: () => ipcRenderer.invoke('claudeConfig:getSettings'),
+  setClaudeConfigEnabled: (updates: any) => ipcRenderer.invoke('claudeConfig:setEnabled', updates),
+  getClaudeConfigScanResult: () => ipcRenderer.invoke('claudeConfig:getScanResult'),
+
+  // Claude Config Event Listeners
+  onClaudeConfigUpdated: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('claudeConfig:updated', subscription)
+    return () => ipcRenderer.removeListener('claudeConfig:updated', subscription)
+  }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
