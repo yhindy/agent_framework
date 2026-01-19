@@ -43,8 +43,8 @@ test.describe('User Flows', () => {
         return selectors.some((sel) => document.querySelector(sel) !== null)
       })
 
-      // The app should have some UI rendered after project selection
-      expect(typeof hasMainUI).toBe('boolean')
+      // The app should have rendered UI after project selection
+      expect(hasMainUI).toBe(true)
     })
 
     test('should remember previously selected project', async ({ electronApp, testProject }) => {
@@ -172,7 +172,8 @@ test.describe('User Flows', () => {
         return selectors.some((sel) => document.querySelector(sel) !== null)
       })
 
-      expect(typeof hasAgentUI).toBe('boolean')
+      // After creating an agent, the UI should display it
+      expect(hasAgentUI).toBe(true)
     })
   })
 })
