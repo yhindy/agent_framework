@@ -95,31 +95,23 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
   useEffect(() => {
     loadSessionInfo()
 
-    // Refresh on agent updates
+    // Refresh on agent updates (main process pushes these when state changes)
     const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
       loadSessionInfo()
     })
 
-    // Also refresh on terminal output (real-time updates)
+    // Also refresh on terminal output (debounced for performance)
     const unsubscribeOutput = window.electronAPI.onTerminalOutput((id: string) => {
       if (id === agentId) {
-        // Debounce - don't refresh too often
         setTimeout(loadSessionInfo, 500)
       }
     })
 
-    // Poll for changes (catches model changes, state updates, token usage)
-    // Use 2 second interval - mtime caching makes this efficient
-    const pollInterval = setInterval(() => {
-      if (isRunning) {
-        loadSessionInfo()
-      }
-    }, 2000)
+    // No client-side polling needed - main process pushes updates via onAgentListUpdate
 
     return () => {
       unsubscribe()
       unsubscribeOutput()
-      clearInterval(pollInterval)
     }
   }, [agentId, isRunning, loadSessionInfo])
 

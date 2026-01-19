@@ -66,6 +66,9 @@ export class TerminalService {
   // Cached tmux availability check result
   private tmuxAvailable: boolean | null = null
 
+  // Throttle map for broadcast updates (prevents flooding agents:updated)
+  private lastAgentBroadcastTime: Map<string, number> = new Map()
+
   constructor(mainWindow: BrowserWindow, notificationService?: NotificationService) {
     this.terminals = new Map()
     this.plainTerminals = new Map()
@@ -382,13 +385,49 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   }
 
   /**
-   * Update agent info and notify UI on success.
-   * Logs error on failure without throwing.
+   * Check if an agents:updated broadcast should be allowed for this agent.
+   * Throttles broadcasts to max once per 500ms per agent to prevent flooding.
+   *
+   * @param agentId - The agent ID to check throttle for
+   * @returns true if broadcast is allowed, false if throttled
    */
-  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>): Promise<void> {
+  private shouldBroadcastUpdate(agentId: string): boolean {
+    const now = Date.now()
+    const lastTime = this.lastAgentBroadcastTime.get(agentId) || 0
+    if (now - lastTime < 500) {
+      return false
+    }
+    this.lastAgentBroadcastTime.set(agentId, now)
+    return true
+  }
+
+  /**
+   * Broadcast agents:updated with throttling.
+   * Only broadcasts if 500ms has passed since last broadcast for this agent.
+   */
+  private throttledBroadcastUpdate(agentId: string): void {
+    if (this.shouldBroadcastUpdate(agentId)) {
+      this.safeSendIPC('agents:updated')
+    }
+  }
+
+  /**
+   * Update agent info and notify UI on success.
+   * Uses throttled broadcast to prevent flooding agents:updated.
+   * Logs error on failure without throwing.
+   *
+   * @param worktreePath - Path to the agent's worktree
+   * @param updates - Partial agent info updates
+   * @param agentId - Optional agent ID for throttling (if not provided, broadcasts immediately)
+   */
+  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string): Promise<void> {
     try {
       await this.updateAgentInfo(worktreePath, updates)
-      this.safeSendIPC('agents:updated')
+      if (agentId) {
+        this.throttledBroadcastUpdate(agentId)
+      } else {
+        this.safeSendIPC('agents:updated')
+      }
     } catch (error) {
       log.error('Failed to update agent info', error)
     }
@@ -684,7 +723,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
             displayName = `${projectName}: ${branchSuffix}`
 
-            this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch })
+            this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
           } catch (err) {
             // Silently ignore errors - branch detection is optional
           }
@@ -711,7 +750,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             claudeState: 'waiting',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: new Date().toISOString()
-          })
+          }, agentId)
         } else {
           log.debug(`${agentId} is working`)
           if (previousState === 'waiting') {
@@ -723,7 +762,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             claudeState: 'working',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: undefined
-          })
+          }, agentId)
         }
       }
 
@@ -749,20 +788,17 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             .join('|')
           if (currentHash !== lastTaskHash) {
             lastTaskHash = currentHash
-            this.safeSendIPC('agents:updated')
+            // Use throttled broadcast to prevent flooding
+            this.throttledBroadcastUpdate(agentId)
           }
         }
       }
 
-      // Check state IMMEDIATELY (no delay for fast Claude responses)
-      log.debug(`Performing immediate state check for ${agentId}`)
+      // Immediate check for fast Claude responses, then poll every 2s
+      log.debug(`Starting state polling for ${agentId} (session: ${effectiveSessionId})`)
       checkAndBroadcastState()
 
-      // Then poll every 1 second (faster than 2s, still efficient with caching)
-      log.debug(`Starting 1s polling for ${agentId} (session: ${effectiveSessionId})`)
-      statePollingInterval = setInterval(() => {
-        checkAndBroadcastState()
-      }, 1000) // 1 second interval - mtime caching makes this efficient
+      statePollingInterval = setInterval(checkAndBroadcastState, 2000)
 
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
@@ -1123,7 +1159,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         if (agentInfo?.cloudSessionId) return
 
         log.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
-        await this.updateAgentInfoAndNotify(session.worktreePath, { cloudSessionId })
+        await this.updateAgentInfoAndNotify(session.worktreePath, { cloudSessionId }, session.agentId)
       })
       .catch(err => log.error('Failed to detect/store cloud session ID', err))
   }
@@ -1134,6 +1170,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     this.cleanupTerminalSession(agentId, session, session.tool)
     this.terminals.delete(agentId)
+    this.lastAgentBroadcastTime.delete(agentId)
     this.safeSendIPC('agents:updated')
   }
 
@@ -1185,6 +1222,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         log.error(`Cleanup failed for plain terminal ${terminalId}`, error)
       }
     }
+
+    this.lastAgentBroadcastTime.clear()
   }
 
   // Check if an agent has an active terminal

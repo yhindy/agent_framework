@@ -1247,7 +1247,7 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     vi.useRealTimers()
   })
 
-  it('should use unified 1-second polling for super minions (state + tasks)', async () => {
+  it('should use unified 2-second polling for super minions (state + tasks)', async () => {
     await terminalService.startAgent(
       '/path/to/project',
       'super-minion-1',
@@ -1259,8 +1259,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Should have set up the watcher
     expect(mockClaudeSessionInfoService.watchSession).toHaveBeenCalled()
 
-    // Advance time by 1 second (unified polling interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance time by 2 seconds (unified polling interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have called parseSessionInfo for unified state + task checking
     expect(mockClaudeSessionInfoService.parseSessionInfo).toHaveBeenCalled()
@@ -1285,8 +1285,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Clear any initial calls
     mockWebContents.send.mockClear()
 
-    // Advance time by 1 second (unified polling interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance time by 2 seconds (unified polling interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Now simulate a task being spawned
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
@@ -1304,8 +1304,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       ]
     })
 
-    // Advance another 1 second
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have emitted agents:updated when tasks changed
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1339,14 +1339,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Advance past initial poll (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance past initial poll (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Clear calls after initial detection
     mockWebContents.send.mockClear()
 
-    // Advance another 1 second - same tasks, no change
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds - same tasks, no change
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should NOT have emitted agents:updated (no change in hash)
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1380,8 +1380,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Advance past initial poll (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance past initial poll (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Clear calls
     mockWebContents.send.mockClear()
@@ -1403,8 +1403,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       ]
     })
 
-    // Advance another 1 second
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have emitted agents:updated due to status change
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1422,8 +1422,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Verify polling is working (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Verify polling is working (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
     expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
 
     // Stop the agent
@@ -1449,8 +1449,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Get the exit handler
     const exitHandler = mockPty.onExit.mock.calls[0][0]
 
-    // Verify polling is working (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Verify polling is working (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Simulate terminal exit
     exitHandler({ exitCode: 0, signal: null })
@@ -1487,8 +1487,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // The key verification is that watchSession was not called
   })
 
-  it('should detect task changes within 1 second (faster than previous 2-second interval)', async () => {
-    // This test verifies the improvement: tasks are now detected at 1-second intervals
+  it('should detect task changes within 2 seconds (polling interval)', async () => {
+    // This test verifies: tasks are detected at 2-second polling intervals
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
       state: 'working',
@@ -1507,8 +1507,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     mockWebContents.send.mockClear()
     mockClaudeSessionInfoService.parseSessionInfo.mockClear()
 
-    // After 1 second, parsing should have been called
-    await vi.advanceTimersByTimeAsync(1000)
+    // After 2 seconds, parsing should have been called
+    await vi.advanceTimersByTimeAsync(2000)
     expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
   })
 })
