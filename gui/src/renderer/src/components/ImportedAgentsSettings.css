@@ -1,20 +1,20 @@
 /* ImportedAgentsSettings Styles */
 
-.imported-loading {
+.imported-loading,
+.imported-empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.imported-loading {
   padding: 40px 24px;
   font-size: 14px;
   color: #858585;
 }
 
-/* Empty State */
 .imported-empty-state {
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   padding: 48px 24px;
   text-align: center;
 }
@@ -74,16 +74,26 @@
 }
 
 /* Refresh Buttons */
-.refresh-button {
+.refresh-button,
+.refresh-button-small {
   background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refresh-button:disabled,
+.refresh-button-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-button {
   color: #4ec9b0;
   border: 1px solid #4ec9b0;
   padding: 8px 16px;
-  border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
 }
 
 .refresh-button:hover:not(:disabled) {
@@ -92,33 +102,19 @@
   color: #5fd9c0;
 }
 
-.refresh-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .refresh-button-small {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
   border: 1px solid #404040;
-  border-radius: 6px;
   padding: 6px;
-  cursor: pointer;
   color: #808080;
-  transition: all 0.2s ease;
 }
 
 .refresh-button-small:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.05);
   border-color: #505050;
   color: #a0a0a0;
-}
-
-.refresh-button-small:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .refresh-button-small svg.spinning {
@@ -134,37 +130,32 @@
   }
 }
 
-/* Warnings and Errors */
-.conflicts-warning {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: rgba(220, 220, 170, 0.1);
-  border: 1px solid rgba(220, 220, 170, 0.3);
-  border-radius: 6px;
-  font-size: 13px;
-  color: #dcdcaa;
-}
-
-.conflicts-warning svg {
-  flex-shrink: 0;
-}
-
+/* Warnings and Errors - shared base styles */
+.conflicts-warning,
 .scan-errors {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background: rgba(244, 135, 113, 0.1);
-  border: 1px solid rgba(244, 135, 113, 0.3);
   border-radius: 6px;
   font-size: 13px;
-  color: #f48771;
 }
 
+.conflicts-warning svg,
 .scan-errors svg {
   flex-shrink: 0;
+}
+
+.conflicts-warning {
+  background: rgba(220, 220, 170, 0.1);
+  border: 1px solid rgba(220, 220, 170, 0.3);
+  color: #dcdcaa;
+}
+
+.scan-errors {
+  background: rgba(244, 135, 113, 0.1);
+  border: 1px solid rgba(244, 135, 113, 0.3);
+  color: #f48771;
 }
 
 /* Plugin List */
@@ -177,12 +168,16 @@
   border-bottom: 1px solid #2d2d2d;
 }
 
-.plugin-item:last-child {
+/* Remove bottom borders from last items */
+.plugin-item:last-child,
+.imported-agent-item:last-child {
   border-bottom: none;
 }
 
-.plugin-item.disabled {
-  opacity: 0.6;
+/* Shared disabled state */
+.plugin-item.disabled,
+.imported-agent-item.disabled {
+  opacity: 0.5;
 }
 
 .plugin-header {
@@ -202,7 +197,8 @@
   padding-top: 2px;
 }
 
-.plugin-info {
+.plugin-info,
+.imported-agent-info {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -210,11 +206,15 @@
   min-width: 0;
 }
 
-.plugin-name-row {
+.plugin-name-row,
+.imported-agent-name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+}
+
+.plugin-name-row {
+  gap: 10px;
 }
 
 .plugin-name {
@@ -288,27 +288,8 @@
   border-bottom: 1px solid #2d2d2d;
 }
 
-.imported-agent-item:last-child {
-  border-bottom: none;
-}
-
-.imported-agent-item.disabled {
-  opacity: 0.5;
-}
-
-.imported-agent-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
 .imported-agent-name-row {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .imported-agent-name {
@@ -317,7 +298,8 @@
   color: #d4d4d4;
 }
 
-.imported-agent-type {
+.imported-agent-type,
+.conflict-badge {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -337,12 +319,6 @@
 }
 
 .conflict-badge {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 2px 6px;
-  border-radius: 3px;
   color: #dcdcaa;
   background: rgba(220, 220, 170, 0.15);
   cursor: help;

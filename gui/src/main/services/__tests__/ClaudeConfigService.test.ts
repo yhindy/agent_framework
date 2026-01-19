@@ -34,13 +34,14 @@ const mockReadFileSync = vi.mocked(readFileSync)
 const mockReaddirSync = vi.mocked(readdirSync)
 const mockStatSync = vi.mocked(statSync)
 
+const TEST_CLAUDE_DIR = '/test/.claude'
+
 describe('ClaudeConfigService', () => {
   let service: ClaudeConfigService
-  const testClaudeDir = '/test/.claude'
 
   beforeEach(() => {
     vi.clearAllMocks()
-    service = new ClaudeConfigService(testClaudeDir)
+    service = new ClaudeConfigService(TEST_CLAUDE_DIR)
   })
 
   afterEach(() => {
@@ -52,7 +53,7 @@ describe('ClaudeConfigService', () => {
       mockExistsSync.mockReturnValue(true)
 
       expect(service.isClaudeCodeInstalled()).toBe(true)
-      expect(mockExistsSync).toHaveBeenCalledWith(testClaudeDir)
+      expect(mockExistsSync).toHaveBeenCalledWith(TEST_CLAUDE_DIR)
     })
 
     it('should return false when ~/.claude does not exist', () => {
@@ -77,8 +78,8 @@ describe('ClaudeConfigService', () => {
 
     it('should return empty plugins when cache directory does not exist', () => {
       mockExistsSync.mockImplementation((path) => {
-        if (path === testClaudeDir) return true
-        if (path === join(testClaudeDir, 'plugins', 'cache')) return false
+        if (path === TEST_CLAUDE_DIR) return true
+        if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache')) return false
         return false
       })
 
@@ -125,9 +126,9 @@ describe('ClaudeConfigService', () => {
     it('should handle parse errors gracefully', () => {
       mockExistsSync.mockReturnValue(true)
       mockReaddirSync.mockImplementation((path) => {
-        if (path === join(testClaudeDir, 'plugins', 'cache')) return ['anthropic'] as any
-        if (path === join(testClaudeDir, 'plugins', 'cache', 'anthropic')) return ['broken-plugin'] as any
-        if (path === join(testClaudeDir, 'plugins', 'cache', 'anthropic', 'broken-plugin')) return ['1.0.0'] as any
+        if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache')) return ['anthropic'] as any
+        if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache', 'anthropic')) return ['broken-plugin'] as any
+        if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache', 'anthropic', 'broken-plugin')) return ['1.0.0'] as any
         return [] as any
       })
       mockStatSync.mockReturnValue({ isDirectory: () => true } as any)
@@ -287,14 +288,10 @@ describe('ClaudeConfigService', () => {
 describe('ClaudeConfigTypes', () => {
   describe('BUILT_IN_AGENT_IDS', () => {
     it('should contain all expected built-in IDs', () => {
-      expect(BUILT_IN_AGENT_IDS).toContain('explore')
-      expect(BUILT_IN_AGENT_IDS).toContain('plan')
-      expect(BUILT_IN_AGENT_IDS).toContain('review')
-      expect(BUILT_IN_AGENT_IDS).toContain('implement')
-      expect(BUILT_IN_AGENT_IDS).toContain('test')
-      expect(BUILT_IN_AGENT_IDS).toContain('debug')
-      expect(BUILT_IN_AGENT_IDS).toContain('document')
-      expect(BUILT_IN_AGENT_IDS).toContain('simplify')
+      expect(BUILT_IN_AGENT_IDS).toEqual([
+        'explore', 'plan', 'review', 'implement',
+        'test', 'debug', 'document', 'simplify'
+      ])
     })
   })
 

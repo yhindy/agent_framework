@@ -9,7 +9,6 @@ import {
   DEBUG_WORKFLOW
 } from './types/WorkflowTypes'
 import type { ClaudeConfigService } from './ClaudeConfigService'
-import type { ImportedSubagentType } from './types/ClaudeConfigTypes'
 
 const log = createLogger('WorkflowService')
 
@@ -28,7 +27,6 @@ export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
   private activeWorkflows: Map<string, WorkflowConfig> = new Map()
   private claudeConfigService: ClaudeConfigService | null = null
-  private enabledImports: string[] = []  // IDs of enabled imported agents
 
   constructor() {
     this.workflows.set(DEFAULT_WORKFLOW.id, DEFAULT_WORKFLOW)
@@ -43,15 +41,6 @@ export class WorkflowService {
   }
 
   /**
-   * Set the list of enabled imported agent IDs.
-   * This is updated when settings change.
-   */
-  setEnabledImports(ids: string[]): void {
-    this.enabledImports = ids
-    log.debug('Updated enabled imports:', ids.length)
-  }
-
-  /**
    * Get imported subagent types from Claude Code plugins.
    */
   getImportedSubagentTypes(): SubagentType[] {
@@ -59,26 +48,11 @@ export class WorkflowService {
       return []
     }
 
-    const enabledImports = this.claudeConfigService.getEnabledImports()
-
-    // Filter by the enabledImports list if set
-    const filteredImports = this.enabledImports.length > 0
-      ? enabledImports.filter(imp => this.enabledImports.includes(imp.id))
-      : enabledImports
-
-    // Convert ImportedSubagentType to SubagentType
-    return filteredImports.map(imported => this.convertToSubagentType(imported))
-  }
-
-  /**
-   * Convert an ImportedSubagentType to a SubagentType.
-   */
-  private convertToSubagentType(imported: ImportedSubagentType): SubagentType {
-    return {
-      id: imported.id,
-      name: imported.name,
-      description: imported.description
-    }
+    return this.claudeConfigService.getEnabledImports().map(({ id, name, description }) => ({
+      id,
+      name,
+      description
+    }))
   }
 
   getSubagentTypes(): SubagentType[] {

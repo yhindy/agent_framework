@@ -5,6 +5,11 @@ import type {
 } from '../../../main/services/types/ClaudeConfigTypes'
 import './ImportedAgentsSettings.css'
 
+/** Returns 's' suffix for pluralization when count is not 1. */
+function plural(count: number): string {
+  return count !== 1 ? 's' : ''
+}
+
 function ImportedAgentsSettings(): JSX.Element {
   const [scanResult, setScanResult] = useState<ClaudeConfigScanResult | null>(null)
   const [settings, setSettings] = useState<ClaudeConfigSettings | null>(null)
@@ -52,20 +57,10 @@ function ImportedAgentsSettings(): JSX.Element {
     }
   }
 
-  const handleToggleEnabled = async (enabled: boolean) => {
+  const handleUpdateSetting = async (updates: Partial<ClaudeConfigSettings>) => {
     if (!settings) return
     try {
-      const updated = await window.electronAPI.setClaudeConfigEnabled({ enabled })
-      setSettings(updated)
-    } catch (error) {
-      console.error('Failed to update settings:', error)
-    }
-  }
-
-  const handleToggleAutoRefresh = async (autoRefresh: boolean) => {
-    if (!settings) return
-    try {
-      const updated = await window.electronAPI.setClaudeConfigEnabled({ autoRefresh })
+      const updated = await window.electronAPI.setClaudeConfigEnabled(updates)
       setSettings(updated)
     } catch (error) {
       console.error('Failed to update settings:', error)
@@ -75,28 +70,15 @@ function ImportedAgentsSettings(): JSX.Element {
   const handleTogglePlugin = async (pluginId: string, enabled: boolean) => {
     if (!settings) return
 
-    // If enabledPlugins is empty, it means all are enabled
-    // To disable one, we need to add all others to the enabled list
-    let newEnabledPlugins: string[]
+    const allPluginIds = scanResult?.plugins.map(p => p.id) || []
+    const currentEnabled = settings.enabledPlugins.length === 0 ? allPluginIds : settings.enabledPlugins
 
-    if (settings.enabledPlugins.length === 0) {
-      // Currently all enabled - need to build the list
-      const allPluginIds = scanResult?.plugins.map(p => p.id) || []
-      if (enabled) {
-        // Enabling a plugin when all are enabled - no change needed
-        return
-      } else {
-        // Disabling a plugin - add all except this one
-        newEnabledPlugins = allPluginIds.filter(id => id !== pluginId)
-      }
-    } else {
-      // Already have an explicit list
-      if (enabled) {
-        newEnabledPlugins = [...settings.enabledPlugins, pluginId]
-      } else {
-        newEnabledPlugins = settings.enabledPlugins.filter(id => id !== pluginId)
-      }
-    }
+    // Enabling when all enabled - no change needed
+    if (enabled && settings.enabledPlugins.length === 0) return
+
+    const newEnabledPlugins = enabled
+      ? [...currentEnabled, pluginId]
+      : currentEnabled.filter(id => id !== pluginId)
 
     try {
       const updated = await window.electronAPI.setClaudeConfigEnabled({
@@ -111,15 +93,9 @@ function ImportedAgentsSettings(): JSX.Element {
   const handleToggleAgent = async (agentId: string, enabled: boolean) => {
     if (!settings) return
 
-    let newDisabledAgentIds: string[]
-
-    if (enabled) {
-      // Remove from disabled list
-      newDisabledAgentIds = settings.disabledAgentIds.filter(id => id !== agentId)
-    } else {
-      // Add to disabled list
-      newDisabledAgentIds = [...settings.disabledAgentIds, agentId]
-    }
+    const newDisabledAgentIds = enabled
+      ? settings.disabledAgentIds.filter(id => id !== agentId)
+      : [...settings.disabledAgentIds, agentId]
 
     try {
       const updated = await window.electronAPI.setClaudeConfigEnabled({
@@ -143,17 +119,11 @@ function ImportedAgentsSettings(): JSX.Element {
     })
   }
 
-  const isPluginEnabled = (pluginId: string): boolean => {
-    if (!settings) return true
-    // Empty list means all enabled
-    if (settings.enabledPlugins.length === 0) return true
-    return settings.enabledPlugins.includes(pluginId)
-  }
+  const isPluginEnabled = (pluginId: string): boolean =>
+    !settings || settings.enabledPlugins.length === 0 || settings.enabledPlugins.includes(pluginId)
 
-  const isAgentEnabled = (agentId: string): boolean => {
-    if (!settings) return true
-    return !settings.disabledAgentIds.includes(agentId)
-  }
+  const isAgentEnabled = (agentId: string): boolean =>
+    !settings || !settings.disabledAgentIds.includes(agentId)
 
   if (isLoading) {
     return (
@@ -232,7 +202,7 @@ function ImportedAgentsSettings(): JSX.Element {
             <input
               type="checkbox"
               checked={settings?.enabled ?? true}
-              onChange={(e) => handleToggleEnabled(e.target.checked)}
+              onChange={(e) => handleUpdateSetting({ enabled: e.target.checked })}
             />
             <div className="setting-text">
               <span className="setting-label">Enable Claude Code imports</span>
@@ -251,7 +221,7 @@ function ImportedAgentsSettings(): JSX.Element {
                 <input
                   type="checkbox"
                   checked={settings?.autoRefresh ?? true}
-                  onChange={(e) => handleToggleAutoRefresh(e.target.checked)}
+                  onChange={(e) => handleUpdateSetting({ autoRefresh: e.target.checked })}
                 />
                 <div className="setting-text">
                   <span className="setting-label">Auto-refresh</span>
@@ -267,15 +237,15 @@ function ImportedAgentsSettings(): JSX.Element {
               <div className="imported-summary">
                 <div className="summary-stats">
                   <span className="stat">
-                    <strong>{scanResult.plugins.length}</strong> plugin{scanResult.plugins.length !== 1 ? 's' : ''}
+                    <strong>{scanResult.plugins.length}</strong> plugin{plural(scanResult.plugins.length)}
                   </span>
                   <span className="stat-separator">|</span>
                   <span className="stat">
-                    <strong>{totalAgents}</strong> agent{totalAgents !== 1 ? 's' : ''}
+                    <strong>{totalAgents}</strong> agent{plural(totalAgents)}
                   </span>
                   <span className="stat-separator">|</span>
                   <span className="stat">
-                    <strong>{totalSkills}</strong> skill{totalSkills !== 1 ? 's' : ''}
+                    <strong>{totalSkills}</strong> skill{plural(totalSkills)}
                   </span>
                 </div>
                 <button
@@ -309,7 +279,7 @@ function ImportedAgentsSettings(): JSX.Element {
                     <path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6zm-1 6v4h2v-4h-2zm0 5v2h2v-2h-2z" />
                   </svg>
                   <span>
-                    {scanResult.conflicts.length} name conflict{scanResult.conflicts.length !== 1 ? 's' : ''} with built-in agents (automatically renamed)
+                    {scanResult.conflicts.length} name conflict{plural(scanResult.conflicts.length)} with built-in agents (automatically renamed)
                   </span>
                 </div>
               </div>
@@ -323,7 +293,7 @@ function ImportedAgentsSettings(): JSX.Element {
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                   </svg>
                   <span>
-                    {scanResult.errors.length} error{scanResult.errors.length !== 1 ? 's' : ''} during scan
+                    {scanResult.errors.length} error{plural(scanResult.errors.length)} during scan
                   </span>
                 </div>
               </div>
@@ -363,13 +333,13 @@ function ImportedAgentsSettings(): JSX.Element {
                         )}
                         <div className="plugin-counts">
                           {plugin.agentCount > 0 && (
-                            <span>{plugin.agentCount} agent{plugin.agentCount !== 1 ? 's' : ''}</span>
+                            <span>{plugin.agentCount} agent{plural(plugin.agentCount)}</span>
                           )}
                           {plugin.agentCount > 0 && plugin.skillCount > 0 && (
                             <span className="count-separator">,</span>
                           )}
                           {plugin.skillCount > 0 && (
-                            <span>{plugin.skillCount} skill{plugin.skillCount !== 1 ? 's' : ''}</span>
+                            <span>{plugin.skillCount} skill{plural(plugin.skillCount)}</span>
                           )}
                         </div>
                       </div>

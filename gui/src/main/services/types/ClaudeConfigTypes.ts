@@ -76,27 +76,14 @@ export interface ScanError {
   message: string         // Error description
 }
 
-/**
- * User settings for Claude Code config import.
- */
-export interface ClaudeConfigSettings {
-  enabled: boolean                      // Master toggle for imports
-  enabledPlugins: string[]              // List of enabled plugin IDs
-  disabledAgentIds: string[]            // Specific agent IDs to skip
-  autoRefresh: boolean                  // Watch for config changes
-  refreshIntervalMs: number             // Polling interval if watching
-}
+// Re-export ClaudeConfigSettings from shared types for consistency
+export type { ClaudeConfigSettings } from '../../../shared/types/settings'
+import { DEFAULT_SETTINGS } from '../../../shared/types/settings'
 
 /**
  * Default settings for Claude Code config import.
  */
-export const DEFAULT_CLAUDE_CONFIG_SETTINGS: ClaudeConfigSettings = {
-  enabled: true,
-  enabledPlugins: [],    // Empty means all plugins enabled
-  disabledAgentIds: [],
-  autoRefresh: true,
-  refreshIntervalMs: 30000  // 30 seconds
-}
+export const DEFAULT_CLAUDE_CONFIG_SETTINGS = DEFAULT_SETTINGS.claudeConfig
 
 /**
  * Plugin metadata from plugin.json file.
@@ -149,9 +136,6 @@ export const BUILT_IN_AGENT_IDS = [
 
 export type BuiltInAgentId = typeof BUILT_IN_AGENT_IDS[number]
 
-/**
- * Check if an ID conflicts with a built-in agent ID.
- */
 export function isBuiltInAgentId(id: string): id is BuiltInAgentId {
-  return BUILT_IN_AGENT_IDS.includes(id as BuiltInAgentId)
+  return (BUILT_IN_AGENT_IDS as readonly string[]).includes(id)
 }

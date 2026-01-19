@@ -21,6 +21,9 @@ import {
 
 const log = createLogger('ClaudeConfigService')
 
+const DESCRIPTION_MAX_LENGTH = 200
+const DEBOUNCE_MS = 1000
+
 /**
  * Service for reading Claude Code configuration and plugins.
  *
@@ -39,62 +42,53 @@ export class ClaudeConfigService {
     this.claudeDir = claudeDir || join(homedir(), '.claude')
   }
 
-  /**
-   * Set the main window for sending IPC events.
-   */
   setWindow(window: BrowserWindow): void {
     this.mainWindow = window
   }
 
-  /**
-   * Check if Claude Code is installed (i.e., ~/.claude/ exists).
-   */
   isClaudeCodeInstalled(): boolean {
     return existsSync(this.claudeDir)
   }
 
-  /**
-   * Get the path to the plugins cache directory.
-   */
   private getPluginsCachePath(): string {
     return join(this.claudeDir, 'plugins', 'cache')
+  }
+
+  private createScanResult(
+    isInstalled: boolean,
+    plugins: PluginInfo[] = [],
+    importedTypes: ImportedSubagentType[] = [],
+    errors: ScanError[] = []
+  ): ClaudeConfigScanResult {
+    const result: ClaudeConfigScanResult = {
+      isInstalled,
+      plugins,
+      importedTypes,
+      conflicts: isInstalled ? this.detectConflicts(importedTypes) : [],
+      errors,
+      lastScanned: new Date().toISOString()
+    }
+    this.cachedScanResult = result
+    return result
   }
 
   /**
    * Scan Claude Code configuration and discover plugins.
    */
   scanConfigs(): ClaudeConfigScanResult {
-    const errors: ScanError[] = []
-    const plugins: PluginInfo[] = []
-    const importedTypes: ImportedSubagentType[] = []
-
     if (!this.isClaudeCodeInstalled()) {
-      const result: ClaudeConfigScanResult = {
-        isInstalled: false,
-        plugins: [],
-        importedTypes: [],
-        conflicts: [],
-        errors: [],
-        lastScanned: new Date().toISOString()
-      }
-      this.cachedScanResult = result
-      return result
+      return this.createScanResult(false)
     }
 
     const cachePath = this.getPluginsCachePath()
     if (!existsSync(cachePath)) {
       log.debug('Plugins cache directory does not exist:', cachePath)
-      const result: ClaudeConfigScanResult = {
-        isInstalled: true,
-        plugins: [],
-        importedTypes: [],
-        conflicts: [],
-        errors: [],
-        lastScanned: new Date().toISOString()
-      }
-      this.cachedScanResult = result
-      return result
+      return this.createScanResult(true)
     }
+
+    const errors: ScanError[] = []
+    const plugins: PluginInfo[] = []
+    const importedTypes: ImportedSubagentType[] = []
 
     // Scan marketplace directories
     try {
@@ -110,32 +104,20 @@ export class ClaudeConfigService {
       }
     } catch (error) {
       log.error('Failed to scan plugins cache:', error)
-      errors.push({
-        type: 'read',
-        path: cachePath,
-        message: error instanceof Error ? error.message : String(error)
-      })
+      errors.push(this.createScanError('read', cachePath, error))
     }
 
-    // Detect conflicts with built-in agents
-    const conflicts = this.detectConflicts(importedTypes)
-
-    const result: ClaudeConfigScanResult = {
-      isInstalled: true,
-      plugins,
-      importedTypes,
-      conflicts,
-      errors,
-      lastScanned: new Date().toISOString()
-    }
-
-    this.cachedScanResult = result
-    return result
+    return this.createScanResult(true, plugins, importedTypes, errors)
   }
 
-  /**
-   * Scan a marketplace directory for plugins.
-   */
+  private createScanError(type: ScanError['type'], path: string, error: unknown): ScanError {
+    return {
+      type,
+      path,
+      message: error instanceof Error ? error.message : String(error)
+    }
+  }
+
   private scanMarketplace(
     marketplacePath: string,
     marketplace: string,
@@ -156,17 +138,10 @@ export class ClaudeConfigService {
       }
     } catch (error) {
       log.error(`Failed to scan marketplace ${marketplace}:`, error)
-      errors.push({
-        type: 'read',
-        path: marketplacePath,
-        message: error instanceof Error ? error.message : String(error)
-      })
+      errors.push(this.createScanError('read', marketplacePath, error))
     }
   }
 
-  /**
-   * Scan a plugin directory (may have multiple versions).
-   */
   private scanPlugin(
     pluginPath: string,
     pluginName: string,
@@ -197,17 +172,10 @@ export class ClaudeConfigService {
       this.scanPluginVersion(versionPath, pluginName, latestVersion, marketplace, plugins, importedTypes, errors)
     } catch (error) {
       log.error(`Failed to scan plugin ${pluginName}:`, error)
-      errors.push({
-        type: 'read',
-        path: pluginPath,
-        message: error instanceof Error ? error.message : String(error)
-      })
+      errors.push(this.createScanError('read', pluginPath, error))
     }
   }
 
-  /**
-   * Scan a specific plugin version for agents and skills.
-   */
   private scanPluginVersion(
     versionPath: string,
     pluginName: string,
@@ -227,11 +195,7 @@ export class ClaudeConfigService {
         manifest = JSON.parse(content) as PluginManifest
       } catch (error) {
         log.warn(`Failed to parse plugin.json for ${pluginName}:`, error)
-        errors.push({
-          type: 'parse',
-          path: pluginJsonPath,
-          message: error instanceof Error ? error.message : String(error)
-        })
+        errors.push(this.createScanError('parse', pluginJsonPath, error))
       }
     }
 
@@ -268,9 +232,6 @@ export class ClaudeConfigService {
     }
   }
 
-  /**
-   * Scan an agents directory for agent .md files.
-   */
   private scanAgentsDirectory(
     agentsDir: string,
     pluginInfo: PluginInfo,
@@ -308,28 +269,17 @@ export class ClaudeConfigService {
           })
         } catch (error) {
           log.warn(`Failed to parse agent file ${file}:`, error)
-          errors.push({
-            type: 'parse',
-            path: filePath,
-            message: error instanceof Error ? error.message : String(error)
-          })
+          errors.push(this.createScanError('parse', filePath, error))
         }
       }
     } catch (error) {
       log.error(`Failed to scan agents directory:`, error)
-      errors.push({
-        type: 'read',
-        path: agentsDir,
-        message: error instanceof Error ? error.message : String(error)
-      })
+      errors.push(this.createScanError('read', agentsDir, error))
     }
 
     return agents
   }
 
-  /**
-   * Scan a skills directory for SKILL.md files.
-   */
   private scanSkillsDirectory(
     skillsDir: string,
     pluginInfo: PluginInfo,
@@ -376,28 +326,17 @@ export class ClaudeConfigService {
           })
         } catch (error) {
           log.warn(`Failed to parse skill ${skillName}:`, error)
-          errors.push({
-            type: 'parse',
-            path: skillMdPath,
-            message: error instanceof Error ? error.message : String(error)
-          })
+          errors.push(this.createScanError('parse', skillMdPath, error))
         }
       }
     } catch (error) {
       log.error(`Failed to scan skills directory:`, error)
-      errors.push({
-        type: 'read',
-        path: skillsDir,
-        message: error instanceof Error ? error.message : String(error)
-      })
+      errors.push(this.createScanError('read', skillsDir, error))
     }
 
     return skills
   }
 
-  /**
-   * Parse YAML frontmatter from a markdown file.
-   */
   private parseMarkdownFrontmatter<T>(content: string): { frontmatter: T | null; body: string } {
     const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/
     const match = content.match(frontmatterRegex)
@@ -422,33 +361,9 @@ export class ClaudeConfigService {
         if (colonIndex === -1) continue
 
         const key = trimmed.slice(0, colonIndex).trim()
-        let value: unknown = trimmed.slice(colonIndex + 1).trim()
+        const rawValue = trimmed.slice(colonIndex + 1).trim()
 
-        // Handle quoted strings
-        if ((value as string).startsWith('"') && (value as string).endsWith('"')) {
-          value = (value as string).slice(1, -1)
-        } else if ((value as string).startsWith("'") && (value as string).endsWith("'")) {
-          value = (value as string).slice(1, -1)
-        }
-        // Handle arrays (simple format: [item1, item2])
-        else if ((value as string).startsWith('[') && (value as string).endsWith(']')) {
-          value = (value as string)
-            .slice(1, -1)
-            .split(',')
-            .map(v => v.trim().replace(/^["']|["']$/g, ''))
-        }
-        // Handle booleans
-        else if (value === 'true') {
-          value = true
-        } else if (value === 'false') {
-          value = false
-        }
-        // Handle numbers
-        else if (!isNaN(Number(value)) && (value as string) !== '') {
-          value = Number(value)
-        }
-
-        frontmatter[key] = value
+        frontmatter[key] = this.parseYamlValue(rawValue)
       }
 
       return { frontmatter: frontmatter as T, body }
@@ -457,9 +372,32 @@ export class ClaudeConfigService {
     }
   }
 
-  /**
-   * Extract the first paragraph from markdown content as a description.
-   */
+  private parseYamlValue(raw: string): unknown {
+    // Handle quoted strings
+    if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+      return raw.slice(1, -1)
+    }
+
+    // Handle arrays (simple format: [item1, item2])
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      return raw
+        .slice(1, -1)
+        .split(',')
+        .map(v => v.trim().replace(/^["']|["']$/g, ''))
+    }
+
+    // Handle booleans
+    if (raw === 'true') return true
+    if (raw === 'false') return false
+
+    // Handle numbers
+    if (raw !== '' && !isNaN(Number(raw))) {
+      return Number(raw)
+    }
+
+    return raw
+  }
+
   private extractFirstParagraph(content: string): string {
     const lines = content.split('\n')
     const paragraphLines: string[] = []
@@ -481,17 +419,13 @@ export class ClaudeConfigService {
 
     const paragraph = paragraphLines.join(' ').trim()
 
-    // Limit to ~200 characters
-    if (paragraph.length > 200) {
-      return paragraph.slice(0, 197) + '...'
+    if (paragraph.length > DESCRIPTION_MAX_LENGTH) {
+      return paragraph.slice(0, DESCRIPTION_MAX_LENGTH - 3) + '...'
     }
 
     return paragraph || 'No description available'
   }
 
-  /**
-   * Convert a name to a URL-safe slug.
-   */
   private slugify(name: string): string {
     return name
       .toLowerCase()
@@ -530,9 +464,6 @@ export class ClaudeConfigService {
     return conflicts
   }
 
-  /**
-   * Get the display name for a built-in agent ID.
-   */
   private getBuiltInName(id: string): string {
     const names: Record<string, string> = {
       explore: 'Explorer',
@@ -547,9 +478,6 @@ export class ClaudeConfigService {
     return names[id] || id
   }
 
-  /**
-   * Get the cached scan result, or scan if not cached.
-   */
   getScanResult(): ClaudeConfigScanResult {
     if (!this.cachedScanResult) {
       return this.scanConfigs()
@@ -557,9 +485,6 @@ export class ClaudeConfigService {
     return this.cachedScanResult
   }
 
-  /**
-   * Force a refresh of the scan.
-   */
   refresh(): ClaudeConfigScanResult {
     const result = this.scanConfigs()
 
@@ -571,51 +496,30 @@ export class ClaudeConfigService {
     return result
   }
 
-  /**
-   * Get current settings.
-   */
   getSettings(): ClaudeConfigSettings {
     return { ...this.settings }
   }
 
-  /**
-   * Update settings.
-   */
   updateSettings(updates: Partial<ClaudeConfigSettings>): ClaudeConfigSettings {
     this.settings = { ...this.settings, ...updates }
     return this.settings
   }
 
-  /**
-   * Get enabled imported types based on current settings.
-   */
   getEnabledImports(): ImportedSubagentType[] {
     if (!this.settings.enabled) {
       return []
     }
 
-    const result = this.getScanResult()
+    const { importedTypes } = this.getScanResult()
+    const { enabledPlugins, disabledAgentIds } = this.settings
 
-    return result.importedTypes.filter(imported => {
-      // Check if plugin is enabled (empty list means all enabled)
-      if (this.settings.enabledPlugins.length > 0) {
-        if (!this.settings.enabledPlugins.includes(imported.source.pluginId)) {
-          return false
-        }
-      }
-
-      // Check if this specific agent is disabled
-      if (this.settings.disabledAgentIds.includes(imported.id)) {
-        return false
-      }
-
-      return true
+    return importedTypes.filter(imported => {
+      const pluginEnabled = enabledPlugins.length === 0 || enabledPlugins.includes(imported.source.pluginId)
+      const agentEnabled = !disabledAgentIds.includes(imported.id)
+      return pluginEnabled && agentEnabled
     })
   }
 
-  /**
-   * Start watching for config changes.
-   */
   startWatching(): void {
     if (this.watcher) {
       return // Already watching
@@ -664,9 +568,6 @@ export class ClaudeConfigService {
     })
   }
 
-  /**
-   * Handle a config change by refreshing and notifying.
-   */
   private handleConfigChange(): void {
     // Debounce rapid changes
     if (this.refreshTimeout) {
@@ -675,12 +576,9 @@ export class ClaudeConfigService {
 
     this.refreshTimeout = setTimeout(() => {
       this.refresh()
-    }, 1000)
+    }, DEBOUNCE_MS)
   }
 
-  /**
-   * Stop watching for config changes.
-   */
   stopWatching(): void {
     if (this.watcher) {
       log.info('Stopping Claude config watcher')
@@ -694,9 +592,6 @@ export class ClaudeConfigService {
     }
   }
 
-  /**
-   * Clean up resources on app shutdown.
-   */
   cleanup(): void {
     this.stopWatching()
     this.cachedScanResult = null
