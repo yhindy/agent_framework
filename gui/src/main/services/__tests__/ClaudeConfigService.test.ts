@@ -477,7 +477,7 @@ describe('ClaudeConfigService', () => {
         if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache', 'anthropic', 'test-plugin')) {
           return ['1.0.0', '2.0.0', '1.5.0'] as any // Multiple versions
         }
-        if (path.includes('2.0.0/agents')) return ['agent.md'] as any
+        if (String(path).includes('2.0.0/agents')) return ['agent.md'] as any
         return [] as any
       })
       mockStatSync.mockReturnValue({ isDirectory: () => true } as any)
@@ -509,7 +509,7 @@ describe('ClaudeConfigService', () => {
       mockReaddirSync.mockImplementation((path) => {
         if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache')) return ['anthropic'] as any
         if (path === join(TEST_CLAUDE_DIR, 'plugins', 'cache', 'anthropic')) return ['empty-plugin'] as any
-        if (path.includes('empty-plugin')) return ['1.0.0'] as any
+        if (String(path).includes('empty-plugin')) return ['1.0.0'] as any
         return [] as any
       })
       mockStatSync.mockReturnValue({ isDirectory: () => true } as any)
@@ -704,9 +704,9 @@ describe('ClaudeConfigService', () => {
       vi.useFakeTimers()
 
       mockExistsSync.mockReturnValue(true)
-      let changeHandler: ((path: string) => void) | null = null
+      let changeHandler: ((path: string) => void) | undefined
       const mockWatcher = {
-        on: vi.fn((event, handler) => {
+        on: vi.fn((event: string, handler: (path: string) => void) => {
           if (event === 'change') changeHandler = handler
           return mockWatcher
         }),
@@ -718,7 +718,7 @@ describe('ClaudeConfigService', () => {
 
       // Simulate a file change to trigger debounced refresh
       if (changeHandler) {
-        changeHandler('/some/path')
+        (changeHandler as (path: string) => void)('/some/path')
       }
 
       // Stop watching before debounce completes
