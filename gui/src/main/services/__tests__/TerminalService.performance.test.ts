@@ -204,3 +204,79 @@ describe('TerminalService Performance - Broadcast Throttling', () => {
     expect(secondBroadcast).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('TerminalService Performance - File Watcher Throttling', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockAgentService: any
+  let mockClaudeSessionInfoService: any
+  let capturedWatchCallback: ((info: any) => void) | null = null
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+
+    mockMainWindow = createMockMainWindow()
+    vi.mocked(pty.spawn).mockReturnValue(createMockPty())
+    setupFsMocks()
+
+    mockAgentService = {
+      readAgentInfo: vi.fn().mockResolvedValue({ isSuperMinion: true }),
+      updateAgentInfo: vi.fn().mockResolvedValue(undefined),
+      getSuperMinionRulesPath: vi.fn().mockReturnValue('/path/to/rules'),
+      getProjectName: vi.fn().mockImplementation((p: string) => p.split('/').pop() || 'project')
+    }
+
+    // Capture the callback passed to watchSession
+    capturedWatchCallback = null
+    mockClaudeSessionInfoService = {
+      parseSessionInfo: vi.fn().mockReturnValue({ sessionId: 'test-session', state: 'working', taskInvocations: [] }),
+      watchSession: vi.fn().mockImplementation((_sessionId: string, _worktreePath: string, callback: (info: any) => void) => {
+        capturedWatchCallback = callback
+      }),
+      unwatchSession: vi.fn(),
+      extractGitBranch: vi.fn().mockReturnValue(null),
+      getSessionState: vi.fn().mockReturnValue('working')
+    }
+
+    terminalService = new TerminalService(mockMainWindow as unknown as BrowserWindow)
+    terminalService.setAgentService(mockAgentService)
+    terminalService.setClaudeSessionInfoService(mockClaudeSessionInfoService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('should throttle file watcher callback broadcasts for super minions', async () => {
+    const sendMock = mockMainWindow.webContents.send
+
+    // Start a super minion agent - this should register a file watcher
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'planning', 'Test prompt')
+
+    // Verify watchSession was called (super minion agents get file watchers)
+    expect(mockClaudeSessionInfoService.watchSession).toHaveBeenCalled()
+    expect(capturedWatchCallback).not.toBeNull()
+
+    // Clear any initial broadcasts
+    sendMock.mockClear()
+
+    // Simulate rapid file watcher callbacks (as if fs.watch fired multiple times)
+    // These should be throttled to max once per 500ms
+    capturedWatchCallback!({ sessionId: 'test', state: 'working', taskInvocations: [] })
+    capturedWatchCallback!({ sessionId: 'test', state: 'working', taskInvocations: [] })
+    capturedWatchCallback!({ sessionId: 'test', state: 'working', taskInvocations: [] })
+
+    // Count agents:updated broadcasts - should be throttled to at most 1
+    const broadcastsAfterRapidCalls = sendMock.mock.calls.filter((c: any[]) => c[0] === 'agents:updated').length
+    expect(broadcastsAfterRapidCalls).toBeLessThanOrEqual(1)
+
+    // After 500ms, another broadcast should be allowed
+    sendMock.mockClear()
+    await vi.advanceTimersByTimeAsync(500)
+    capturedWatchCallback!({ sessionId: 'test', state: 'working', taskInvocations: [] })
+
+    const broadcastsAfterThrottle = sendMock.mock.calls.filter((c: any[]) => c[0] === 'agents:updated').length
+    expect(broadcastsAfterThrottle).toBeLessThanOrEqual(1)
+  })
+})
