@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ProjectPicker from './ProjectPicker'
 import MissionDropdown from './MissionDropdown'
 import { extractBranchName } from '../utils/branchUtils'
+import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import {
   BotIcon,
   CrownIcon,
@@ -52,6 +53,7 @@ interface AgentSession {
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
   failureReason?: string  // Why session resume failed
   resumeAttempts?: number  // Number of times we've tried to resume
+  currentState?: string  // Current state from backend (waiting, working, etc.)
 }
 
 interface AgentsByProject {
@@ -101,6 +103,9 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const [failedTeleportSessions, setFailedTeleportSessions] = useState<Map<string, TeleportFailure>>(new Map())
   const submenuRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
   const currentPath = location.pathname
+  const { showLoading, hideLoading } = useLoadingSnackbar()
+  const loadingSnackbarRef = useRef<string | null>(null)
+  const isInitialLoadRef = useRef(true)
 
   // Close project submenu when clicking outside
   useEffect(() => {
@@ -124,7 +129,20 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
   useEffect(() => {
     // Load agents and query current state from backend
-    const loadAgentsAndStates = async () => {
+    const loadAgentsAndStates = async (showIndicator: boolean) => {
+      // Show loading indicator only on initial load (not on IPC updates)
+      if (showIndicator && activeProjects.length > 0) {
+        loadingSnackbarRef.current = showLoading({
+          title: 'Loading Projects',
+          messages: [
+            'Scanning worktrees...',
+            'Reading agent info...',
+            'Checking session states...'
+          ],
+          rotationInterval: 1500
+        })
+      }
+
       const agentsByProj: AgentsByProject = {}
       const currentWaitingAgents = new Set<string>()
       const tasksByAg: TasksByAgent = {}
@@ -135,34 +153,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
           const agents = await window.electronAPI.listAgentsForProject(project.path)
           agentsByProj[project.path] = agents
 
-          // Query backend for CURRENT state of each active Claude agent
-          // This fixes the "stuck state" bug on page reload
-          // Also fetch task invocations for super minions
+          // Use currentState from listAgentsForProject response (includes state inline)
+          // This avoids separate getAgentState calls which were causing N extra listAgents calls
           for (const agent of agents) {
-            if (agent.terminalPid && agent.tool === 'claude') {
-              try {
-                const state = await window.electronAPI.getAgentState(agent.id)
-                console.log(`[Sidebar] Queried state for ${agent.id}: ${state}`)
-
-                if (state === 'waiting') {
-                  currentWaitingAgents.add(agent.id)
-                }
-              } catch (err) {
-                console.error(`Failed to query state for ${agent.id}:`, err)
-              }
+            // Check waiting state from inline currentState (already fetched by backend)
+            if (agent.currentState === 'waiting') {
+              currentWaitingAgents.add(agent.id)
             }
 
-            // Fetch task invocations for super minions
+            // Track super minions for collapse state initialization
             if (agent.isSuperMinion) {
               superMinionIds.push(agent.id)
-              try {
-                const superDetails = await window.electronAPI.getSuperAgentDetails(agent.id)
-                if (superDetails?.taskInvocations) {
-                  tasksByAg[agent.id] = superDetails.taskInvocations
-                }
-              } catch (err) {
-                // Ignore errors fetching task invocations
-              }
             }
           }
         } catch (err) {
@@ -182,13 +183,22 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       console.log('[Sidebar] Loaded agents with current states:', {
         waiting: [...currentWaitingAgents]
       })
+
+      // Hide loading indicator when done
+      if (loadingSnackbarRef.current) {
+        hideLoading(loadingSnackbarRef.current)
+        loadingSnackbarRef.current = null
+      }
     }
 
-    loadAgentsAndStates()
+    // Show loading indicator only on initial load
+    const shouldShowIndicator = isInitialLoadRef.current
+    isInitialLoadRef.current = false
+    loadAgentsAndStates(shouldShowIndicator)
 
-    // Listen for agent updates
+    // Listen for agent updates (don't show loading indicator for updates)
     const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
-      loadAgentsAndStates()
+      loadAgentsAndStates(false)
     })
 
     // Listen for state changes (NEW: replaces individual waiting/resumed events)
@@ -256,7 +266,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       unsubTeleportFailed()
       unsubResumeFailed()
     }
-  }, [activeProjects])
+  }, [activeProjects, showLoading, hideLoading])
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -345,8 +355,25 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     })
   }
 
-  const toggleSuperMinionCollapse = (agentId: string, e: React.MouseEvent) => {
+  const toggleSuperMinionCollapse = async (agentId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    const isCurrentlyCollapsed = collapsedSuperMinions.has(agentId)
+
+    // If expanding and we don't have task invocations yet, fetch them
+    if (isCurrentlyCollapsed && !tasksByAgent[agentId]) {
+      try {
+        const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
+        if (superDetails?.taskInvocations) {
+          setTasksByAgent(prev => ({
+            ...prev,
+            [agentId]: superDetails.taskInvocations
+          }))
+        }
+      } catch (err) {
+        console.error(`Failed to fetch task invocations for ${agentId}:`, err)
+      }
+    }
+
     setCollapsedSuperMinions(prev => {
       const next = new Set(prev)
       if (next.has(agentId)) {

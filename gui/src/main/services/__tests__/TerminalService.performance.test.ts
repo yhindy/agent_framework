@@ -46,16 +46,22 @@ function createMockClaudeSessionInfoService(stateProvider?: () => { state: strin
     watchSession: vi.fn(),
     unwatchSession: vi.fn(),
     extractGitBranch: vi.fn().mockReturnValue(null),
-    getSessionState: vi.fn().mockReturnValue('working')
+    getSessionState: vi.fn().mockReturnValue('working'),
+    findSessionFile: vi.fn().mockReturnValue('/mock/session/file.jsonl')
   }
 }
 
+// Global counter for incrementing mtime to simulate file changes
+let mtimeCounter = 1000
+
 function setupFsMocks(): void {
+  mtimeCounter = 1000  // Reset counter for each test
   vi.mocked(fs.existsSync).mockReturnValue(true)
-  vi.mocked(fs.statSync).mockReturnValue({
+  vi.mocked(fs.statSync).mockImplementation(() => ({
     isDirectory: () => true,
-    mode: 0o755
-  } as any)
+    mode: 0o755,
+    mtimeMs: mtimeCounter++  // Increment on each call to simulate file changes
+  } as any))
 }
 
 describe('TerminalService Performance - Polling Interval', () => {
@@ -90,19 +96,20 @@ describe('TerminalService Performance - Polling Interval', () => {
     )
 
     // Clear initial calls
-    mockClaudeSessionInfoService.parseSessionInfo.mockClear()
+    // Note: For non-super-minion agents, we use lightweight getSessionState instead of parseSessionInfo
+    mockClaudeSessionInfoService.getSessionState.mockClear()
 
     // After 1 second, should NOT have been called yet (old behavior was 1s)
     await vi.advanceTimersByTimeAsync(1000)
-    expect(mockClaudeSessionInfoService.parseSessionInfo).not.toHaveBeenCalled()
+    expect(mockClaudeSessionInfoService.getSessionState).not.toHaveBeenCalled()
 
     // After 2 seconds total, should have been called once
     await vi.advanceTimersByTimeAsync(1000)
-    expect(mockClaudeSessionInfoService.parseSessionInfo).toHaveBeenCalledTimes(1)
+    expect(mockClaudeSessionInfoService.getSessionState).toHaveBeenCalledTimes(1)
 
     // After 4 seconds total, should have been called twice
     await vi.advanceTimersByTimeAsync(2000)
-    expect(mockClaudeSessionInfoService.parseSessionInfo).toHaveBeenCalledTimes(2)
+    expect(mockClaudeSessionInfoService.getSessionState).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -235,7 +242,8 @@ describe('TerminalService Performance - File Watcher Throttling', () => {
       }),
       unwatchSession: vi.fn(),
       extractGitBranch: vi.fn().mockReturnValue(null),
-      getSessionState: vi.fn().mockReturnValue('working')
+      getSessionState: vi.fn().mockReturnValue('working'),
+      findSessionFile: vi.fn().mockReturnValue('/mock/session/file.jsonl')
     }
 
     terminalService = new TerminalService(mockMainWindow as unknown as BrowserWindow)

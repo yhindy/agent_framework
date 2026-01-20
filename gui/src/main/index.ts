@@ -495,13 +495,27 @@ function setupIPC(): void {
 
   ipcMain.handle('agents:listForProject', async (_event, projectPath: string) => {
     const agents = await services!.agent.listAgents(projectPath)
-    
-    // Merge in terminal PIDs from TerminalService
+
+    // Merge in terminal PIDs and current state from TerminalService
+    // This avoids separate getAgentState calls for each agent (major perf improvement)
     const activeTerminals = services!.terminal.getActiveTerminals()
-    return agents.map(agent => ({
-      ...agent,
-      terminalPid: activeTerminals.get(agent.id) ?? null
-    }))
+    return agents.map(agent => {
+      let currentState: string | undefined
+
+      // Get state for active Claude agents
+      if (activeTerminals.has(agent.id) && agent.tool === 'claude' && agent.claudeSessionId) {
+        currentState = services!.claudeSessionInfo.getSessionState(
+          agent.claudeSessionId,
+          agent.worktreePath
+        )
+      }
+
+      return {
+        ...agent,
+        terminalPid: activeTerminals.get(agent.id) ?? null,
+        currentState
+      }
+    })
   })
 
   ipcMain.handle('agents:stop', async (_event, agentId: string) => {
@@ -1331,6 +1345,10 @@ app.on('window-all-closed', () => {
     services.terminal.cleanup()
     services.testEnv.cleanup()
     services.claudeConfig.cleanup()
+    // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
+    services.claudeSessionInfo.dispose()
+    // MEMORY FIX: Dispose PRPollingService to clean up polling jobs
+    services.prPolling.dispose()
   }
   if (process.platform !== 'darwin') {
     app.quit()

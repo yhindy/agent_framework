@@ -814,12 +814,16 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         }
       }
 
-      // Unified polling: state and task detection in a single JSONL parse
+      // State polling using lightweight tail-based method (reads only last 10KB, not entire file)
+      // For super minions, we also check task invocations but only when file changes
+      let lastTaskCheckMtime = 0
+
       const checkAndBroadcastState = async (): Promise<void> => {
         if (!effectiveSessionId) return
 
-        const sessionInfo = await this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
-        const currentState = sessionInfo?.state || 'unknown'
+        // PERFORMANCE: Use lightweight getSessionState which only reads last 10KB of file
+        // instead of parseSessionInfo which streams the entire file (can be 700MB+)
+        const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
 
         tryDetectBranch()
 
@@ -829,15 +833,31 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           lastKnownState = currentState
         }
 
-        // For super minions: detect task invocation changes for sidebar updates
-        if (isSuperMinionAgent && sessionInfo) {
-          const currentHash = sessionInfo.taskInvocations
-            .map(t => `${t.toolUseId}:${t.status}`)
-            .join('|')
-          if (currentHash !== lastTaskHash) {
-            lastTaskHash = currentHash
-            // Use throttled broadcast to prevent flooding
-            this.throttledBroadcastUpdate(agentId)
+        // For super minions: check task invocations only when file has changed
+        // to avoid expensive full-file parsing on every poll
+        if (isSuperMinionAgent) {
+          const sessionFile = this.claudeSessionInfoService!.findSessionFile(effectiveSessionId, worktreePath)
+          if (sessionFile) {
+            try {
+              const stat = statSync(sessionFile)
+              if (stat.mtimeMs !== lastTaskCheckMtime) {
+                lastTaskCheckMtime = stat.mtimeMs
+                // File changed - parse full session for task invocations
+                const sessionInfo = await this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
+                if (sessionInfo) {
+                  const currentHash = sessionInfo.taskInvocations
+                    .map(t => `${t.toolUseId}:${t.status}`)
+                    .join('|')
+                  if (currentHash !== lastTaskHash) {
+                    lastTaskHash = currentHash
+                    // Use throttled broadcast to prevent flooding
+                    this.throttledBroadcastUpdate(agentId)
+                  }
+                }
+              }
+            } catch {
+              // Ignore stat errors
+            }
           }
         }
       }
@@ -1019,6 +1039,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }
 
       this.terminals.delete(agentId)
+      // MEMORY FIX: Clean up broadcast throttling map entry
+      this.lastAgentBroadcastTime.delete(agentId)
       this.safeSendIPC('agents:updated')
     })
   }
