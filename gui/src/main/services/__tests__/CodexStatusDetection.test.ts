@@ -63,7 +63,7 @@ describe('Codex Status Detection', () => {
     }
     vi.mocked(pty.spawn).mockReturnValue(mockPty)
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any)
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true, mtimeMs: Date.now() } as any)
 
     mockAgentService = {
       readAgentInfo: vi.fn().mockResolvedValue(null),

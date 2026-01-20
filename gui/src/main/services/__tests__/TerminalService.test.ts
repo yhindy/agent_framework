@@ -955,7 +955,8 @@ describe('Teleport Session Retry Mechanism', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
-      mode: 0o755
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
     } as any)
 
     terminalService = new TerminalService(mockMainWindow)
@@ -1221,7 +1222,9 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       }),
       watchSession: vi.fn(),
       unwatchSession: vi.fn(),
-      extractGitBranch: vi.fn().mockReturnValue(null)
+      extractGitBranch: vi.fn().mockReturnValue(null),
+      getSessionState: vi.fn().mockReturnValue('working'),
+      findSessionFile: vi.fn().mockReturnValue('/mock/session/file.jsonl')
     }
 
     mockWorkflowService = {
@@ -1233,7 +1236,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
-      mode: 0o755
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
     } as any)
 
     terminalService = new TerminalService(mockMainWindow)
@@ -1267,6 +1271,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should emit agents:updated when task invocations change', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     // Start with no tasks
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
@@ -1356,6 +1368,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should emit agents:updated when task status changes', async () => {
+    // Use incrementing mtime to simulate file changes (needed for optimization that skips unchanged files)
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     // Start with running task
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
@@ -1414,6 +1434,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should clean up unified polling interval on stopAgent', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     await terminalService.startAgent(
       '/path/to/project',
       'super-minion-1',
@@ -1488,6 +1516,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should detect task changes within 2 seconds (polling interval)', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     // This test verifies: tasks are detected at 2-second polling intervals
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
@@ -1540,7 +1576,8 @@ describe('PTY Cleanup Error Handling', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
-      mode: 0o755
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
     } as any)
 
     terminalService = new TerminalService(mockMainWindow)

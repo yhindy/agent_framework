@@ -65,7 +65,8 @@ function setupDefaultMocks(mockPty: any): void {
   vi.mocked(fs.existsSync).mockReturnValue(true)
   vi.mocked(fs.statSync).mockReturnValue({
     isDirectory: () => true,
-    mode: 0o755
+    mode: 0o755,
+    mtimeMs: Date.now()  // Add mtimeMs for file change detection
   } as any)
 }
 

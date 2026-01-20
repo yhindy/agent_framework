@@ -348,6 +348,10 @@ export class PRPollingService {
     }
 
     this.pollingJobs.delete(assignmentId)
+
+    // MEMORY FIX: Clean up cache and subscriptions for this job
+    this.prStatusCache.delete(assignmentId)
+    this.subscriptions.delete(assignmentId)
   }
 
   /**
