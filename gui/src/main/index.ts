@@ -142,6 +142,9 @@ function initializeServices(): void {
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
   terminalService.setSettingsService(settingsService)
 
+  // Clean up orphaned minion-* tmux sessions from previous runs
+  terminalService.killAllMinionTmuxSessions()
+
   // WorkflowService will be set after services object is created (below)
 
   // Set service references in AgentService
