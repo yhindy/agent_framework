@@ -1156,7 +1156,7 @@ function setupIPC(): void {
       const agents = await services!.agent.listAgents(project.path)
       const agent = agents.find(a => a.id === agentId)
       if (agent && agent.claudeSessionId) {
-        const info = services!.claudeSessionInfo.parseSessionInfo(
+        const info = await services!.claudeSessionInfo.parseSessionInfo(
           agent.claudeSessionId,
           agent.worktreePath
         )

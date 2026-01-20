@@ -1,4 +1,5 @@
-import { readFileSync, existsSync, watch, FSWatcher, statSync, readdirSync } from 'fs'
+import { existsSync, watch, FSWatcher, statSync, readdirSync, openSync, readSync, closeSync, createReadStream } from 'fs'
+import { createInterface } from 'readline'
 import { join } from 'path'
 import { homedir } from 'os'
 import { createLogger } from './logger'
@@ -215,15 +216,36 @@ export class ClaudeSessionInfoService {
   }
 
   /**
-   * Read the last N bytes of a file (tail-based reading for efficiency).
+   * Read the last N bytes of a file using true tail reading.
+   * Uses file descriptor with positioned reads to avoid loading the entire file.
    */
   private readFileTail(filePath: string, bytes: number = 50000): string {
+    let fd: number | null = null
     try {
-      const content = readFileSync(filePath, 'utf-8')
-      // Return last N characters (approximating bytes for UTF-8)
-      return content.slice(-bytes)
+      fd = openSync(filePath, 'r')
+      const stat = statSync(filePath)
+
+      if (stat.size === 0) {
+        return ''
+      }
+
+      const readLength = Math.min(bytes, stat.size)
+      const startPosition = Math.max(0, stat.size - readLength)
+      const buffer = Buffer.alloc(readLength)
+
+      readSync(fd, buffer, 0, readLength, startPosition)
+
+      return buffer.toString('utf-8')
     } catch {
       return ''
+    } finally {
+      if (fd !== null) {
+        try {
+          closeSync(fd)
+        } catch {
+          // Ignore close errors
+        }
+      }
     }
   }
 
@@ -267,9 +289,10 @@ export class ClaudeSessionInfoService {
 
   /**
    * Parse a session JSONL file and extract session info.
+   * Uses streaming to handle large files that exceed JavaScript's string length limit.
    * Uses smart caching to avoid re-parsing unchanged files.
    */
-  parseSessionInfo(sessionId: string, worktreePath: string): ClaudeSessionInfo | null {
+  async parseSessionInfo(sessionId: string, worktreePath: string): Promise<ClaudeSessionInfo | null> {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
     if (!sessionFile) {
       return null
@@ -286,9 +309,12 @@ export class ClaudeSessionInfoService {
         return cached.info
       }
 
-      // Read the whole file for now - can optimize to tail later if needed
-      const content = readFileSync(sessionFile, 'utf-8')
-      const lines = content.trim().split('\n')
+      // Use streaming to avoid loading entire file into memory
+      // This prevents ERR_STRING_TOO_LONG errors on large session files (>512MB)
+      const rl = createInterface({
+        input: createReadStream(sessionFile, { encoding: 'utf-8' }),
+        crlfDelay: Infinity
+      })
 
       let actualModel = ''
       let claudeCodeVersion = ''
@@ -307,8 +333,22 @@ export class ClaudeSessionInfoService {
       // Track Task tool invocations
       const taskInvocationsMap = new Map<string, TaskInvocation>()
 
-      for (const line of lines) {
+      // Keep a sliding window of recent lines for backward state scanning
+      // We only need ~100 lines to find the last real conversation entry
+      const RECENT_LINES_BUFFER_SIZE = 100
+      const recentLines: string[] = []
+      let totalLineCount = 0
+
+      for await (const line of rl) {
         if (!line.trim()) continue
+
+        totalLineCount++
+
+        // Maintain sliding window of recent lines
+        recentLines.push(line)
+        if (recentLines.length > RECENT_LINES_BUFFER_SIZE) {
+          recentLines.shift()
+        }
 
         try {
           const entry = JSON.parse(line) as SessionJSONLEntry
@@ -402,6 +442,7 @@ export class ClaudeSessionInfoService {
       }
 
       // Determine state from the LAST REAL entry (skip slash commands)
+      // Use the recent lines buffer for backward scanning
       //
       // ACCEPTANCE CRITERIA: Only show "waiting" when Claude is expecting human input
       //
@@ -410,10 +451,10 @@ export class ClaudeSessionInfoService {
       // - working: Claude is processing, using tools, or waiting for tool results
       // - unknown: any other case (safe default)
 
-      // Scan backwards to find last REAL conversation entry (skip slash commands)
-      for (let i = lines.length - 1; i >= 0; i--) {
+      // Scan backwards through recent lines to find last REAL conversation entry
+      for (let i = recentLines.length - 1; i >= 0; i--) {
         try {
-          const entry = JSON.parse(lines[i]) as SessionJSONLEntry
+          const entry = JSON.parse(recentLines[i]) as SessionJSONLEntry
 
           // Skip non-conversation entries
           if (entry.type !== 'user' && entry.type !== 'assistant') {
@@ -518,8 +559,8 @@ export class ClaudeSessionInfoService {
       // Debug state detection
       if (process.env.NODE_ENV === 'development') {
         log.debug(' Parsed session state:', state, {
-          lastLine: lines[lines.length - 1]?.substring(0, 100),
-          linesCount: lines.length
+          lastLine: recentLines[recentLines.length - 1]?.substring(0, 100),
+          linesCount: totalLineCount
         })
       }
 
@@ -721,11 +762,13 @@ export class ClaudeSessionInfoService {
 
           const timer = setTimeout(() => {
             this.debounceTimers.delete(sessionId)
-            const info = this.parseSessionInfo(sessionId, worktreePath)
-            if (info) {
-              const cb = this.callbacks.get(sessionId)
-              if (cb) cb(info)
-            }
+            // Use void to handle async function in sync callback
+            void this.parseSessionInfo(sessionId, worktreePath).then(info => {
+              if (info) {
+                const cb = this.callbacks.get(sessionId)
+                if (cb) cb(info)
+              }
+            })
           }, WATCHER_DEBOUNCE_MS)
 
           this.debounceTimers.set(sessionId, timer)
@@ -785,10 +828,11 @@ export class ClaudeSessionInfoService {
 
   /**
    * Extract gitBranch from a session's JSONL file.
+   * Uses streaming with early exit since gitBranch typically appears early in the file.
    * Used for late detection of branch names (e.g., after teleport syncs).
    * Returns null if file doesn't exist, is empty, or has no gitBranch.
    */
-  extractGitBranch(sessionId: string, worktreePath: string): string | null {
+  async extractGitBranch(sessionId: string, worktreePath: string): Promise<string | null> {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
     if (!sessionFile) {
       return null
@@ -800,14 +844,19 @@ export class ClaudeSessionInfoService {
         return null
       }
 
-      const content = readFileSync(sessionFile, 'utf-8')
+      const rl = createInterface({
+        input: createReadStream(sessionFile, { encoding: 'utf-8' }),
+        crlfDelay: Infinity
+      })
 
-      for (const line of content.trim().split('\n')) {
+      for await (const line of rl) {
         if (!line.trim()) continue
 
         try {
           const entry = JSON.parse(line)
           if (entry.gitBranch && typeof entry.gitBranch === 'string') {
+            // Close the stream immediately - no need to read the rest of the file
+            rl.close()
             return this.stripRefsHeadsPrefix(entry.gitBranch)
           }
         } catch {

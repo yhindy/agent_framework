@@ -713,21 +713,23 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
         // Run detection in next tick to avoid blocking the polling loop
         setImmediate(() => {
-          try {
-            const detectedBranch = this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
-            if (!detectedBranch) return
+          void (async () => {
+            try {
+              const detectedBranch = await this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
+              if (!detectedBranch) return
 
-            log.debug(`Late branch detection for ${agentId}: ${detectedBranch}`)
-            branchDetectionComplete = true
+              log.debug(`Late branch detection for ${agentId}: ${detectedBranch}`)
+              branchDetectionComplete = true
 
-            const projectName = projectPath.split('/').pop() || 'project'
-            const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
-            displayName = `${projectName}: ${branchSuffix}`
+              const projectName = projectPath.split('/').pop() || 'project'
+              const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
+              displayName = `${projectName}: ${branchSuffix}`
 
-            this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
-          } catch (err) {
-            // Silently ignore errors - branch detection is optional
-          }
+              this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
+            } catch (err) {
+              // Silently ignore errors - branch detection is optional
+            }
+          })()
         })
       }
 
@@ -768,10 +770,10 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }
 
       // Unified polling: state and task detection in a single JSONL parse
-      const checkAndBroadcastState = (): void => {
+      const checkAndBroadcastState = async (): Promise<void> => {
         if (!effectiveSessionId) return
 
-        const sessionInfo = this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
+        const sessionInfo = await this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
         const currentState = sessionInfo?.state || 'unknown'
 
         tryDetectBranch()
@@ -797,9 +799,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
       // Immediate check for fast Claude responses, then poll every 2s
       log.debug(`Starting state polling for ${agentId} (session: ${effectiveSessionId})`)
-      checkAndBroadcastState()
+      void checkAndBroadcastState()
 
-      statePollingInterval = setInterval(checkAndBroadcastState, 2000)
+      statePollingInterval = setInterval(() => void checkAndBroadcastState(), 2000)
 
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
