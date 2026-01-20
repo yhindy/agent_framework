@@ -71,9 +71,11 @@ The app window will open automatically.
 ### Option C: Test the Signal System
 
 1. Click `agent-1` in the sidebar
-2. In the terminal, type:
+2. In the terminal, type these commands to test signal detection:
    ```bash
-   ../../minions/bin/test_signal.sh
+   echo "===SIGNAL:PLAN_READY==="
+   echo "===SIGNAL:WORKING==="
+   echo "===SIGNAL:DEV_COMPLETED==="
    ```
 3. Watch the signals appear as notifications!
 
@@ -89,7 +91,7 @@ The app window will open automatically.
 Make sure you're selecting the actual project root, not a subdirectory.
 
 ### "Not a valid minion framework project"
-Your project needs a `minions/` directory. Run `../minions/bin/init.sh` first.
+Your project needs either `minions.json` (new format) or a `minions/` directory (legacy format). Use the setup wizard to configure a new project.
 
 ### Terminal shows nothing
 - Verify `claude` or `cursor` is installed: `which claude` / `which cursor`
