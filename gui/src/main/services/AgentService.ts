@@ -837,7 +837,7 @@ export class AgentService {
     // 6. Get task invocations from JSONL if we have a session and service
     let taskInvocations: TaskInvocation[] = []
     if (agentInfo.claudeSessionId && this.claudeSessionInfoService) {
-      const sessionInfo = this.claudeSessionInfoService.parseSessionInfo(
+      const sessionInfo = await this.claudeSessionInfoService.parseSessionInfo(
         agentInfo.claudeSessionId,
         session.worktreePath
       )

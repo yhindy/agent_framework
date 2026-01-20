@@ -83,7 +83,7 @@ describe('Session Persistence', () => {
       findSessionFile: vi.fn(),
       watchSession: vi.fn(),
       unwatchSession: vi.fn(),
-      extractGitBranch: vi.fn().mockReturnValue(null) // For late branch detection
+      extractGitBranch: vi.fn().mockResolvedValue(null) // For late branch detection (async)
     } as any
 
     terminalService = new TerminalService(mockMainWindow)
@@ -280,7 +280,7 @@ describe('Session Persistence', () => {
 
     it('persists waiting state when Claude session state changes via JSONL', async () => {
       // Mock session initially working (unified polling uses parseSessionInfo)
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockReturnValue({
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockResolvedValue({
         sessionId: 'test-session',
         state: 'working',
         taskInvocations: []
@@ -292,14 +292,14 @@ describe('Session Persistence', () => {
       vi.mocked(agentService.updateAgentInfo).mockClear()
 
       // Change JSONL state to waiting (simulating Claude finishing a task)
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockReturnValue({
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockResolvedValue({
         sessionId: 'test-session',
         state: 'waiting',
         taskInvocations: []
       } as any)
 
       // Advance timer to trigger JSONL polling (2 second interval with unified polling)
-      vi.advanceTimersByTime(2100)
+      await vi.advanceTimersByTimeAsync(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),
@@ -312,7 +312,7 @@ describe('Session Persistence', () => {
 
     it('persists resumed state when Claude resumes work via JSONL', async () => {
       // Start with waiting state (unified polling uses parseSessionInfo)
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockReturnValue({
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockResolvedValue({
         sessionId: 'test-session',
         state: 'waiting',
         taskInvocations: []
@@ -321,20 +321,20 @@ describe('Session Persistence', () => {
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
       // Advance timer to establish initial waiting state (2 second interval with unified polling)
-      vi.advanceTimersByTime(2100)
+      await vi.advanceTimersByTimeAsync(2100)
 
       // Clear mock to see new calls
       vi.mocked(agentService.updateAgentInfo).mockClear()
 
       // Change JSONL state to working (simulating user input and Claude processing)
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockReturnValue({
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockResolvedValue({
         sessionId: 'test-session',
         state: 'working',
         taskInvocations: []
       } as any)
 
       // Advance timer to trigger JSONL polling (2 second interval with unified polling)
-      vi.advanceTimersByTime(2100)
+      await vi.advanceTimersByTimeAsync(2100)
 
       expect(agentService.updateAgentInfo).toHaveBeenCalledWith(
         expect.any(String),
@@ -371,7 +371,7 @@ describe('Session Persistence', () => {
       // Setup: Mock parseSessionInfo to simulate state transitions (unified polling)
       // Account for: 1 immediate call + polling every 2000ms
       let callCount = 0
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockImplementation(() => {
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockImplementation(async () => {
         callCount++
         if (callCount === 1) return { sessionId: 'test', state: 'unknown', taskInvocations: [] } as any
         if (callCount === 2) return { sessionId: 'test', state: 'waiting', taskInvocations: [] } as any
@@ -382,7 +382,7 @@ describe('Session Persistence', () => {
 
       // Immediate call happens on start (returns unknown)
       // Advance 2000ms to trigger first poll (returns waiting, transitions from unknown -> waiting)
-      vi.advanceTimersByTime(2000)
+      await vi.advanceTimersByTimeAsync(2000)
 
       // Verify waiting state was detected (Claude uses agent:stateChanged event)
       expect(mockWebContents.send).toHaveBeenCalledWith(
@@ -395,7 +395,7 @@ describe('Session Persistence', () => {
       mockWebContents.send.mockClear()
 
       // Advance another 2000ms to trigger next poll (returns working, transitions from waiting -> working)
-      vi.advanceTimersByTime(2000)
+      await vi.advanceTimersByTimeAsync(2000)
 
       // Claude uses agent:stateChanged event for state transitions
       expect(mockWebContents.send).toHaveBeenCalledWith('agent:stateChanged', 'agent-1', 'working')
@@ -510,7 +510,7 @@ describe('Session Persistence', () => {
       const sessionToAgent = new Map<string, string>()
 
       // Setup: Mock parseSessionInfo to return different states based on worktreePath (unified polling)
-      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockImplementation((sessionId: string, worktreePath: string) => {
+      vi.mocked(claudeSessionInfoService.parseSessionInfo).mockImplementation(async (sessionId: string, worktreePath: string) => {
         // Determine which agent based on projectPath (in worktreePath)
         const isAgent1 = worktreePath.includes('worktree1')
 
@@ -528,7 +528,7 @@ describe('Session Persistence', () => {
       await terminalService.startAgent('/path/to/worktree1', 'agent-1', 'claude', 'dev')
 
       // Advance timer to let agent-1's polling start and first call happen
-      vi.advanceTimersByTime(100)
+      await vi.advanceTimersByTimeAsync(100)
 
       // Start agent 2
       mockPty.write.mockClear()
@@ -537,10 +537,10 @@ describe('Session Persistence', () => {
 
       // Advance timers to trigger JSONL polling (1 second interval with unified polling)
       // First poll returns 'unknown' (initial state)
-      vi.advanceTimersByTime(1100)
+      await vi.advanceTimersByTimeAsync(1100)
 
       // Second poll returns the actual state - this triggers the transition
-      vi.advanceTimersByTime(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       // Agent 1 should be waiting (state transitioned from unknown to waiting)
       // Claude uses agent:stateChanged event for state transitions

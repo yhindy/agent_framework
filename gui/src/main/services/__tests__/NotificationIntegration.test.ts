@@ -3,7 +3,7 @@ import { NotificationService } from '../NotificationService'
 import { SettingsService } from '../SettingsService'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
 import { BrowserWindow, Notification } from 'electron'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, statSync } from 'fs'
 
 /**
  * Notification System Integration Tests
@@ -31,13 +31,28 @@ vi.mock('electron', () => {
   }
 })
 
-// Mock fs
+// Mock fs - including openSync/readSync/closeSync for readFileTail
+let currentTailContent = ''
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   existsSync: vi.fn(),
   watch: vi.fn(),
-  statSync: vi.fn(() => ({ mtimeMs: Date.now() }))
+  statSync: vi.fn(() => ({ mtimeMs: Date.now(), size: 1000 })),
+  openSync: vi.fn().mockReturnValue(1),
+  readSync: vi.fn().mockImplementation((fd: number, buffer: Buffer, offset: number, length: number, position: number | null) => {
+    const contentBuffer = Buffer.from(currentTailContent, 'utf-8')
+    const bytesToRead = Math.min(length, contentBuffer.length - (position ?? 0))
+    contentBuffer.copy(buffer, offset, position ?? 0, (position ?? 0) + bytesToRead)
+    return bytesToRead
+  }),
+  closeSync: vi.fn()
 }))
+
+// Helper to set up readFileTail mock content
+function setupReadFileTailMock(content: string) {
+  currentTailContent = content
+  vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: content.length || 1 } as any)
+}
 
 // Mock SettingsService
 vi.mock('../SettingsService', () => ({
@@ -114,8 +129,8 @@ describe('Notification System Integration Tests', () => {
     state: 'working' | 'waiting' | 'unknown'
     notificationSent: boolean
   } => {
-    // Mock the JSONL file content
-    vi.mocked(readFileSync).mockReturnValue(jsonlContent)
+    // Mock the JSONL file content for readFileTail (uses openSync/readSync/closeSync)
+    setupReadFileTailMock(jsonlContent)
 
     // Get state from session info service
     const sessionId = 'test-session'
@@ -504,7 +519,7 @@ describe('Notification System Integration Tests', () => {
 
     it('should notify correctly AFTER slash command completes if Claude is waiting', () => {
       // First: Assistant finishes, triggers notification
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'assistant',
           message: {
@@ -531,7 +546,7 @@ describe('Notification System Integration Tests', () => {
       vi.mocked(Notification).mockClear()
 
       // Then: Slash command happens (should be skipped)
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'assistant',
           message: {
@@ -817,7 +832,7 @@ describe('Notification System Integration Tests', () => {
         }
       )
 
-      vi.mocked(readFileSync).mockReturnValue(waitingJsonl)
+      setupReadFileTailMock(waitingJsonl)
       let state = sessionInfoService.getSessionState(sessionId, '/Users/test/project')
       expect(state).toBe('waiting')
 
@@ -849,7 +864,7 @@ describe('Notification System Integration Tests', () => {
         }
       )
 
-      vi.mocked(readFileSync).mockReturnValue(workingJsonl)
+      setupReadFileTailMock(workingJsonl)
       state = sessionInfoService.getSessionState(sessionId, '/Users/test/project')
       expect(state).toBe('working')
 
@@ -883,7 +898,7 @@ describe('Notification System Integration Tests', () => {
         }
       )
 
-      vi.mocked(readFileSync).mockReturnValue(waitingAgainJsonl)
+      setupReadFileTailMock(waitingAgainJsonl)
       state = sessionInfoService.getSessionState(sessionId, '/Users/test/project')
       expect(state).toBe('waiting')
 
@@ -989,7 +1004,7 @@ describe('Notification System Integration Tests', () => {
       notificationService.setWindowFocus(false)
 
       // Step 1: User asks question → working
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'user',
           message: { role: 'user', content: 'List files in /src' },
@@ -1000,7 +1015,7 @@ describe('Notification System Integration Tests', () => {
       expect(state).toBe('working')
 
       // Step 2: Claude uses tool → working (no notification)
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'user',
           message: { role: 'user', content: 'List files in /src' },
@@ -1027,7 +1042,7 @@ describe('Notification System Integration Tests', () => {
       expect(state).toBe('working')
 
       // Step 3: Tool result → working
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'user',
           message: { role: 'user', content: 'List files in /src' },
@@ -1068,7 +1083,7 @@ describe('Notification System Integration Tests', () => {
       expect(state).toBe('working')
 
       // Step 4: Claude finishes with text → waiting (SHOULD NOTIFY)
-      vi.mocked(readFileSync).mockReturnValue(createJSONL(
+      setupReadFileTailMock(createJSONL(
         {
           type: 'user',
           message: { role: 'user', content: 'List files in /src' },
@@ -1160,7 +1175,7 @@ describe('Notification System Integration Tests', () => {
         }
       )
 
-      vi.mocked(readFileSync).mockReturnValue(jsonl)
+      setupReadFileTailMock(jsonl)
       const state = sessionInfoService.getSessionState(sessionId, '/Users/test/project')
 
       // All slash command entries are skipped, so state is waiting from assistant message
