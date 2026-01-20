@@ -160,6 +160,51 @@ export class TerminalService {
   }
 
   /**
+   * Kill all orphaned minion-* tmux sessions.
+   *
+   * Called on app startup to clean up sessions left behind from crashes,
+   * force-quits, or abnormal terminations.
+   *
+   * @returns number of sessions killed
+   */
+  killAllMinionTmuxSessions(): number {
+    if (!this.isTmuxAvailable()) {
+      return 0
+    }
+
+    try {
+      const output = execSync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { encoding: 'utf8' })
+      const sessions = output.trim().split('\n').filter(Boolean).filter(s => s.startsWith('minion-'))
+
+      if (sessions.length === 0) {
+        log.debug('No orphaned minion tmux sessions found')
+        return 0
+      }
+
+      log.info(`Cleaning up ${sessions.length} orphaned minion tmux sessions`)
+
+      let killed = 0
+      for (const sessionName of sessions) {
+        try {
+          execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
+          killed++
+        } catch {
+          log.debug(`Failed to kill tmux session: ${sessionName}`)
+        }
+      }
+
+      if (killed > 0) {
+        log.info(`Cleaned up ${killed} orphaned minion tmux sessions`)
+      }
+      return killed
+    } catch {
+      // tmux list-sessions fails if no server is running
+      log.debug('No tmux server running or no sessions to clean up')
+      return 0
+    }
+  }
+
+  /**
    * Check if tmux mode should be used based on settings and availability.
    *
    * Tmux mode is used when BOTH conditions are met:
