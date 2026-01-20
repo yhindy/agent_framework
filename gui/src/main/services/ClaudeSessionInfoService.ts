@@ -111,11 +111,15 @@ interface SessionJSONLEntry {
   }
 }
 
+/** Debounce time for file watcher events (ms) - coalesces rapid fs.watch events */
+const WATCHER_DEBOUNCE_MS = 100
+
 export class ClaudeSessionInfoService {
   private claudeProjectsDir: string
   private watchers: Map<string, FSWatcher> = new Map()
   private cache: Map<string, { info: ClaudeSessionInfo; mtime: number }> = new Map()
   private callbacks: Map<string, (info: ClaudeSessionInfo) => void> = new Map()
+  private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
 
   constructor() {
     // Claude stores projects in ~/.claude/projects/
@@ -731,6 +735,7 @@ export class ClaudeSessionInfoService {
   /**
    * Start watching a session file for changes.
    * Calls the callback whenever the session info updates.
+   * Uses debouncing to coalesce rapid fs.watch events (which are notoriously chatty).
    */
   watchSession(
     sessionId: string,
@@ -749,14 +754,24 @@ export class ClaudeSessionInfoService {
     try {
       const watcher = watch(sessionFile, { persistent: false }, (eventType) => {
         if (eventType === 'change') {
-          // Debounce: only process if file was modified recently
-          // Use void to handle async function in sync callback
-          void this.parseSessionInfo(sessionId, worktreePath).then(info => {
-            if (info) {
-              const cb = this.callbacks.get(sessionId)
-              if (cb) cb(info)
-            }
-          })
+          // Debounce rapid file change events (fs.watch can fire multiple times per write)
+          const existingTimer = this.debounceTimers.get(sessionId)
+          if (existingTimer) {
+            clearTimeout(existingTimer)
+          }
+
+          const timer = setTimeout(() => {
+            this.debounceTimers.delete(sessionId)
+            // Use void to handle async function in sync callback
+            void this.parseSessionInfo(sessionId, worktreePath).then(info => {
+              if (info) {
+                const cb = this.callbacks.get(sessionId)
+                if (cb) cb(info)
+              }
+            })
+          }, WATCHER_DEBOUNCE_MS)
+
+          this.debounceTimers.set(sessionId, timer)
         }
       })
 
@@ -770,6 +785,13 @@ export class ClaudeSessionInfoService {
    * Stop watching a session file.
    */
   unwatchSession(sessionId: string): void {
+    // Clear any pending debounce timer
+    const timer = this.debounceTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.debounceTimers.delete(sessionId)
+    }
+
     const watcher = this.watchers.get(sessionId)
     if (watcher) {
       watcher.close()
@@ -779,9 +801,16 @@ export class ClaudeSessionInfoService {
   }
 
   /**
-   * Clean up all watchers.
+   * Clean up all watchers and debounce timers.
    */
   dispose(): void {
+    // Clear all debounce timers first
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.debounceTimers.clear()
+
+    // Then clean up watchers
     for (const [sessionId] of this.watchers) {
       this.unwatchSession(sessionId)
     }

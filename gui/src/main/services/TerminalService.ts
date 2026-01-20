@@ -951,9 +951,10 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
       // JSONL watcher for super minions provides immediate updates; polling serves as backup
+      // Use throttled broadcast to prevent flooding from rapid file changes
       if (agentInfo && isSuperMinion(agentInfo) && this.claudeSessionInfoService) {
         this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
-          this.mainWindow.webContents.send('agents:updated')
+          this.throttledBroadcastUpdate(agentId)
         })
       }
     }
