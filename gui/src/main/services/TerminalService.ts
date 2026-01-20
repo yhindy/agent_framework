@@ -978,6 +978,23 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     })
   }
 
+  /**
+   * Escape shell metacharacters for use in double-quoted bash strings.
+   *
+   * Handles: backslashes, backticks (command substitution), dollar signs (variable expansion),
+   * double quotes, and exclamation marks (history expansion).
+   *
+   * Order matters: backslashes must be escaped first to avoid double-escaping.
+   */
+  private escapeForShell(str: string): string {
+    return str
+      .replace(/\\/g, '\\\\')
+      .replace(/`/g, '\\`')
+      .replace(/\$/g, '\\$')
+      .replace(/"/g, '\\"')
+      .replace(/!/g, '\\!')
+  }
+
   private getClaudeArgs(mode: string, agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any, projectPath?: string, worktreePath?: string): string[] {
     const args: string[] = []
 
@@ -1005,12 +1022,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         const planPrompt = (isSuperMinion && projectPath)
           ? this.generateWorkflowPrompt(projectPath, prompt)
           : `Create a plan for: ${prompt}`
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(planPrompt)}"`)
       }
     } else if (mode === 'dev') {
       args.push('--permission-mode', 'acceptEdits')
       if (prompt) {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(prompt)}"`)
       }
     }
 
@@ -1051,9 +1068,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(planPrompt)}"`)
       } else {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(prompt)}"`)
       }
     }
 
@@ -1084,9 +1101,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(planPrompt)}"`)
       } else {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${this.escapeForShell(prompt)}"`)
       }
     }
 

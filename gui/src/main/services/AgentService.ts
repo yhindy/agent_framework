@@ -66,97 +66,80 @@ export class AgentService {
   /**
    * Validate a teleported session to ensure it can be resumed.
    * Checks if JSONL file exists, is not corrupted, and is resumable.
+   *
+   * @param agentInfo - The agent info containing session details
+   * @param worktreePath - The worktree path (required to find JSONL file correctly)
    */
-  async validateTeleportSession(agentInfo: AgentInfo): Promise<{
+  async validateTeleportSession(agentInfo: AgentInfo, worktreePath?: string): Promise<{
     isValid: boolean
     reason?: string
     canResume: boolean
   }> {
-    // Check if this is a teleported session
+    const invalid = (reason: string) => ({ isValid: false, reason, canResume: false })
+
+    // Validate teleport session requirements
     if (!agentInfo.cloudSessionId && !agentInfo.isTeleportedSession) {
-      return {
-        isValid: false,
-        reason: 'Not a teleported session (missing cloudSessionId)',
-        canResume: false
-      }
+      return invalid('Not a teleported session (missing cloudSessionId)')
     }
-
-    // If cloudSessionId is missing but marked as teleported, it's invalid
     if (!agentInfo.cloudSessionId) {
-      return {
-        isValid: false,
-        reason: 'Teleported session missing cloudSessionId',
-        canResume: false
-      }
+      return invalid('Teleported session missing cloudSessionId')
     }
 
-    // Check if JSONL file exists
-    const jsonlPath = join(homedir(), '.claude', 'projects', agentInfo.cloudSessionId, 'session.jsonl')
-
-    if (!existsSync(jsonlPath)) {
-      return {
-        isValid: false,
-        reason: 'JSONL file not found at expected path',
-        canResume: false
-      }
+    // Find JSONL file: try ClaudeSessionInfoService first, then legacy path
+    const jsonlPath = this.findJsonlPath(agentInfo, worktreePath)
+    if (!jsonlPath) {
+      return invalid('JSONL file not found (checked worktree hash directory and legacy paths)')
     }
 
-    // Check if file is stale (older than 7 days)
+    // Validate file freshness (must be modified within 7 days)
     try {
       const stats = statSync(jsonlPath)
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
       if (stats.mtimeMs < sevenDaysAgo) {
-        return {
-          isValid: false,
-          reason: 'JSONL file is stale (older than 7 days)',
-          canResume: false
-        }
+        return invalid('JSONL file is stale (older than 7 days)')
       }
-    } catch (error) {
-      return {
-        isValid: false,
-        reason: 'Failed to read JSONL file stats',
-        canResume: false
-      }
+    } catch {
+      return invalid('Failed to read JSONL file stats')
     }
 
-    // Check if JSONL file is valid (can parse first line)
+    // Validate file content (must be non-empty valid JSONL)
     try {
       const content = readFileSync(jsonlPath, 'utf-8')
-
       if (!content.trim()) {
-        return {
-          isValid: false,
-          reason: 'JSONL file is empty',
-          canResume: false
-        }
+        return invalid('JSONL file is empty')
       }
-
-      // Try to parse first line
-      const firstLine = content.split('\n')[0]
-      JSON.parse(firstLine)
-    } catch (error) {
-      return {
-        isValid: false,
-        reason: 'JSONL file is corrupted (invalid JSON)',
-        canResume: false
-      }
+      JSON.parse(content.split('\n')[0])
+    } catch {
+      return invalid('JSONL file is corrupted (invalid JSON)')
     }
 
     // Check if session state is resumable
     if (agentInfo.status === 'completed' || agentInfo.status === 'closed') {
-      return {
-        isValid: true,
-        reason: 'Session is completed or closed',
-        canResume: false
-      }
+      return { isValid: true, reason: 'Session is completed or closed', canResume: false }
     }
 
-    // All checks passed
-    return {
-      isValid: true,
-      canResume: true
+    return { isValid: true, canResume: true }
+  }
+
+  /**
+   * Find the JSONL file path for a teleported session.
+   * Tries ClaudeSessionInfoService first (worktree hash directory), then legacy path.
+   *
+   * Precondition: agentInfo.cloudSessionId must be defined (caller validates this).
+   */
+  private findJsonlPath(agentInfo: AgentInfo, worktreePath?: string): string | null {
+    const cloudSessionId = agentInfo.cloudSessionId!
+
+    // Try ClaudeSessionInfoService for correct path lookup
+    if (this.claudeSessionInfoService && worktreePath) {
+      const sessionId = agentInfo.claudeSessionId || cloudSessionId
+      const path = this.claudeSessionInfoService.findSessionFile(sessionId, worktreePath)
+      if (path) return path
     }
+
+    // Fallback to legacy path for backwards compatibility
+    const legacyPath = join(homedir(), '.claude', 'projects', cloudSessionId, 'session.jsonl')
+    return existsSync(legacyPath) ? legacyPath : null
   }
 
   async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {

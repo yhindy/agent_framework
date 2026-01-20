@@ -300,6 +300,121 @@ describe('AgentService Teleport Session Validation', () => {
       expect(result.canResume).toBe(false)
       expect(result.reason).toContain('Session is completed')
     })
+
+    it('should use ClaudeSessionInfoService.findSessionFile when available', async () => {
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: 'myrepo-abc123',
+        cloudSessionId: 'session_xyz789',
+        claudeSessionId: 'uuid-123-456',
+        isTeleportedSession: true,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      const worktreePath = '/Users/test/code/myrepo-abc123'
+      const expectedJsonlPath = '/Users/test/.claude/projects/-Users-test-code-myrepo-abc123/a1b2c3d4.jsonl'
+
+      // Create mock ClaudeSessionInfoService
+      const mockClaudeSessionInfoService = {
+        findSessionFile: vi.fn().mockReturnValue(expectedJsonlPath)
+      } as any
+
+      agentService.setClaudeSessionInfoService(mockClaudeSessionInfoService)
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === expectedJsonlPath)
+      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"file-history-snapshot","sessionId":"session_xyz789"}\n')
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: Date.now() } as any)
+
+      const result = await agentService.validateTeleportSession(agentInfo, worktreePath)
+
+      // Should call findSessionFile with the correct arguments
+      expect(mockClaudeSessionInfoService.findSessionFile).toHaveBeenCalledWith(
+        'uuid-123-456',  // Uses claudeSessionId first
+        worktreePath
+      )
+
+      expect(result.isValid).toBe(true)
+      expect(result.canResume).toBe(true)
+    })
+
+    it('should fall back to legacy path when ClaudeSessionInfoService returns null', async () => {
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: 'myrepo-abc123',
+        cloudSessionId: 'session_xyz789',
+        isTeleportedSession: true,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      const worktreePath = '/Users/test/code/myrepo-abc123'
+      const legacyPath = join(homedir(), '.claude', 'projects', 'session_xyz789', 'session.jsonl')
+
+      // Create mock ClaudeSessionInfoService that returns null
+      const mockClaudeSessionInfoService = {
+        findSessionFile: vi.fn().mockReturnValue(null)
+      } as any
+
+      agentService.setClaudeSessionInfoService(mockClaudeSessionInfoService)
+
+      // Legacy path exists
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === legacyPath)
+      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"file-history-snapshot","sessionId":"session_xyz789"}\n')
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: Date.now() } as any)
+
+      const result = await agentService.validateTeleportSession(agentInfo, worktreePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.canResume).toBe(true)
+    })
+
+    it('should return invalid when both new and legacy paths fail', async () => {
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: 'myrepo-abc123',
+        cloudSessionId: 'session_xyz789',
+        isTeleportedSession: true,
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      const worktreePath = '/Users/test/code/myrepo-abc123'
+
+      // Create mock ClaudeSessionInfoService that returns null
+      const mockClaudeSessionInfoService = {
+        findSessionFile: vi.fn().mockReturnValue(null)
+      } as any
+
+      agentService.setClaudeSessionInfoService(mockClaudeSessionInfoService)
+
+      // No paths exist
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+
+      const result = await agentService.validateTeleportSession(agentInfo, worktreePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.canResume).toBe(false)
+      expect(result.reason).toContain('JSONL file not found')
+    })
   })
 
   // Note: updateAgentBranchName tests are skipped for now as they require complex mocking
