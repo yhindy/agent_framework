@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, watch, FSWatcher, statSync, readdirSync, openSync, readSync, closeSync, createReadStream } from 'fs'
+import { existsSync, watch, FSWatcher, statSync, readdirSync, openSync, readSync, closeSync, createReadStream } from 'fs'
 import { createInterface } from 'readline'
 import { join } from 'path'
 import { homedir } from 'os'

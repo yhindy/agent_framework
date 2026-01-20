@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
-import { readFileSync, existsSync, watch, statSync, createReadStream, openSync, readSync, closeSync } from 'fs'
+import { existsSync, watch, statSync, readSync } from 'fs'
 import { createInterface } from 'readline'
 import { join } from 'path'
 import { homedir } from 'os'
-import { Readable } from 'stream'
 
 // Helper to create a mock async iterator from content string
 function createMockReadlineInterface(content: string) {
@@ -26,12 +25,13 @@ let currentTailContent = ''
 function setupReadFileTailMock(content: string) {
   currentTailContent = content
   vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now(), size: content.length } as any)
-  vi.mocked(readSync).mockImplementation((fd, buffer: Buffer, offset: number, length: number, position: number) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.mocked(readSync).mockImplementation(((_fd: number, buffer: Buffer, offset: number, length: number, position: number | null) => {
     const contentBuffer = Buffer.from(currentTailContent, 'utf-8')
     const bytesToRead = Math.min(length, contentBuffer.length - (position ?? 0))
     contentBuffer.copy(buffer, offset, position ?? 0, (position ?? 0) + bytesToRead)
     return bytesToRead
-  })
+  }) as typeof readSync)
 }
 
 // Mock fs

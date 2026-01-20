@@ -3,7 +3,7 @@ import { NotificationService } from '../NotificationService'
 import { SettingsService } from '../SettingsService'
 import { ClaudeSessionInfoService } from '../ClaudeSessionInfoService'
 import { BrowserWindow, Notification } from 'electron'
-import { readFileSync, existsSync, statSync } from 'fs'
+import { existsSync, statSync } from 'fs'
 
 /**
  * Notification System Integration Tests
@@ -39,7 +39,7 @@ vi.mock('fs', () => ({
   watch: vi.fn(),
   statSync: vi.fn(() => ({ mtimeMs: Date.now(), size: 1000 })),
   openSync: vi.fn().mockReturnValue(1),
-  readSync: vi.fn().mockImplementation((fd: number, buffer: Buffer, offset: number, length: number, position: number | null) => {
+  readSync: vi.fn().mockImplementation((_fd: number, buffer: Buffer, offset: number, length: number, position: number | null) => {
     const contentBuffer = Buffer.from(currentTailContent, 'utf-8')
     const bytesToRead = Math.min(length, contentBuffer.length - (position ?? 0))
     contentBuffer.copy(buffer, offset, position ?? 0, (position ?? 0) + bytesToRead)
