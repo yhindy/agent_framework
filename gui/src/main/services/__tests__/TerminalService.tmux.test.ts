@@ -299,6 +299,110 @@ describe('TerminalService Tmux Integration', () => {
       expect(scriptContent).toContain('## Mission')
     })
 
+    it('properly escapes backticks in prompts to prevent command substitution', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt with backticks (was causing "command not found" errors)
+      const promptWithBackticks = 'Fix the bug in `content_handlers.py` and update `config.json`'
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithBackticks
+      )
+
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).includes('.minion-cmd-')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
+
+      // Backticks should be escaped to prevent bash command substitution
+      expect(scriptContent).toContain('\\`content_handlers.py\\`')
+      expect(scriptContent).toContain('\\`config.json\\`')
+      // Should NOT contain unescaped backticks inside the quoted string
+      expect(scriptContent).not.toMatch(/"`[^\\]/)
+    })
+
+    it('properly escapes dollar signs in prompts to prevent variable expansion', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt with dollar signs
+      const promptWithDollars = 'Check the $HOME directory and set $MY_VAR=value'
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithDollars
+      )
+
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).includes('.minion-cmd-')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
+
+      // Dollar signs should be escaped to prevent bash variable expansion
+      expect(scriptContent).toContain('\\$HOME')
+      expect(scriptContent).toContain('\\$MY_VAR')
+    })
+
+    it('properly escapes backslashes in prompts', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Prompt with backslashes (common in regex or Windows paths)
+      const promptWithBackslashes = 'Use regex \\d+ to match numbers and path C:\\Users\\test'
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        promptWithBackslashes
+      )
+
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).includes('.minion-cmd-')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
+
+      // Backslashes should be escaped (doubled)
+      expect(scriptContent).toContain('\\\\d+')
+      expect(scriptContent).toContain('C:\\\\Users\\\\test')
+    })
+
+    it('properly escapes all shell metacharacters together', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      // Complex prompt with multiple metacharacters
+      const complexPrompt = 'Run `echo $HOME` and check if "$PATH" contains \\bin'
+
+      await terminalService.startAgent(
+        '/path/to/project',
+        'agent-1',
+        'claude',
+        'dev',
+        complexPrompt
+      )
+
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        call => String(call[0]).includes('.minion-cmd-')
+      )
+      expect(writeCall).toBeDefined()
+      const scriptContent = writeCall![1] as string
+
+      // All metacharacters should be properly escaped
+      expect(scriptContent).toContain('\\`echo')
+      expect(scriptContent).toContain('\\$HOME\\`')
+      expect(scriptContent).toContain('\\"\\$PATH\\"')
+      expect(scriptContent).toContain('\\\\bin')
+    })
+
     it('handles complex super minion prompts via script file', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
 

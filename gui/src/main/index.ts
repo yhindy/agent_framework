@@ -242,8 +242,8 @@ function initializeServices(): void {
                   continue
                 }
 
-                // Validate teleported session
-                const validation = await services!.agent.validateTeleportSession(agentInfo)
+                // Validate teleported session (pass worktreePath for correct JSONL lookup)
+                const validation = await services!.agent.validateTeleportSession(agentInfo, agent.worktreePath)
 
                 if (!validation.isValid) {
                   log.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
@@ -561,8 +561,8 @@ function setupIPC(): void {
         return { success: false, error: 'Could not read agent info' }
       }
 
-      // Validate the teleported session
-      const validation = await services!.agent.validateTeleportSession(agentInfo)
+      // Validate the teleported session (pass worktreePath for correct JSONL lookup)
+      const validation = await services!.agent.validateTeleportSession(agentInfo, agent.worktreePath)
 
       if (validation.isValid && validation.canResume) {
         // Update lastValidatedAt timestamp
