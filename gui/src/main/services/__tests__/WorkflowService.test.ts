@@ -74,18 +74,30 @@ describe('WorkflowService', () => {
     it('should return default subagent types', () => {
       const types = service.getSubagentTypes()
       expect(types).toEqual(DEFAULT_SUBAGENT_TYPES)
-      expect(types).toHaveLength(8)
+      expect(types).toHaveLength(6)
       expect(types.map(t => t.id)).toEqual([
-        'explore', 'plan', 'review', 'implement', 'test', 'debug', 'document', 'simplify'
+        'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
       ])
     })
   })
 
   describe('getSubagentType', () => {
     it('should return a specific subagent type by id', () => {
-      const explorer = service.getSubagentType('explore')
+      const explorer = service.getSubagentType('Explore')
       expect(explorer).toBeDefined()
       expect(explorer?.name).toBe('Explorer')
+    })
+
+    it('should map legacy agent IDs to current types', () => {
+      // Legacy 'explore' should map to 'Explore'
+      const explorer = service.getSubagentType('explore')
+      expect(explorer).toBeDefined()
+      expect(explorer?.id).toBe('Explore')
+
+      // Legacy 'review' should map to 'general-purpose'
+      const reviewer = service.getSubagentType('review')
+      expect(reviewer).toBeDefined()
+      expect(reviewer?.id).toBe('general-purpose')
     })
 
     it('should return undefined for unknown type', () => {
@@ -385,16 +397,18 @@ describe('WorkflowService', () => {
         a.customPrompt?.includes('acceptance criteria checker')
       )
       expect(criteriaChecker).toBeDefined()
-      expect(criteriaChecker?.typeId).toBe('review')
+      expect(criteriaChecker?.typeId).toBe('general-purpose')
     })
 
     it('should have test runner with custom prompt in validation', () => {
       const workflow = service.getActiveWorkflow('/any/project')
       const validateStep = workflow.steps.find(s => s.name === 'Validation')
 
-      const testAgent = validateStep?.agents.find(a => a.typeId === 'test')
+      const testAgent = validateStep?.agents.find(a =>
+        a.customPrompt?.includes('Run all tests')
+      )
       expect(testAgent).toBeDefined()
-      expect(testAgent?.customPrompt).toContain('Run all tests')
+      expect(testAgent?.typeId).toBe('general-purpose')
     })
   })
 
@@ -498,8 +512,8 @@ describe('WorkflowService', () => {
 
         const types = service.getSubagentTypes()
 
-        // Should have 8 built-in + 2 imported
-        expect(types).toHaveLength(10)
+        // Should have 6 built-in + 2 imported
+        expect(types).toHaveLength(8)
       })
 
       it('should list built-in types first', () => {
@@ -508,12 +522,12 @@ describe('WorkflowService', () => {
 
         const types = service.getSubagentTypes()
 
-        // First 8 should be built-in
-        expect(types.slice(0, 8).map(t => t.id)).toEqual([
-          'explore', 'plan', 'review', 'implement', 'test', 'debug', 'document', 'simplify'
+        // First 6 should be built-in
+        expect(types.slice(0, 6).map(t => t.id)).toEqual([
+          'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
         ])
         // Last 2 should be imported
-        expect(types.slice(8).map(t => t.id)).toEqual([
+        expect(types.slice(6).map(t => t.id)).toEqual([
           'imported:my-plugin:custom-agent',
           'imported:my-plugin:skill:my-skill'
         ])
@@ -525,7 +539,7 @@ describe('WorkflowService', () => {
         const mockService = createMockClaudeConfigService(mockImportedAgents)
         service.setClaudeConfigService(mockService)
 
-        const explorer = service.getSubagentType('explore')
+        const explorer = service.getSubagentType('Explore')
 
         expect(explorer).toBeDefined()
         expect(explorer?.name).toBe('Explorer')
