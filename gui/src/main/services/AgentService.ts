@@ -55,10 +55,10 @@ export class AgentService {
 
   private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
-  // Cache for agent/assignment-to-project mapping to avoid repeated git worktree list calls
-  private agentProjectCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
-  private assignmentProjectCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
-  private readonly AGENT_PROJECT_CACHE_TTL_MS = 30 * 1000 // 30 seconds
+  // Cache for agent/assignment ID to project path mapping.
+  // Avoids repeated git worktree list calls which can cause EAGAIN spawn errors.
+  private projectLookupCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
+  private readonly PROJECT_LOOKUP_CACHE_TTL_MS = 30 * 1000 // 30 seconds
 
   constructor() {
     this.sessions = new Map()
@@ -539,23 +539,37 @@ export class AgentService {
     })
   }
 
-  async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
-    // Check cache first to avoid spawning git processes
-    const cached = this.agentProjectCache.get(agentId)
-    if (cached && Date.now() - cached.timestamp < this.AGENT_PROJECT_CACHE_TTL_MS) {
-      if (activeProjectPaths.includes(cached.projectPath)) {
-        return cached.projectPath
-      }
-    }
+  /**
+   * Get cached project path for an agent/assignment ID if still valid.
+   * Returns null if cache miss, expired, or project is no longer active.
+   */
+  private getCachedProjectPath(id: string, activeProjectPaths: string[]): string | null {
+    const cached = this.projectLookupCache.get(id)
+    if (!cached) return null
 
-    // Cache miss - do full lookup
+    const isValid = Date.now() - cached.timestamp < this.PROJECT_LOOKUP_CACHE_TTL_MS
+      && activeProjectPaths.includes(cached.projectPath)
+
+    return isValid ? cached.projectPath : null
+  }
+
+  /**
+   * Update the project lookup cache for multiple IDs belonging to the same project.
+   */
+  private updateProjectLookupCache(ids: string[], projectPath: string): void {
+    const now = Date.now()
+    for (const id of ids) {
+      this.projectLookupCache.set(id, { timestamp: now, projectPath })
+    }
+  }
+
+  async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
+    const cached = this.getCachedProjectPath(agentId, activeProjectPaths)
+    if (cached) return cached
+
     for (const projectPath of activeProjectPaths) {
       const agents = await this.listAgents(projectPath)
-      // Update cache for all found agents
-      const now = Date.now()
-      for (const agent of agents) {
-        this.agentProjectCache.set(agent.id, { timestamp: now, projectPath })
-      }
+      this.updateProjectLookupCache(agents.map(a => a.id), projectPath)
       if (agents.some(a => a.id === agentId)) {
         return projectPath
       }
@@ -564,22 +578,12 @@ export class AgentService {
   }
 
   async findProjectForAssignment(activeProjectPaths: string[], assignmentId: string): Promise<string> {
-    // Check cache first to avoid spawning git processes
-    const cached = this.assignmentProjectCache.get(assignmentId)
-    if (cached && Date.now() - cached.timestamp < this.AGENT_PROJECT_CACHE_TTL_MS) {
-      if (activeProjectPaths.includes(cached.projectPath)) {
-        return cached.projectPath
-      }
-    }
+    const cached = this.getCachedProjectPath(assignmentId, activeProjectPaths)
+    if (cached) return cached
 
-    // Cache miss - do full lookup
     for (const projectPath of activeProjectPaths) {
       const { assignments } = await this.getAssignments(projectPath)
-      // Update cache for all found assignments
-      const now = Date.now()
-      for (const assignment of assignments) {
-        this.assignmentProjectCache.set(assignment.id, { timestamp: now, projectPath })
-      }
+      this.updateProjectLookupCache(assignments.map(a => a.id), projectPath)
       if (assignments.some(a => a.id === assignmentId)) {
         return projectPath
       }
@@ -1109,10 +1113,9 @@ export class AgentService {
       log.debug('Teardown script output:', stdout)
       if (stderr) log.warn('Teardown script errors:', stderr)
 
-      // Remove from sessions and caches
+      // Remove from sessions and project lookup cache
       this.sessions.delete(agentId)
-      this.agentProjectCache.delete(agentId)
-      this.assignmentProjectCache.delete(agentId)
+      this.projectLookupCache.delete(agentId)
 
       // No need to update config.json - the .agent-info file is removed with the worktree atomically
     } catch (error: any) {
