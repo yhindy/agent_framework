@@ -23,9 +23,9 @@ describe('branchUtils', () => {
       expect(result).toBe('main')
     })
 
-    it('returns full branch name for non-standard format (two segments)', () => {
+    it('extracts branch name from new format (two segments): feature/branch-name', () => {
       const result = extractBranchName('feature/branch-name')
-      expect(result).toBe('feature/branch-name')
+      expect(result).toBe('branch-name')
     })
 
     it('returns null when branch is undefined', () => {
