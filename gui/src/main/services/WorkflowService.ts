@@ -9,7 +9,8 @@ import {
   StepAgent,
   DEFAULT_SUBAGENT_TYPES,
   DEFAULT_WORKFLOW,
-  DEBUG_WORKFLOW
+  DEBUG_WORKFLOW,
+  LEGACY_AGENT_ID_MAP
 } from './types/WorkflowTypes'
 import type { ClaudeConfigService } from './ClaudeConfigService'
 
@@ -133,9 +134,19 @@ export class WorkflowService {
   }
 
   getSubagentType(id: string): SubagentType | undefined {
+    // Map legacy IDs to current IDs for backwards compatibility
+    const mappedId = LEGACY_AGENT_ID_MAP[id] || id
+
     // Built-in types take precedence over imported types
-    return DEFAULT_SUBAGENT_TYPES.find(t => t.id === id)
-      ?? this.getImportedSubagentTypes().find(t => t.id === id)
+    return DEFAULT_SUBAGENT_TYPES.find(t => t.id === mappedId)
+      ?? this.getImportedSubagentTypes().find(t => t.id === mappedId)
+  }
+
+  /**
+   * Normalize an agent type ID, mapping legacy IDs to current ones.
+   */
+  normalizeAgentId(id: string): string {
+    return LEGACY_AGENT_ID_MAP[id] || id
   }
 
   getActiveWorkflow(projectPath: string): WorkflowConfig {
