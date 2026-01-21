@@ -40,6 +40,107 @@ function getCurrentBranch(): string {
 }
 
 let mainWindow: BrowserWindow | null = null
+
+// Agent type from listAgents (subset of AgentSession interface)
+interface ResumeableAgent {
+  id: string
+  worktreePath: string
+  claudeSessionId?: string
+  cloudSessionId?: string
+  isTeleportedSession?: boolean
+  tool?: string
+  mode?: string
+  prompt?: string
+  model?: string
+  yolo?: boolean
+  chrome?: boolean
+}
+
+/**
+ * Validates a teleported session and returns whether it can be resumed.
+ * Returns true if the session is valid and resumable, false otherwise.
+ */
+async function validateTeleportedSession(agent: ResumeableAgent): Promise<boolean> {
+  if (!services) return false
+
+  const agentInfo = services.agent.readAgentInfo(agent.worktreePath)
+  if (!agentInfo) {
+    log.debug(`Could not read agent info for ${agent.id}`)
+    return false
+  }
+
+  const validation = await services.agent.validateTeleportSession(agentInfo)
+
+  if (!validation.isValid) {
+    log.warn(`Teleported session ${agent.id} validation failed: ${validation.reason}`)
+    mainWindow?.webContents.send('agent:teleportValidationFailed', {
+      agentId: agent.id,
+      reason: validation.reason,
+      canRetry: validation.canResume
+    })
+    services.agent.updateAgentInfo(agent.worktreePath, { claudeSessionActive: false })
+    return false
+  }
+
+  if (!validation.canResume) {
+    log.debug(`Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Attempts to resume a single agent's Claude session.
+ * Handles teleport validation, session state checking, and terminal startup.
+ */
+async function resumeAgentSession(projectPath: string, agent: ResumeableAgent): Promise<void> {
+  if (!services || !agent.claudeSessionId) return
+
+  // Validate teleported sessions first
+  if (agent.cloudSessionId || agent.isTeleportedSession) {
+    const isValid = await validateTeleportedSession(agent)
+    if (!isValid) return
+  }
+
+  // Check session state from JSONL
+  const sessionState = services.claudeSessionInfo.getSessionState(
+    agent.claudeSessionId,
+    agent.worktreePath
+  )
+
+  if (sessionState === 'unknown') {
+    log.debug(`Skipping ${agent.id} - session not found in JSONL`)
+    return
+  }
+
+  log.debug(`Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
+
+  try {
+    await services.terminal.startAgent(
+      projectPath,
+      agent.id,
+      agent.tool || 'claude',
+      agent.mode || 'dev',
+      agent.prompt,
+      agent.model,
+      agent.yolo || false,
+      agent.chrome !== false
+    )
+
+    mainWindow?.webContents.send('agents:updated')
+
+    if (sessionState === 'waiting') {
+      mainWindow?.webContents.send('agent:waitingForInput', agent.id, 'Claude is waiting for input')
+    }
+  } catch (error) {
+    log.error(`Failed to resume agent ${agent.id}`, error)
+    mainWindow?.webContents.send('agent:resumeFailed', {
+      agentId: agent.id,
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
 let services: {
   project: ProjectService
   agent: AgentService
@@ -142,8 +243,7 @@ function initializeServices(): void {
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
   terminalService.setSettingsService(settingsService)
 
-  // Clean up orphaned minion-* tmux sessions from previous runs
-  terminalService.killAllMinionTmuxSessions()
+  // Note: Orphaned tmux session cleanup happens after we know which agents are active (see below)
 
   // WorkflowService will be set after services object is created (below)
 
@@ -195,15 +295,42 @@ function initializeServices(): void {
   // Do initial scan of Claude plugins
   services.claudeConfig.scanConfigs()
 
-  // Migrate existing assignments from config.json to .agent-info files
+  // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
   const activeProjects = services.project.getActiveProjects()
-  for (const project of activeProjects) {
-    services.agent.migrateAssignments(project.path)
-      .catch(err => log.error(`Failed to migrate assignments for ${project.path}`, err))
 
-    // Ensure base branch agent exists for projects with framework installed
-    if (!project.needsInstall) {
-      services.agent.ensureBaseBranchAgentWithStartup(project.path)
+  // Async initialization: collect agents, cleanup orphans, then auto-resume
+  ;(async () => {
+    // First pass: collect all active agent IDs and do migrations
+    const allAgentIds: string[] = []
+    const agentsByProject = new Map<string, ResumeableAgent[]>()
+
+    await Promise.all(activeProjects.map(async (project) => {
+      try {
+        await services!.agent.migrateAssignments(project.path)
+      } catch (err) {
+        log.error(`Failed to migrate assignments for ${project.path}`, err)
+      }
+
+      if (!project.needsInstall) {
+        try {
+          const agents = await services!.agent.listAgents(project.path)
+          allAgentIds.push(...agents.map(a => a.id))
+          agentsByProject.set(project.path, agents)
+        } catch (err) {
+          log.error(`Failed to list agents for ${project.path}`, err)
+        }
+      }
+    }))
+
+    // Clean up orphaned tmux sessions (those without active agents)
+    services!.terminal.killOrphanedTmuxSessions(allAgentIds)
+
+    // Second pass: ensure base agents and auto-resume
+    for (const project of activeProjects) {
+      if (project.needsInstall) continue
+
+      // Ensure base branch agent exists
+      services!.agent.ensureBaseBranchAgentWithStartup(project.path)
         .then(result => {
           // Auto-start Claude for newly created base agents
           if (result.shouldStartClaude && result.agentInfo.prompt) {
@@ -228,106 +355,16 @@ function initializeServices(): void {
         })
         .catch(err => log.error(`Failed to ensure base agent for ${project.path}`, err))
 
-      // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
-      services.agent.listAgents(project.path)
-        .then(async agents => {
-          for (const agent of agents) {
-            // Check for Claude sessions with session IDs (use JSONL to verify they exist)
-            if (agent.claudeSessionId && agent.tool === 'claude') {
-              // Special handling for teleported sessions (cloudSessionId present)
-              if (agent.cloudSessionId || agent.isTeleportedSession) {
-                log.debug(`[Startup] Validating teleported session for ${agent.id}`)
+      // Auto-resume existing Claude sessions
+      const agents = agentsByProject.get(project.path) || []
+      const resumePromises = agents
+        .filter(agent => agent.claudeSessionId && agent.tool === 'claude')
+        .map(agent => resumeAgentSession(project.path, agent))
 
-                // Read full agent info from disk to pass to validation
-                const agentInfo = services!.agent.readAgentInfo(agent.worktreePath)
-                if (!agentInfo) {
-                  log.debug(`[Startup] Could not read agent info for ${agent.id}`)
-                  continue
-                }
-
-                // Validate teleported session (pass worktreePath for correct JSONL lookup)
-                const validation = await services!.agent.validateTeleportSession(agentInfo, agent.worktreePath)
-
-                if (!validation.isValid) {
-                  log.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
-
-                  // Send notification to user about failed validation
-                  mainWindow?.webContents.send('agent:teleportValidationFailed', {
-                    agentId: agent.id,
-                    reason: validation.reason,
-                    canRetry: validation.canResume
-                  })
-
-                  // Update agent info with validation error
-                  services!.agent.updateAgentInfo(agent.worktreePath, {
-                    claudeSessionActive: false
-                  })
-
-                  continue
-                }
-
-                if (!validation.canResume) {
-                  log.debug(`[Startup] Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
-                  continue
-                }
-
-                log.debug(`[Startup] Teleported session ${agent.id} validated successfully`)
-              }
-
-              // Check actual session state from JSONL
-              const sessionState = services!.claudeSessionInfo.getSessionState(
-                agent.claudeSessionId,
-                agent.worktreePath
-              )
-
-              // Only resume if session exists (not 'unknown')
-              if (sessionState !== 'unknown') {
-                log.debug(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
-
-                // Stagger resumes to avoid overwhelming
-                const delay = 500 + Math.random() * 2000
-
-                setTimeout(async () => {
-                  try {
-                    await services!.terminal.startAgent(
-                      project.path,
-                      agent.id,
-                      agent.tool || 'claude',
-                      agent.mode || 'dev',
-                      agent.prompt,
-                      agent.model,
-                      agent.yolo || false,  // Restore yolo flag for dangerously-skip-permissions
-                      agent.chrome !== false  // Restore chrome flag (default true)
-                    )
-
-                    mainWindow?.webContents.send('agents:updated')
-
-                    // Restore waiting notification based on JSONL state
-                    if (sessionState === 'waiting') {
-                      mainWindow?.webContents.send('agent:waitingForInput',
-                        agent.id,
-                        'Claude is waiting for input'
-                      )
-                    }
-                  } catch (error) {
-                    log.error(`Failed to resume agent ${agent.id}`, error)
-
-                    // Send failure notification to UI
-                    mainWindow?.webContents.send('agent:resumeFailed', {
-                      agentId: agent.id,
-                      error: error instanceof Error ? error.message : String(error)
-                    })
-                  }
-                }, delay)
-              } else {
-                log.debug(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
-              }
-            }
-          }
-        })
+      Promise.all(resumePromises)
         .catch(err => log.error(`Failed to auto-resume agents for ${project.path}`, err))
     }
-  }
+  })().catch(err => log.error('Failed during startup initialization', err))
 
   // Set up IPC handlers
   setupIPC()
@@ -336,10 +373,32 @@ function initializeServices(): void {
 function setupIPC(): void {
   if (!services) return
 
-  // Helper function to find which project an agent belongs to
+  // Cache for agent -> project mapping to avoid repeated git worktree calls
+  const agentProjectCache = new Map<string, string>()
+
+  // Helper function to find which project an agent belongs to (with caching)
   const findProjectForAgent = async (agentId: string): Promise<string> => {
+    // Check cache first
+    const cached = agentProjectCache.get(agentId)
+    if (cached) {
+      return cached
+    }
+
     const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
-    return services!.agent.findProjectForAgent(activeProjectPaths, agentId)
+    const projectPath = await services!.agent.findProjectForAgent(activeProjectPaths, agentId)
+
+    // Cache the result
+    agentProjectCache.set(agentId, projectPath)
+    return projectPath
+  }
+
+  // Clear agent cache when agent list changes (called after agent operations)
+  const clearAgentCache = (agentId?: string) => {
+    if (agentId) {
+      agentProjectCache.delete(agentId)
+    } else {
+      agentProjectCache.clear()
+    }
   }
 
   // Helper function to find which project an assignment belongs to
@@ -500,6 +559,9 @@ function setupIPC(): void {
     // This avoids separate getAgentState calls for each agent (major perf improvement)
     const activeTerminals = services!.terminal.getActiveTerminals()
     return agents.map(agent => {
+      // Populate the agent -> project cache while we have this data
+      agentProjectCache.set(agent.id, projectPath)
+
       let currentState: string | undefined
 
       // Get state for active Claude agents
@@ -578,8 +640,8 @@ function setupIPC(): void {
         return { success: false, error: 'Could not read agent info' }
       }
 
-      // Validate the teleported session (pass worktreePath for correct JSONL lookup)
-      const validation = await services!.agent.validateTeleportSession(agentInfo, agent.worktreePath)
+      // Validate the teleported session
+      const validation = await services!.agent.validateTeleportSession(agentInfo)
 
       if (validation.isValid && validation.canResume) {
         // Update lastValidatedAt timestamp
@@ -923,18 +985,32 @@ function setupIPC(): void {
 
   // Cleanup handlers
   ipcMain.handle('agents:teardown', async (_event, agentId: string, force: boolean) => {
-    // Find the project this agent belongs to by searching all active projects
-    const activeProjects = services!.project.getActiveProjects()
-    let projectPath: string | null = null
+    // Use cached project path if available, otherwise search
+    let projectPath = agentProjectCache.get(agentId)
     let agent: any = null
 
-    for (const project of activeProjects) {
-      const agents = await services!.agent.listAgents(project.path)
-      const found = agents.find(a => a.id === agentId)
-      if (found) {
-        projectPath = project.path
-        agent = found
-        break
+    if (projectPath) {
+      // Verify agent still exists in cached project
+      const agents = await services!.agent.listAgents(projectPath)
+      agent = agents.find(a => a.id === agentId)
+      if (!agent) {
+        // Cache was stale, clear and search
+        agentProjectCache.delete(agentId)
+        projectPath = undefined
+      }
+    }
+
+    if (!projectPath) {
+      // Fallback to searching all projects
+      const activeProjects = services!.project.getActiveProjects()
+      for (const project of activeProjects) {
+        const agents = await services!.agent.listAgents(project.path)
+        const found = agents.find(a => a.id === agentId)
+        if (found) {
+          projectPath = project.path
+          agent = found
+          break
+        }
       }
     }
 
@@ -958,34 +1034,27 @@ function setupIPC(): void {
     } catch (error) {
       log.error('Failed to stop test environments', error)
     }
-    
+
     await services!.agent.teardownAgent(projectPath, agentId, force)
-    
+
+    // Clear cache for this agent
+    clearAgentCache(agentId)
+
     // Trigger updates
     mainWindow?.webContents.send('agents:updated')
     mainWindow?.webContents.send('assignments:updated')
   })
 
   ipcMain.handle('agents:unassign', async (_event, agentId: string) => {
-    // Find the project this agent belongs to by searching all active projects
-    const activeProjects = services!.project.getActiveProjects()
-    let projectPath: string | null = null
-    let agent: any = null
+    // Use cached project path, fallback to findProjectForAgent
+    const projectPath = await findProjectForAgent(agentId)
+    const agents = await services!.agent.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
 
-    for (const project of activeProjects) {
-      const agents = await services!.agent.listAgents(project.path)
-      const found = agents.find(a => a.id === agentId)
-      if (found) {
-        projectPath = project.path
-        agent = found
-        break
-      }
-    }
-
-    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
+    if (!agent) throw new Error(`Agent ${agentId} not found`)
 
     // Prevent unassign of base branch agents
-    if (agent && agent.isBaseBranchAgent) {
+    if (agent.isBaseBranchAgent) {
       throw new Error('Cannot unassign base branch agent')
     }
 
