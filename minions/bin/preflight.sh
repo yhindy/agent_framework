@@ -32,9 +32,9 @@ for file in "${REQUIRED_FILES[@]}"; do
     fi
 done
 
-# Run preflight commands
+# Run preflight commands (using bash -c for subshell isolation)
 for cmd in "${PREFLIGHT_COMMANDS[@]}"; do
-    if eval "$cmd"; then
+    if bash -c "$cmd"; then
         echo -e "${GREEN}✓ Command passed: $cmd${NC}"
     else
         echo -e "${RED}✗ FAIL: $cmd${NC}"

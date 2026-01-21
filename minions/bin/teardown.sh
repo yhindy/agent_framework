@@ -83,8 +83,9 @@ else
 fi
 
 # Helper to read config values
+# Uses environment variable to avoid shell injection via config file path
 get_json_value() {
-  python3 -c "import sys, json; print(json.load(open('$CONFIG_FILE'))$1)" 2>/dev/null || echo ""
+  MINIONS_CONFIG_FILE="$CONFIG_FILE" python3 -c "import sys, json, os; print(json.load(open(os.environ['MINIONS_CONFIG_FILE']))$1)" 2>/dev/null || echo ""
 }
 
 PROJECT_NAME=$(get_json_value "['project']['name']")

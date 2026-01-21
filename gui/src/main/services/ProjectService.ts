@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import { join, basename } from 'path'
+import { join, basename, resolve } from 'path'
 import { existsSync, cpSync, readFileSync, writeFileSync } from 'fs'
 import { app } from 'electron'
 import { AgentService } from './AgentService'
@@ -95,12 +95,18 @@ export class ProjectService {
   async addProject(projectPath: string): Promise<ProjectState> {
     log.info('Adding project:', projectPath)
 
+    // SECURITY: Normalize path to prevent path traversal attacks
+    const normalizedPath = resolve(projectPath)
+
     // Validate project path
-    if (!existsSync(projectPath)) {
-      const error = `Project path does not exist: ${projectPath}`
+    if (!existsSync(normalizedPath)) {
+      const error = `Project path does not exist: ${normalizedPath}`
       log.error('Error:', error)
       throw new Error(error)
     }
+
+    // Use the normalized path from here on
+    projectPath = normalizedPath
 
     try {
       // Check if project has the agent framework installed

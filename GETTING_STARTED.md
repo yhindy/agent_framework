@@ -18,15 +18,52 @@ Think of it like having a team of helpful AI assistants, each working on their o
 
 Before you start, make sure you have:
 
+### Required
 - **Node.js 20.x** - [Download from nodejs.org](https://nodejs.org)
 - **Git** - [Download from git-scm.com](https://git-scm.com) (or use your package manager)
 - **Python 3** - Usually pre-installed on Mac/Linux. Windows users: [python.org](https://python.org)
 
-To check if you have these:
+### At Least One AI Agent Tool (Required)
+
+You need at least one of these AI coding tools installed:
+
+| Tool | Install | Notes |
+|------|---------|-------|
+| **Claude Code** (Recommended) | `npm install -g @anthropic-ai/claude-code` | Anthropic's official CLI |
+| **Cursor CLI** | `npm install -g cursor-cli` | For Cursor IDE users |
+| **Codex CLI** | `npm install -g @openai/codex` | Requires `OPENAI_API_KEY` env var |
+
+After installing, verify it works:
 ```bash
-node -v    # Should show v20.x.x or higher
+claude --version    # or cursor --version, or codex --version
+```
+
+### Optional (but recommended)
+- **GitHub CLI** - Required for creating pull requests from the GUI
+  - macOS: `brew install gh`
+  - Linux: See [cli.github.com/manual/installation](https://cli.github.com/manual/installation)
+  - Then authenticate: `gh auth login`
+- **tmux** - For enhanced terminal experience (auto-detected, falls back to tabs if not installed)
+  - macOS: `brew install tmux`
+  - Linux: `sudo apt install tmux`
+
+### Platform Support
+
+| Platform | Status |
+|----------|--------|
+| macOS | Fully supported |
+| Linux | Fully supported |
+| Windows | Experimental - some features may not work (tmux, some shell scripts) |
+
+### Quick Check
+
+Run these commands to verify your setup:
+```bash
+node -v        # Should show v20.x.x or higher
 git --version
 python3 --version
+claude --version  # (or your chosen AI tool)
+gh --version      # (optional, for PR features)
 ```
 
 ---
