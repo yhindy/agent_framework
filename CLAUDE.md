@@ -264,12 +264,20 @@ cd gui && npm test -- --coverage
 
 E2E tests use Playwright to launch and test the actual Electron application. These tests are designed to be run by AI agents to verify full application functionality.
 
+For detailed documentation, see `gui/e2e/README.md`.
+
 ```bash
 # Run all E2E tests
 npm run test:e2e
 
 # Run with visible browser (debugging)
 npm run test:e2e:headed
+
+# Run specific test suites
+npm run test:e2e:smoke    # Quick smoke tests
+npm run test:e2e:flow     # User flow tests
+npm run test:e2e:settings # Settings page tests
+npm run test:e2e:errors   # Error handling tests
 
 # Run specific tests by name
 cd gui && npm run test:e2e -- --grep "project selection"
@@ -289,6 +297,32 @@ cd gui && npm run test:e2e:report
 | `gui/e2e/user-flows.e2e.ts` | Project selection, agent creation flows |
 | `gui/e2e/ipc-communication.e2e.ts` | IPC round-trips, API verification |
 | `gui/e2e/terminal.e2e.ts` | Terminal rendering and I/O |
+| `gui/e2e/settings.e2e.ts` | Settings page navigation and persistence |
+| `gui/e2e/error-scenarios.e2e.ts` | Error handling and recovery |
+
+#### E2E Test Helpers
+
+Test helpers are located in `gui/e2e/helpers/`:
+
+| Helper | Purpose |
+|--------|---------|
+| `createIPCHelpers(appPage)` | Typed IPC wrappers for all main process calls |
+| `waitForDashboard(page)` | Wait for dashboard to be visible |
+| `waitForSettingsPage(page)` | Wait for settings page to be visible |
+| `clickSettingsLink(page)` | Navigate to settings page |
+| `getVisibleAgentCount(page)` | Count visible agent cards |
+
+Example usage:
+```typescript
+import { createIPCHelpers, waitForDashboard } from './helpers'
+
+const ipc = createIPCHelpers(appPage)
+await ipc.selectProject(testProject)
+await waitForDashboard(appPage.page)
+
+const settings = await ipc.getSettings()
+await ipc.updateSettings({ notifications: { enabled: false } })
+```
 
 #### E2E Test Results
 
@@ -301,15 +335,18 @@ After running E2E tests, results are available in:
 
 ```typescript
 import { test, expect, createAppPage } from './fixtures'
+import { createIPCHelpers, waitForDashboard } from './helpers'
 
 test('should complete user flow', async ({ electronApp, testProject }) => {
   const appPage = createAppPage(electronApp)
+  const ipc = createIPCHelpers(appPage)
 
   // Select project via IPC (bypasses file dialog)
-  await appPage.callIPC('selectProjectWithPath', testProject)
+  await ipc.selectProject(testProject)
+  await waitForDashboard(appPage.page)
 
   // Create assignment
-  const assignment = await appPage.callIPC('createAssignment', {
+  const assignment = await ipc.createAssignment({
     prompt: 'Test prompt',
     tool: 'claude',
   })
@@ -715,8 +752,12 @@ For projects with the old `minions/` folder structure:
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
 | `gui/playwright.config.ts` | E2E test configuration |
-| `gui/e2e/fixtures.ts` | E2E test fixtures and helpers |
+| `gui/e2e/README.md` | E2E testing guide and documentation |
+| `gui/e2e/fixtures.ts` | E2E test fixtures and AppPage class |
 | `gui/e2e/electron-app.ts` | Electron app launch utilities |
+| `gui/e2e/helpers/` | E2E test helpers (IPC wrappers, UI utilities) |
+| `gui/e2e/settings.e2e.ts` | Settings page E2E tests |
+| `gui/e2e/error-scenarios.e2e.ts` | Error handling E2E tests |
 | `minions/bin/setup.sh` | Worktree creation script |
 | `minions/rules/orchestrator_signals.md` | Signal protocol docs |
 | `.github/scripts/analyze-changes.js` | CI test selection logic (reference for selective testing) |

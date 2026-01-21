@@ -17,6 +17,8 @@
     "test:smart": "npm run test:changed",
     "test:e2e": "npm run test:e2e -w gui",
     "test:e2e:headed": "npm run test:e2e:headed -w gui",
+    "test:e2e:smoke": "npm run test:e2e:smoke -w gui",
+    "test:e2e:flow": "npm run test:e2e:flow -w gui",
     "gui:dev": "npm run dev -w gui",
     "gui:build": "npm run build -w gui",
     "gui:test": "npm run test -w gui",
