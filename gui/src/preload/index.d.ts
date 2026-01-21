@@ -51,6 +51,7 @@ declare const api: {
     onAgentStateChanged: (callback: (agentId: string, state: "working" | "waiting" | "unknown") => void) => () => Electron.IpcRenderer;
     onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => Electron.IpcRenderer;
     onAgentResumedWork: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
+    onAgentAlreadyAttached: (callback: (agentId: string, details: { sessionName: string; message: string }) => void) => () => Electron.IpcRenderer;
     getClaudeSessionInfo: (agentId: string) => Promise<any>;
     onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
     getSettings: () => Promise<any>;

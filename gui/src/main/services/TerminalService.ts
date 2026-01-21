@@ -160,10 +160,44 @@ export class TerminalService {
   }
 
   /**
+   * Check if a tmux session exists and is already attached.
+   * Prevents detaching sessions in other windows when using tmux mode.
+   *
+   * @param sessionName - The tmux session name to check
+   * @returns true if the session exists and is attached, false otherwise
+   */
+  isTmuxSessionAttached(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      const output = execSync(
+        `tmux list-sessions -F "#{session_name}:#{session_attached}" 2>/dev/null`,
+        { encoding: 'utf8' }
+      )
+
+      const lines = output.trim().split('\n').filter(Boolean)
+      for (const line of lines) {
+        const [name, attached] = line.split(':')
+        if (name === sessionName && attached === '1') {
+          return true
+        }
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Kill all orphaned minion-* tmux sessions.
    *
    * Called on app startup to clean up sessions left behind from crashes,
    * force-quits, or abnormal terminations.
+   *
+   * Only kills sessions that are NOT currently attached. This preserves
+   * sessions from other running app instances while cleaning up true orphans.
    *
    * @returns number of sessions killed
    */
@@ -181,10 +215,18 @@ export class TerminalService {
         return 0
       }
 
-      log.info(`Cleaning up ${sessions.length} orphaned minion tmux sessions`)
+      log.info(`Found ${sessions.length} minion tmux sessions, checking for orphans`)
 
       let killed = 0
+      let skipped = 0
       for (const sessionName of sessions) {
+        // Skip sessions that are currently attached (another window is using them)
+        if (this.isTmuxSessionAttached(sessionName)) {
+          log.debug(`Skipping attached session: ${sessionName}`)
+          skipped++
+          continue
+        }
+
         try {
           execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
           killed++
@@ -194,7 +236,9 @@ export class TerminalService {
       }
 
       if (killed > 0) {
-        log.info(`Cleaned up ${killed} orphaned minion tmux sessions`)
+        log.info(`Cleaned up ${killed} orphaned minion tmux sessions (${skipped} attached sessions preserved)`)
+      } else if (skipped > 0) {
+        log.info(`No orphaned sessions to clean up (${skipped} attached sessions preserved)`)
       }
       return killed
     } catch {
@@ -482,8 +526,21 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   /**
    * Clean up all resources for a terminal session.
    * Safely disposes idle detector, polling intervals, tmux sessions, and PTY.
+   *
+   * @param agentId - The agent ID
+   * @param session - The terminal session to clean up
+   * @param tool - The tool type (claude, cursor-cli, etc.)
+   * @param effectiveSessionId - Optional session ID for Claude session cleanup
+   * @param killTmuxSession - Whether to kill the tmux session (default: true).
+   *                          Set to false on window close to preserve sessions for other windows.
    */
-  private cleanupTerminalSession(agentId: string, session: TerminalSession, tool: string, effectiveSessionId?: string): void {
+  private cleanupTerminalSession(
+    agentId: string,
+    session: TerminalSession,
+    tool: string,
+    effectiveSessionId?: string,
+    killTmuxSession: boolean = true
+  ): void {
     const { idleDetector, statePollingInterval, tmuxSession, pty } = session
 
     this.safeDispose(() => idleDetector?.dispose(), 'idle detector', agentId)
@@ -497,7 +554,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       )
     }
 
-    if (tmuxSession) {
+    if (tmuxSession && killTmuxSession) {
       this.killTmuxSession(agentId)
     }
 
@@ -549,6 +606,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     if (existingSession) {
       log.debug(`Cleaning up existing terminal for ${agentId} before starting`)
       this.stopAgent(agentId)
+    }
+
+    // Check if tmux session is already attached in another window/process
+    // This prevents detaching sessions when a second app window opens
+    if (this.shouldUseTmux()) {
+      const tmuxSessionName = this.getTmuxSessionName(agentId)
+      if (this.isTmuxSessionAttached(tmuxSessionName)) {
+        log.warn(`Tmux session ${tmuxSessionName} is already attached, skipping agent start`)
+        this.safeSendIPC('agent:alreadyAttached', agentId, {
+          sessionName: tmuxSessionName,
+          message: 'This agent is already running in another window'
+        })
+        return
+      }
     }
 
     // Determine worktree path (shared logic with startPlainTerminal)
@@ -1031,7 +1102,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     terminal.onExit((data) => {
       log.info(`Terminal exited for ${agentId} - ${data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'}`)
 
-      this.cleanupTerminalSession(agentId, session, tool, effectiveSessionId)
+      // Don't kill tmux session on PTY exit - user may have detached or session may be used by other windows
+      this.cleanupTerminalSession(agentId, session, tool, effectiveSessionId, false)
 
       if (tool === 'claude') {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
@@ -1297,7 +1369,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   cleanup(): void {
     for (const [agentId, session] of this.terminals) {
       try {
-        this.cleanupTerminalSession(agentId, session, session.tool)
+        // Don't kill tmux sessions on window close - other windows may use them
+        // Orphaned sessions will be cleaned up on next app startup
+        this.cleanupTerminalSession(agentId, session, session.tool, undefined, false)
         this.terminals.delete(agentId)
       } catch (error) {
         log.error(`Cleanup failed for agent ${agentId}`, error)

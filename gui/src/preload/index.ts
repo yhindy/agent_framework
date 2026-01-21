@@ -128,6 +128,13 @@ const api = {
     return () => ipcRenderer.removeListener('agent:resumedWork', subscription)
   },
 
+  onAgentAlreadyAttached: (callback: (agentId: string, details: { sessionName: string; message: string }) => void) => {
+    const subscription = (_event: any, agentId: string, details: { sessionName: string; message: string }) =>
+      callback(agentId, details)
+    ipcRenderer.on('agent:alreadyAttached', subscription)
+    return () => ipcRenderer.removeListener('agent:alreadyAttached', subscription)
+  },
+
   // Claude Session Info APIs
   getClaudeSessionInfo: (agentId: string) => ipcRenderer.invoke('claude:getSessionInfo', agentId),
   onClaudeSessionInfoUpdated: (callback: (agentId: string, info: any) => void) => {
