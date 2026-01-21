@@ -1,13 +1,72 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { WorkflowService } from '../WorkflowService'
-import { DEFAULT_SUBAGENT_TYPES, DEFAULT_WORKFLOW } from '../types/WorkflowTypes'
+import { WorkflowService, WorkflowStoreSchema } from '../WorkflowService'
+import { DEFAULT_SUBAGENT_TYPES, DEFAULT_WORKFLOW, DEBUG_WORKFLOW } from '../types/WorkflowTypes'
 import type { ClaudeConfigService } from '../ClaudeConfigService'
 import type { ImportedSubagentType } from '../types/ClaudeConfigTypes'
+import Store from 'electron-store'
+import * as fs from 'fs'
+
+// Mock electron-store
+vi.mock('electron-store', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      get: vi.fn(),
+      set: vi.fn(),
+      store: { version: 1, workflows: [], activeWorkflowByProject: {} }
+    }))
+  }
+})
+
+// Mock fs module
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn()
+}))
 
 describe('WorkflowService', () => {
   let service: WorkflowService
+  let mockStore: {
+    get: ReturnType<typeof vi.fn>
+    set: ReturnType<typeof vi.fn>
+    store: WorkflowStoreSchema
+  }
 
   beforeEach(() => {
+    vi.clearAllMocks()
+
+    // Setup store mock with state
+    const storeState: WorkflowStoreSchema = {
+      version: 1,
+      workflows: [DEFAULT_WORKFLOW, DEBUG_WORKFLOW],
+      activeWorkflowByProject: {}
+    }
+    mockStore = {
+      get: vi.fn((key: keyof WorkflowStoreSchema, defaultValue?: unknown) => {
+        switch (key) {
+          case 'workflows': return storeState.workflows
+          case 'activeWorkflowByProject': return storeState.activeWorkflowByProject
+          default: return defaultValue
+        }
+      }),
+      set: vi.fn((key: keyof WorkflowStoreSchema, value: unknown) => {
+        switch (key) {
+          case 'workflows':
+            storeState.workflows = value as typeof storeState.workflows
+            break
+          case 'activeWorkflowByProject':
+            storeState.activeWorkflowByProject = value as typeof storeState.activeWorkflowByProject
+            break
+        }
+      }),
+      store: storeState
+    }
+    vi.mocked(Store).mockImplementation(() => mockStore as unknown as Store)
+
+    // Reset fs mocks
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+
     service = new WorkflowService()
   })
 
@@ -608,6 +667,300 @@ describe('WorkflowService', () => {
         expect(step.agents[0].typeId).toBe('explore')
         expect(step.agents[1].typeId).toBe('imported:my-plugin:custom-agent')
         expect(step.agents[2].typeId).toBe('implement')
+      })
+    })
+  })
+
+  describe('Persistence', () => {
+    describe('constructor', () => {
+      it('should initialize electron-store with correct defaults', () => {
+        expect(Store).toHaveBeenCalledWith({
+          name: 'workflows',
+          defaults: {
+            version: 1,
+            workflows: [DEFAULT_WORKFLOW, DEBUG_WORKFLOW],
+            activeWorkflowByProject: {}
+          }
+        })
+      })
+
+      it('should load workflows from store on initialization', () => {
+        // The service loads from store.store on initialization
+        const workflows = service.getAllWorkflows()
+        expect(workflows).toHaveLength(2)
+        expect(workflows.map(w => w.id)).toContain('default')
+        expect(workflows.map(w => w.id)).toContain('debug-workflow')
+      })
+    })
+
+    describe('createWorkflow', () => {
+      it('should save to store after creating a workflow', () => {
+        service.createWorkflow('New Workflow', 'Description')
+
+        expect(mockStore.set).toHaveBeenCalledWith(
+          'workflows',
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'New Workflow' })
+          ])
+        )
+      })
+    })
+
+    describe('updateWorkflow', () => {
+      it('should save to store after updating a workflow', () => {
+        const workflow = service.createWorkflow('Test')
+        vi.clearAllMocks()
+
+        service.updateWorkflow(workflow.id, { name: 'Updated' })
+
+        expect(mockStore.set).toHaveBeenCalledWith(
+          'workflows',
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'Updated' })
+          ])
+        )
+      })
+    })
+
+    describe('deleteWorkflow', () => {
+      it('should save to store after deleting a workflow', () => {
+        const workflow = service.createWorkflow('To Delete')
+        vi.clearAllMocks()
+
+        service.deleteWorkflow(workflow.id)
+
+        expect(mockStore.set).toHaveBeenCalledWith(
+          'workflows',
+          expect.not.arrayContaining([
+            expect.objectContaining({ id: workflow.id })
+          ])
+        )
+      })
+    })
+
+    describe('addStep', () => {
+      it('should save to store after adding a step', () => {
+        const workflow = service.createWorkflow('Test')
+        vi.clearAllMocks()
+
+        service.addStep(workflow.id, 'New Step', ['explore'])
+
+        expect(mockStore.set).toHaveBeenCalledWith(
+          'workflows',
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: workflow.id,
+              steps: expect.arrayContaining([
+                expect.objectContaining({ name: 'New Step' })
+              ])
+            })
+          ])
+        )
+      })
+    })
+
+    describe('updateStep', () => {
+      it('should save to store after updating a step', () => {
+        const workflow = service.createWorkflow('Test')
+        const step = service.addStep(workflow.id, 'Original', ['explore'])
+        vi.clearAllMocks()
+
+        service.updateStep(workflow.id, step.id, { name: 'Updated Step' })
+
+        expect(mockStore.set).toHaveBeenCalledWith(
+          'workflows',
+          expect.arrayContaining([
+            expect.objectContaining({
+              steps: expect.arrayContaining([
+                expect.objectContaining({ name: 'Updated Step' })
+              ])
+            })
+          ])
+        )
+      })
+    })
+
+    describe('removeStep', () => {
+      it('should save to store after removing a step', () => {
+        const workflow = service.createWorkflow('Test')
+        const step = service.addStep(workflow.id, 'To Remove', ['explore'])
+        vi.clearAllMocks()
+
+        service.removeStep(workflow.id, step.id)
+
+        expect(mockStore.set).toHaveBeenCalledWith('workflows', expect.any(Array))
+      })
+    })
+
+    describe('reorderSteps', () => {
+      it('should save to store after reordering steps', () => {
+        const workflow = service.createWorkflow('Test')
+        const step1 = service.addStep(workflow.id, 'Step 1', ['explore'])
+        const step2 = service.addStep(workflow.id, 'Step 2', ['implement'])
+        vi.clearAllMocks()
+
+        service.reorderSteps(workflow.id, [step2.id, step1.id])
+
+        expect(mockStore.set).toHaveBeenCalledWith('workflows', expect.any(Array))
+      })
+    })
+
+    describe('setActiveWorkflow', () => {
+      it('should persist active workflow selection', () => {
+        const workflow = service.createWorkflow('Active Workflow')
+        vi.clearAllMocks()
+
+        service.setActiveWorkflow('/project/path', workflow)
+
+        expect(mockStore.get).toHaveBeenCalledWith('activeWorkflowByProject', {})
+        expect(mockStore.set).toHaveBeenCalledWith('activeWorkflowByProject', {
+          '/project/path': workflow.id
+        })
+      })
+
+      it('should restore active workflow on initialization', () => {
+        // Setup store with an active workflow selection
+        const storeState: WorkflowStoreSchema = {
+          version: 1,
+          workflows: [DEFAULT_WORKFLOW, DEBUG_WORKFLOW],
+          activeWorkflowByProject: {
+            '/test/project': 'debug-workflow'
+          }
+        }
+        mockStore.store = storeState
+
+        // Create new service instance
+        service = new WorkflowService()
+
+        // Check that the active workflow is restored
+        const active = service.getActiveWorkflow('/test/project')
+        expect(active.id).toBe('debug-workflow')
+      })
+    })
+  })
+
+  describe('Per-Project Workflows', () => {
+    describe('loadProjectWorkflows', () => {
+      it('should return empty array if file does not exist', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(false)
+
+        const workflows = service.loadProjectWorkflows('/test/project')
+
+        expect(workflows).toEqual([])
+        expect(fs.existsSync).toHaveBeenCalledWith('/test/project/.minions/workflows.json')
+      })
+
+      it('should load workflows from project file', () => {
+        const projectWorkflows = [
+          { id: 'project-workflow', name: 'Project Workflow', steps: [], isDefault: false }
+        ]
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+          version: 1,
+          workflows: projectWorkflows
+        }))
+
+        const workflows = service.loadProjectWorkflows('/test/project')
+
+        expect(workflows).toEqual(projectWorkflows)
+      })
+
+      it('should return empty array on invalid JSON', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+        vi.mocked(fs.readFileSync).mockReturnValue('invalid json')
+
+        const workflows = service.loadProjectWorkflows('/test/project')
+
+        expect(workflows).toEqual([])
+      })
+
+      it('should return empty array on invalid file format', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+          version: 1,
+          workflows: 'not an array'
+        }))
+
+        const workflows = service.loadProjectWorkflows('/test/project')
+
+        expect(workflows).toEqual([])
+      })
+    })
+
+    describe('saveProjectWorkflows', () => {
+      it('should create .minions directory if it does not exist', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(false)
+
+        const workflows = [
+          { id: 'project-workflow', name: 'Project Workflow', steps: [], isDefault: false }
+        ]
+        service.saveProjectWorkflows('/test/project', workflows)
+
+        expect(fs.mkdirSync).toHaveBeenCalledWith('/test/project/.minions', { recursive: true })
+      })
+
+      it('should write workflows to project file', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+
+        const workflows = [
+          { id: 'project-workflow', name: 'Project Workflow', steps: [], isDefault: false }
+        ]
+        service.saveProjectWorkflows('/test/project', workflows)
+
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          '/test/project/.minions/workflows.json',
+          JSON.stringify({ version: 1, workflows }, null, 2),
+          'utf-8'
+        )
+      })
+    })
+
+    describe('getWorkflowsForProject', () => {
+      it('should merge global and project workflows', () => {
+        const projectWorkflows = [
+          { id: 'project-workflow', name: 'Project Workflow', steps: [], isDefault: false }
+        ]
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+          version: 1,
+          workflows: projectWorkflows
+        }))
+
+        const workflows = service.getWorkflowsForProject('/test/project')
+
+        // Should have default + debug + project workflow
+        expect(workflows).toHaveLength(3)
+        expect(workflows.map(w => w.id)).toContain('default')
+        expect(workflows.map(w => w.id)).toContain('debug-workflow')
+        expect(workflows.map(w => w.id)).toContain('project-workflow')
+      })
+
+      it('should let project workflows override global ones with same ID', () => {
+        const projectWorkflows = [
+          { id: 'default', name: 'Project Default Override', steps: [], isDefault: true }
+        ]
+        vi.mocked(fs.existsSync).mockReturnValue(true)
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+          version: 1,
+          workflows: projectWorkflows
+        }))
+
+        const workflows = service.getWorkflowsForProject('/test/project')
+
+        // Should have debug + overridden default
+        expect(workflows).toHaveLength(2)
+        const defaultWorkflow = workflows.find(w => w.id === 'default')
+        expect(defaultWorkflow?.name).toBe('Project Default Override')
+      })
+
+      it('should return only global workflows if no project file exists', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(false)
+
+        const workflows = service.getWorkflowsForProject('/test/project')
+
+        expect(workflows).toHaveLength(2)
+        expect(workflows.map(w => w.id)).toContain('default')
+        expect(workflows.map(w => w.id)).toContain('debug-workflow')
       })
     })
   })
