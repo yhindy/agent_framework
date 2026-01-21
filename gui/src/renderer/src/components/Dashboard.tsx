@@ -719,8 +719,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
+    <div className="dashboard" data-testid="dashboard">
+      <div className="dashboard-header" data-testid="dashboard-header">
         <h1>Minion Missions <BotIcon /></h1>
         <div className="header-actions">
           <MissionDropdown
@@ -750,6 +750,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                     <div
                       key={assignment.id}
                       className="assignment-card clickable"
+                      data-testid="agent-card"
                       data-status={assignment.status}
                       onClick={() => {
                         navigate(`/workspace/agent/${assignment.agentId}`)

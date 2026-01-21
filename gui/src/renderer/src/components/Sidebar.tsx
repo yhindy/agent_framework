@@ -608,7 +608,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   }
 
   return (
-    <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+    <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`} data-testid="sidebar">
       <button
         className="collapse-sidebar-btn"
         onClick={onToggleCollapse}
@@ -635,7 +635,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
         </div>
       </div>
 
-      <div className="projects-section">
+      <div className="projects-section" data-testid="project-list">
         {activeProjects.map((project) => {
           const agents = agentsByProject[project.path] || []
           const isCollapsed = collapsedProjects.has(project.path)
@@ -723,7 +723,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
               </div>
 
               {!isCollapsed && (
-                <div className="agent-list">
+                <div className="agent-list" data-testid="agent-list">
                   {sortedAgents.length === 0 && (
                     <div className="empty-state">No minions working</div>
                   )}
@@ -797,6 +797,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
         </div>
         <div
           className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}
+          data-testid="settings-link"
           onClick={() => handleNavigate('/workspace/settings')}
           title="Settings"
         >

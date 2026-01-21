@@ -25,7 +25,11 @@
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:headed": "playwright test --config=playwright.config.ts --headed",
     "test:e2e:debug": "playwright test --config=playwright.config.ts --debug",
-    "test:e2e:report": "playwright show-report e2e-report"
+    "test:e2e:report": "playwright show-report e2e-report",
+    "test:e2e:smoke": "playwright test --config=playwright.config.ts --grep 'startup|launch|should show'",
+    "test:e2e:flow": "playwright test --config=playwright.config.ts user-flows.e2e.ts",
+    "test:e2e:settings": "playwright test --config=playwright.config.ts settings.e2e.ts",
+    "test:e2e:errors": "playwright test --config=playwright.config.ts error-scenarios.e2e.ts"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",

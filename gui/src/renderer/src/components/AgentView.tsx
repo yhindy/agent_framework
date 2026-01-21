@@ -443,7 +443,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
   )
 
   return (
-    <div className="agent-view">
+    <div className="agent-view" data-testid="agent-view">
       <AgentHeader
         icon={<BotIcon size="md" />}
         title={extractBranchName(assignment?.branch) || agentId || 'Unknown'}
@@ -567,7 +567,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
           </div>
         </div>
 
-        <div className="unified-terminal-container">
+        <div className="unified-terminal-container" data-testid="terminal-container">
           {activeTab === 'agent' && (
             assignment?.tool === 'cursor' && !isRunning ? (
               <div className="placeholder">
