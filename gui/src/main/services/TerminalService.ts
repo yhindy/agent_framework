@@ -70,6 +70,9 @@ export class TerminalService {
   // Throttle map for broadcast updates (prevents flooding agents:updated)
   private lastAgentBroadcastTime: Map<string, number> = new Map()
 
+  // Guard against concurrent starts for the same agent (race condition prevention)
+  private startingAgents: Set<string> = new Set()
+
   constructor(mainWindow: BrowserWindow, notificationService?: NotificationService) {
     this.terminals = new Map()
     this.plainTerminals = new Map()
@@ -191,17 +194,37 @@ export class TerminalService {
   }
 
   /**
-   * Kill all orphaned minion-* tmux sessions.
+   * Check if a tmux session exists (regardless of attachment status).
+   */
+  tmuxSessionExists(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      execSync(`tmux has-session -t ${sessionName} 2>/dev/null`)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Kill orphaned minion-* tmux sessions.
    *
    * Called on app startup to clean up sessions left behind from crashes,
    * force-quits, or abnormal terminations.
    *
-   * Only kills sessions that are NOT currently attached. This preserves
-   * sessions from other running app instances while cleaning up true orphans.
+   * Only kills sessions that:
+   * 1. Match our pattern (minion-*)
+   * 2. Are NOT currently attached (another window may be using them)
+   * 3. Do NOT have a corresponding active agent
    *
+   * @param activeAgentIds - List of agent IDs that are currently active. Sessions
+   *                         for these agents will be preserved.
    * @returns number of sessions killed
    */
-  killAllMinionTmuxSessions(): number {
+  killOrphanedTmuxSessions(activeAgentIds: string[]): number {
     if (!this.isTmuxAvailable()) {
       return 0
     }
@@ -211,15 +234,25 @@ export class TerminalService {
       const sessions = output.trim().split('\n').filter(Boolean).filter(s => s.startsWith('minion-'))
 
       if (sessions.length === 0) {
-        log.debug('No orphaned minion tmux sessions found')
+        log.debug('No minion tmux sessions found')
         return 0
       }
 
       log.info(`Found ${sessions.length} minion tmux sessions, checking for orphans`)
 
+      // Build a set of expected session names from active agents
+      const activeSessionNames = new Set(activeAgentIds.map(id => this.getTmuxSessionName(id)))
+
       let killed = 0
       let skipped = 0
       for (const sessionName of sessions) {
+        // Skip sessions that belong to active agents
+        if (activeSessionNames.has(sessionName)) {
+          log.debug(`Skipping session for active agent: ${sessionName}`)
+          skipped++
+          continue
+        }
+
         // Skip sessions that are currently attached (another window is using them)
         if (this.isTmuxSessionAttached(sessionName)) {
           log.debug(`Skipping attached session: ${sessionName}`)
@@ -228,6 +261,7 @@ export class TerminalService {
         }
 
         try {
+          log.debug(`Killing orphaned tmux session: ${sessionName}`)
           execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
           killed++
         } catch {
@@ -236,9 +270,9 @@ export class TerminalService {
       }
 
       if (killed > 0) {
-        log.info(`Cleaned up ${killed} orphaned minion tmux sessions (${skipped} attached sessions preserved)`)
+        log.info(`Cleaned up ${killed} orphaned minion tmux sessions (${skipped} sessions preserved)`)
       } else if (skipped > 0) {
-        log.info(`No orphaned sessions to clean up (${skipped} attached sessions preserved)`)
+        log.info(`No orphaned sessions to clean up (${skipped} sessions preserved)`)
       }
       return killed
     } catch {
@@ -601,25 +635,36 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     chrome?: boolean,
     teleportSessionId?: string
   ): Promise<void> {
+    // Prevent concurrent starts for the same agent (race condition guard)
+    if (this.startingAgents.has(agentId)) {
+      log.warn(`Agent ${agentId} is already being started, skipping duplicate start`)
+      return
+    }
+    this.startingAgents.add(agentId)
+
+    try {
+      await this._startAgentInternal(projectPath, agentId, tool, mode, prompt, model, yolo, chrome, teleportSessionId)
+    } finally {
+      this.startingAgents.delete(agentId)
+    }
+  }
+
+  private async _startAgentInternal(
+    projectPath: string,
+    agentId: string,
+    tool: string,
+    mode: string,
+    prompt?: string,
+    model?: string,
+    yolo?: boolean,
+    chrome?: boolean,
+    teleportSessionId?: string
+  ): Promise<void> {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
     if (existingSession) {
       log.debug(`Cleaning up existing terminal for ${agentId} before starting`)
       this.stopAgent(agentId)
-    }
-
-    // Check if tmux session is already attached in another window/process
-    // This prevents detaching sessions when a second app window opens
-    if (this.shouldUseTmux()) {
-      const tmuxSessionName = this.getTmuxSessionName(agentId)
-      if (this.isTmuxSessionAttached(tmuxSessionName)) {
-        log.warn(`Tmux session ${tmuxSessionName} is already attached, skipping agent start`)
-        this.safeSendIPC('agent:alreadyAttached', agentId, {
-          sessionName: tmuxSessionName,
-          message: 'This agent is already running in another window'
-        })
-        return
-      }
     }
 
     // Determine worktree path (shared logic with startPlainTerminal)
@@ -634,6 +679,21 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     // Read agent info to check for existing session
     const agentInfo = await this.readAgentInfo(worktreePath)
+
+    // Check if tmux session already exists - we'll attach to it instead of spawning new Claude
+    let attachToExistingTmux = false
+    const useTmux = this.shouldUseTmux()
+    if (useTmux) {
+      const tmuxSessionName = this.getTmuxSessionName(agentId)
+      const sessionExists = this.tmuxSessionExists(tmuxSessionName)
+      log.info(`[startAgent] agent=${agentId} tmuxSession=${tmuxSessionName} exists=${sessionExists}`)
+      if (sessionExists) {
+        log.info(`Attaching to existing tmux session ${tmuxSessionName} instead of spawning new Claude`)
+        attachToExistingTmux = true
+      }
+    } else {
+      log.info(`[startAgent] agent=${agentId} NOT using tmux mode`)
+    }
 
     let isResume = false
     if (agentInfo?.claudeSessionId && tool === 'claude') {
@@ -998,10 +1058,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       )
     }
 
-    // Determine if tmux mode should be used
-    const useTmux = this.shouldUseTmux()
+    // Get tmux session name (useTmux is already determined above)
     let tmuxSessionName: string | undefined
-
     if (useTmux) {
       tmuxSessionName = this.getTmuxSessionName(agentId)
       log.debug(`Using tmux mode with session: ${tmuxSessionName}`)
@@ -1034,40 +1092,38 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     // Send the command to the terminal
     // If tmux mode is enabled, wrap in tmux session
     if (useTmux && tmuxSessionName) {
-      // For tmux mode, write command to a temp script file to avoid escaping issues
-      // This is especially important for super minion prompts which are very long
-      // and contain special characters, quotes, and newlines
-      const rawCommand = `${command} ${args.join(' ')}`
-      // Write to temp directory to avoid dirtying git worktree (critical for --teleport)
-      const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
-      const scriptPath = join(tmpdir(), `.minion-cmd-${sanitizedAgentId}.sh`)
+      if (attachToExistingTmux) {
+        // Session already exists (Claude already running) - just attach to it
+        log.info(`Attaching to existing tmux session: ${tmuxSessionName}`)
+        terminal.write(`tmux attach-session -t ${tmuxSessionName}\r`)
+      } else {
+        // Create new tmux session and run the command
+        const rawCommand = `${command} ${args.join(' ')}`
+        const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
+        const scriptPath = join(tmpdir(), `.minion-cmd-${sanitizedAgentId}.sh`)
 
-      try {
-        // Write the command to a script file
-        writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
-        log.debug(`Wrote tmux command script to ${scriptPath}`)
+        try {
+          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
+          log.debug(`Wrote tmux command script to ${scriptPath}`)
 
-        // Create tmux session with two windows:
-        // Window 0 (default) - runs the agent command
-        // Window 1 "shell" - bare terminal for manual work (created with -d to not switch to it)
-        const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
-        terminal.write(`${tmuxCmd}\r`)
-      } catch (err) {
-        log.error('Failed to write command script, falling back to direct command', err)
-        // Fallback: try direct command with escaping
-        const escapedCommand = rawCommand
-          .replace(/'/g, "'\\''")
-          .replace(/\n/g, ' ')
-        // Create tmux session with two windows (fallback version, -d to not switch to shell window)
-        const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
-        terminal.write(`${tmuxCmd}\r`)
+          // Create tmux session with two windows:
+          // Window 0 (default) - runs the agent command
+          // Window 1 "shell" - bare terminal for manual work
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        } catch (err) {
+          log.error('Failed to write command script, falling back to direct command', err)
+          const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        }
       }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
     }
 
-    // Persist session ID and flags immediately
-    if (tool === 'claude') {
+    // Persist session ID and flags (skip if just attaching to existing session)
+    if (tool === 'claude' && !attachToExistingTmux) {
       const agentInfoUpdate: Partial<AgentInfo> = {
         claudeSessionId: effectiveSessionId,
         claudeSessionActive: true,
@@ -1079,15 +1135,13 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         prompt
       }
 
-      // Store cloud session ID when teleporting (for future teleport-out)
       if (teleportSessionId) {
         agentInfoUpdate.cloudSessionId = teleportSessionId
       }
 
       await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
-      // JSONL watcher for super minions provides immediate updates; polling serves as backup
-      // Use throttled broadcast to prevent flooding from rapid file changes
+      // JSONL watcher for super minions
       if (agentInfo && isSuperMinion(agentInfo) && this.claudeSessionInfoService) {
         this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
           this.throttledBroadcastUpdate(agentId)
@@ -1117,23 +1171,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     })
   }
 
-  /**
-   * Escape shell metacharacters for use in double-quoted bash strings.
-   *
-   * Handles: backslashes, backticks (command substitution), dollar signs (variable expansion),
-   * double quotes, and exclamation marks (history expansion).
-   *
-   * Order matters: backslashes must be escaped first to avoid double-escaping.
-   */
-  private escapeForShell(str: string): string {
-    return str
-      .replace(/\\/g, '\\\\')
-      .replace(/`/g, '\\`')
-      .replace(/\$/g, '\\$')
-      .replace(/"/g, '\\"')
-      .replace(/!/g, '\\!')
-  }
-
   private getClaudeArgs(mode: string, agentId: string, prompt?: string, model?: string, yolo?: boolean, chrome?: boolean, agentInfo?: any, projectPath?: string, worktreePath?: string): string[] {
     const args: string[] = []
 
@@ -1161,12 +1198,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         const planPrompt = (isSuperMinion && projectPath)
           ? this.generateWorkflowPrompt(projectPath, prompt)
           : `Create a plan for: ${prompt}`
-        args.push(`"${this.escapeForShell(planPrompt)}"`)
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       }
     } else if (mode === 'dev') {
       args.push('--permission-mode', 'acceptEdits')
       if (prompt) {
-        args.push(`"${this.escapeForShell(prompt)}"`)
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
     }
 
@@ -1207,9 +1244,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${this.escapeForShell(planPrompt)}"`)
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
-        args.push(`"${this.escapeForShell(prompt)}"`)
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
     }
 
@@ -1240,9 +1277,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${this.escapeForShell(planPrompt)}"`)
+        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
       } else {
-        args.push(`"${this.escapeForShell(prompt)}"`)
+        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
       }
     }
 
