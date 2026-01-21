@@ -1501,8 +1501,7 @@ export class AgentService {
 
       // 7. Check if branch exists on remote
       try {
-        // SECURITY: Use execFileAsync with argument array to prevent command injection
-        const { stdout: remoteRefs } = await execFileAsync('git', ['ls-remote', '--heads', remote, currentBranch], { cwd: worktreePath })
+        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
         if (!remoteRefs.trim()) {
           log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
           // Branch not on remote, cache negative result
@@ -1517,9 +1516,8 @@ export class AgentService {
       // 8. Run gh pr list to find existing PR
       let prData: { url: string; state: string; createdAt: string } | null = null
       try {
-        // SECURITY: Use execFileAsync with argument array to prevent command injection
-        const { stdout } = await execFileAsync(
-          'gh', ['pr', 'list', '--head', currentBranch, '--json', 'number,url,state,createdAt', '--jq', '.[0]'],
+        const { stdout } = await execAsync(
+          `gh pr list --head ${currentBranch} --json number,url,state,createdAt --jq '.[0]'`,
           { cwd: projectPath }
         )
 
