@@ -284,6 +284,12 @@
   border-color: rgba(96, 125, 139, 0.2);
 }
 
+.agent-chip.agent-frontend {
+  background: rgba(233, 30, 99, 0.1);
+  color: #e91e63;
+  border-color: rgba(233, 30, 99, 0.2);
+}
+
 /* Agent item wrapper - scoped to workflow panel to avoid conflicts with global sidebar */
 .workflow-panel .agent-item {
   display: flex;
@@ -586,6 +592,10 @@
 
 .add-first-step-btn.agent-simplify {
   color: #607d8b;
+}
+
+.add-first-step-btn.agent-frontend {
+  color: #e91e63;
 }
 
 /* =============================================================================

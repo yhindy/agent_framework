@@ -136,6 +136,9 @@
 .fab-step-option.agent-simplify { color: var(--color-info); }
 .fab-step-option.agent-simplify:hover { background: var(--color-info-dim); }
 
+.fab-step-option.agent-frontend { color: #e91e63; }
+.fab-step-option.agent-frontend:hover { background: rgba(233, 30, 99, 0.1); }
+
 .fab-step-icon {
   width: 32px;
   height: 32px;

@@ -47,49 +47,55 @@ export interface WorkflowConfig {
 
 /**
  * Available agent types for the workflow system.
+ * These map directly to Claude Code's Task tool subagent_type parameter.
  */
 export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
   {
-    id: 'explore',
+    id: 'Explore',
     name: 'Explorer',
-    description: 'Quick codebase reconnaissance - searches files, reads code'
+    description: 'Fast codebase reconnaissance - searches files, reads code, finds patterns'
   },
   {
-    id: 'plan',
+    id: 'Plan',
     name: 'Planner',
-    description: 'Architecture and design planning - creates technical specifications'
+    description: 'Architecture and design planning - creates technical specifications and implementation plans'
   },
   {
-    id: 'review',
-    name: 'Reviewer',
-    description: 'Code review and validation - checks quality, patterns, and requirements'
+    id: 'general-purpose',
+    name: 'General Purpose',
+    description: 'Versatile agent for implementation, review, testing, and documentation tasks'
   },
   {
-    id: 'implement',
-    name: 'Implementer',
-    description: 'Full implementation following TDD - writes tests first, then code'
-  },
-  {
-    id: 'test',
-    name: 'Tester',
-    description: 'Test execution and validation - runs tests, checks coverage'
-  },
-  {
-    id: 'debug',
+    id: 'debugger',
     name: 'Debugger',
-    description: 'Debug unexpected behavior - traces bugs, adds logging, fixes issues'
+    description: 'Debug unexpected behavior - systematic hypothesis generation, adds logging, finds root causes'
   },
   {
-    id: 'document',
-    name: 'Documenter',
-    description: 'Documentation updates - writes READMEs, API docs, code comments'
-  },
-  {
-    id: 'simplify',
+    id: 'code-simplifier',
     name: 'Simplifier',
-    description: 'Code simplification - refactors, removes duplication, improves clarity'
+    description: 'Code simplification - refactors for clarity, removes duplication, improves maintainability'
+  },
+  {
+    id: 'bold-frontend-designer',
+    name: 'Frontend Designer',
+    description: 'UI/UX specialist - creates bold visual designs, improves layouts, and component styling'
   }
 ]
+
+/**
+ * Maps legacy agent IDs to current valid Claude subagent types.
+ * Used for backwards compatibility with existing saved workflows.
+ */
+export const LEGACY_AGENT_ID_MAP: Record<string, string> = {
+  'explore': 'Explore',
+  'plan': 'Plan',
+  'review': 'general-purpose',
+  'implement': 'general-purpose',
+  'test': 'general-purpose',
+  'debug': 'debugger',
+  'document': 'general-purpose',
+  'simplify': 'code-simplifier'
+}
 
 /**
  * Helper to create a simple agent (no custom prompt).
@@ -106,25 +112,25 @@ export const DEFAULT_WORKFLOW: WorkflowConfig = {
   name: 'Standard Workflow',
   description: 'Standard workflow with 5 phases: explore, design, review, implement, validate',
   steps: [
-    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'explore' }] },
-    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'plan' }] },
+    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'Explore' }] },
+    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'Plan' }] },
     {
       id: 'step-3',
       name: 'Design Review',
       agents: [
-        { id: 'a3', typeId: 'review', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
-        { id: 'a4', typeId: 'review', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
+        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
+        { id: 'a4', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
       ]
     },
-    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'implement' }] },
+    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'general-purpose' }] },
     {
       id: 'step-5',
       name: 'Validation',
       agents: [
-        { id: 'a6', typeId: 'simplify' },
-        { id: 'a7', typeId: 'test', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
-        { id: 'a8', typeId: 'review', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
-        { id: 'a9', typeId: 'document' }
+        { id: 'a6', typeId: 'code-simplifier' },
+        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
+        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
+        { id: 'a9', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
       ]
     }
   ],
@@ -143,26 +149,26 @@ export const DEBUG_WORKFLOW: WorkflowConfig = {
       id: 'dbg-1',
       name: 'Reproduce & Understand',
       agents: [
-        { id: 'd1', typeId: 'explore', customPrompt: 'Find the code related to the bug and understand the current behavior' },
-        { id: 'd2', typeId: 'debug', customPrompt: 'Reproduce the bug and document the steps to trigger it' }
+        { id: 'd1', typeId: 'Explore', customPrompt: 'Find the code related to the bug and understand the current behavior' },
+        { id: 'd2', typeId: 'debugger', customPrompt: 'Reproduce the bug and document the steps to trigger it' }
       ]
     },
     {
       id: 'dbg-2',
       name: 'Root Cause Analysis',
-      agents: [{ id: 'd3', typeId: 'debug', customPrompt: 'Identify the root cause of the bug using logging, breakpoints, and code analysis' }]
+      agents: [{ id: 'd3', typeId: 'debugger', customPrompt: 'Identify the root cause of the bug using logging, breakpoints, and code analysis' }]
     },
     {
       id: 'dbg-3',
       name: 'Fix Implementation',
-      agents: [{ id: 'd4', typeId: 'implement', customPrompt: 'Implement the fix with minimal changes. Write a regression test first.' }]
+      agents: [{ id: 'd4', typeId: 'general-purpose', customPrompt: 'Implement the fix with minimal changes. Write a regression test first.' }]
     },
     {
       id: 'dbg-4',
       name: 'Verification',
       agents: [
-        { id: 'd5', typeId: 'test', customPrompt: 'Run all tests and verify the fix works' },
-        { id: 'd6', typeId: 'review', customPrompt: 'Review the fix for correctness and potential side effects' }
+        { id: 'd5', typeId: 'general-purpose', customPrompt: 'Run all tests and verify the fix works' },
+        { id: 'd6', typeId: 'general-purpose', customPrompt: 'Review the fix for correctness and potential side effects' }
       ]
     }
   ],

@@ -5,34 +5,35 @@ import {
   HammerIcon,
   ClipboardIcon,
   BugIcon,
-  CheckCircleIcon,
-  CheckIcon,
-  EditIcon,
-  RefreshIcon
+  RefreshIcon,
+  PaletteIcon
 } from '../icons'
 
 type IconSize = 'xs' | 'sm' | 'md' | 'lg'
 
 export function getAgentIcon(agentId: string, size: IconSize = 'sm'): JSX.Element {
   switch (agentId) {
-    case 'explore':
+    // Current valid agent IDs
+    case 'Explore':
+    case 'explore': // legacy
       return <SearchIcon size={size} />
-    case 'plan':
+    case 'Plan':
+    case 'plan': // legacy
       return <ClipboardIcon size={size} />
-    case 'review':
-      return <CheckCircleIcon size={size} />
-    case 'implement':
     case 'general-purpose':
+    case 'implement': // legacy
+    case 'review': // legacy
+    case 'test': // legacy
+    case 'document': // legacy
       return <HammerIcon size={size} />
-    case 'test':
-      return <CheckIcon size={size} />
-    case 'debug':
     case 'debugger':
+    case 'debug': // legacy
       return <BugIcon size={size} />
-    case 'document':
-      return <EditIcon size={size} />
-    case 'simplify':
+    case 'code-simplifier':
+    case 'simplify': // legacy
       return <RefreshIcon size={size} />
+    case 'bold-frontend-designer':
+      return <PaletteIcon size={size} />
     default:
       return <HammerIcon size={size} />
   }
@@ -40,24 +41,27 @@ export function getAgentIcon(agentId: string, size: IconSize = 'sm'): JSX.Elemen
 
 export function getAgentColorClass(agentId: string): string {
   switch (agentId) {
-    case 'explore':
+    // Current valid agent IDs
+    case 'Explore':
+    case 'explore': // legacy
       return 'agent-explore'
-    case 'plan':
+    case 'Plan':
+    case 'plan': // legacy
       return 'agent-plan'
-    case 'review':
-      return 'agent-review'
-    case 'implement':
     case 'general-purpose':
+    case 'implement': // legacy
+    case 'review': // legacy
+    case 'test': // legacy
+    case 'document': // legacy
       return 'agent-implement'
-    case 'test':
-      return 'agent-test'
-    case 'debug':
     case 'debugger':
+    case 'debug': // legacy
       return 'agent-debug'
-    case 'document':
-      return 'agent-document'
-    case 'simplify':
+    case 'code-simplifier':
+    case 'simplify': // legacy
       return 'agent-simplify'
+    case 'bold-frontend-designer':
+      return 'agent-frontend'
     default:
       return 'agent-implement'
   }
