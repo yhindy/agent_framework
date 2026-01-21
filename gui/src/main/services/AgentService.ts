@@ -164,10 +164,20 @@ export class AgentService {
         }
       }
     } catch (error) {
-      return { 
-        ghInstalled: false, 
+      // Provide platform-appropriate installation instructions
+      const platform = process.platform
+      let installHint: string
+      if (platform === 'darwin') {
+        installHint = 'brew install gh'
+      } else if (platform === 'win32') {
+        installHint = 'winget install GitHub.cli (or scoop install gh)'
+      } else {
+        installHint = 'See https://cli.github.com/manual/installation'
+      }
+      return {
+        ghInstalled: false,
         ghAuthenticated: false,
-        error: 'GitHub CLI not installed. Install with: brew install gh'
+        error: `GitHub CLI not installed. Install with: ${installHint}`
       }
     }
   }
@@ -1491,7 +1501,8 @@ export class AgentService {
 
       // 7. Check if branch exists on remote
       try {
-        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
+        // SECURITY: Use execFileAsync with argument array to prevent command injection
+        const { stdout: remoteRefs } = await execFileAsync('git', ['ls-remote', '--heads', remote, currentBranch], { cwd: worktreePath })
         if (!remoteRefs.trim()) {
           log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
           // Branch not on remote, cache negative result
@@ -1506,8 +1517,9 @@ export class AgentService {
       // 8. Run gh pr list to find existing PR
       let prData: { url: string; state: string; createdAt: string } | null = null
       try {
-        const { stdout } = await execAsync(
-          `gh pr list --head "${currentBranch}" --json number,url,state,createdAt --jq ".[0]"`,
+        // SECURITY: Use execFileAsync with argument array to prevent command injection
+        const { stdout } = await execFileAsync(
+          'gh', ['pr', 'list', '--head', currentBranch, '--json', 'number,url,state,createdAt', '--jq', '.[0]'],
           { cwd: projectPath }
         )
 

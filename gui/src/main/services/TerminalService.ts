@@ -2,8 +2,8 @@ import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
-import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
-import { execSync } from 'child_process'
+import { existsSync, statSync, writeFileSync, mkdirSync, mkdtempSync } from 'fs'
+import { execSync, execFileSync, spawnSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo, isSuperMinion } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
@@ -129,8 +129,8 @@ export class TerminalService {
   /**
    * Generate a sanitized tmux session name from an agentId.
    *
-   * Tmux session names cannot contain periods, colons, slashes, or backslashes.
-   * These characters are replaced with underscores to create a valid session name.
+   * SECURITY: Only allows alphanumeric characters, hyphens, and underscores.
+   * This prevents shell injection attacks when the session name is used in commands.
    *
    * Naming convention: minion-{sanitizedAgentId}
    *
@@ -138,10 +138,11 @@ export class TerminalService {
    * getTmuxSessionName('agent-1') // returns 'minion-agent-1'
    * getTmuxSessionName('myproject-5') // returns 'minion-myproject-5'
    * getTmuxSessionName('agent/with:special.chars') // returns 'minion-agent_with_special_chars'
+   * getTmuxSessionName('evil;rm -rf /') // returns 'minion-evil_rm__rf__'
    */
   getTmuxSessionName(agentId: string): string {
-    // Replace characters not allowed in tmux session names with underscores
-    const sanitized = agentId.replace(/[.:/\\]/g, '_')
+    // SECURITY: Only allow alphanumeric, hyphens, and underscores to prevent shell injection
+    const sanitized = agentId.replace(/[^a-zA-Z0-9_-]/g, '_')
     return `minion-${sanitized}`
   }
 
@@ -155,7 +156,8 @@ export class TerminalService {
     const sessionName = this.getTmuxSessionName(agentId)
 
     try {
-      execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
+      // SECURITY: Use execFileSync with argument array to prevent command injection
+      execFileSync('tmux', ['kill-session', '-t', sessionName], { encoding: 'utf8', stdio: 'pipe' })
       log.debug(`Killed tmux session: ${sessionName}`)
     } catch {
       log.debug(`Tmux session ${sessionName} does not exist or already killed`)
@@ -202,7 +204,8 @@ export class TerminalService {
     }
 
     try {
-      execSync(`tmux has-session -t ${sessionName} 2>/dev/null`)
+      // SECURITY: Use execFileSync with argument array to prevent command injection
+      execFileSync('tmux', ['has-session', '-t', sessionName], { stdio: 'pipe' })
       return true
     } catch {
       return false
@@ -262,7 +265,8 @@ export class TerminalService {
 
         try {
           log.debug(`Killing orphaned tmux session: ${sessionName}`)
-          execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
+          // SECURITY: Use execFileSync with argument array to prevent command injection
+          execFileSync('tmux', ['kill-session', '-t', sessionName], { encoding: 'utf8', stdio: 'pipe' })
           killed++
         } catch {
           log.debug(`Failed to kill tmux session: ${sessionName}`)
@@ -1100,10 +1104,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         // Create new tmux session and run the command
         const rawCommand = `${command} ${args.join(' ')}`
         const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
-        const scriptPath = join(tmpdir(), `.minion-cmd-${sanitizedAgentId}.sh`)
+        // SECURITY: Use unique temp directory to prevent symlink attacks and race conditions
+        const tempDir = mkdtempSync(join(tmpdir(), 'minion-'))
+        const scriptPath = join(tempDir, `cmd-${sanitizedAgentId}.sh`)
 
         try {
-          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
+          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
           log.debug(`Wrote tmux command script to ${scriptPath}`)
 
           // Create tmux session with two windows:
@@ -1394,11 +1400,18 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   }
 
   private resizeTmuxWindows(sessionName: string, cols: number, rows: number): void {
+    const adjustedRows = Math.max(1, rows - 1)
+    // SECURITY: Use execFileSync with argument arrays to prevent command injection
+    // Ignore errors (window may not exist yet)
     try {
-      const adjustedRows = Math.max(1, rows - 1)
-      execSync(`tmux resize-window -t ${sessionName}:0 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
-      execSync(`tmux resize-window -t ${sessionName}:1 -x ${cols} -y ${adjustedRows} 2>/dev/null || true`, { encoding: 'utf8' })
+      execFileSync('tmux', ['resize-window', '-t', `${sessionName}:0`, '-x', String(cols), '-y', String(adjustedRows)], { stdio: 'pipe' })
     } catch {
+      // Window 0 may not exist yet
+    }
+    try {
+      execFileSync('tmux', ['resize-window', '-t', `${sessionName}:1`, '-x', String(cols), '-y', String(adjustedRows)], { stdio: 'pipe' })
+    } catch {
+      // Window 1 may not exist yet
       log.debug(`Failed to resize tmux windows for ${sessionName}`)
     }
   }

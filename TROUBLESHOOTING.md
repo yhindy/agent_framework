@@ -140,7 +140,7 @@ If Codex isn't available:
 which codex
 
 # If not found, install it
-npm install -g openai-codex-cli
+npm install -g @openai/codex
 
 # Verify PATH includes npm global bin
 npm bin -g

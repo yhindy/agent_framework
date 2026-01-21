@@ -112,10 +112,10 @@ When cleaning up resources (especially in terminal services and app shutdown):
 
 The framework supports three agent tools. At least one must be installed:
 
-#### Claude Desktop
-- Install from: https://claude.ai/download
+#### Claude Code (CLI)
+- Install: `npm install -g @anthropic-ai/claude-code`
+- Command: `claude` (spawns in terminal with prompt)
 - No additional configuration required
-- Spawned via AppleScript on macOS
 
 #### Cursor CLI
 - Install: `npm install -g cursor-cli`
@@ -124,7 +124,7 @@ The framework supports three agent tools. At least one must be installed:
 - Model selection: Available in GUI
 
 #### Codex CLI
-- Install: `npm install -g openai-codex-cli` (or your Codex CLI package)
+- Install: `npm install -g @openai/codex`
 - Command: `codex --model gpt-5.2-codex "<prompt>"`
 - Model: **gpt-5.2-codex (hardcoded, no selection available)**
 - API Key: Set `OPENAI_API_KEY` environment variable
@@ -585,7 +585,7 @@ The GUI allows selecting from three agent tools when creating an assignment:
 
 | Tool | Model Selection | Status Detection | Command |
 |------|-----------------|------------------|---------|
-| **claude** | Yes (multiple models) | JSONL file parsing | AppleScript launch |
+| **claude** | Yes (multiple models) | JSONL file parsing | `claude` CLI command |
 | **cursor-cli** | Yes (multiple models) | Pattern matching | `cursor-cli "<prompt>"` |
 | **codex** | No (hardcoded to gpt-5.2-codex) | Pattern matching | `codex --model gpt-5.2-codex "<prompt>"` |
 
@@ -797,7 +797,7 @@ If build-gui fails with "Cannot find module 'electron/package.json'":
 
 **Codex Command Not Found:**
 - Verify Codex CLI is installed: `which codex`
-- Install if missing: `npm install -g openai-codex-cli` (or appropriate package)
+- Install if missing: `npm install -g @openai/codex`
 - Check PATH includes npm global bin directory: `npm bin -g`
 - The `install.sh` script warns if `codex` is not found but does not block installation
 
