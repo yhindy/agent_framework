@@ -30,7 +30,7 @@ You need at least one of these AI coding tools installed:
 | Tool | Install | Notes |
 |------|---------|-------|
 | **Claude Code** (Recommended) | `npm install -g @anthropic-ai/claude-code` | Anthropic's official CLI |
-| **Cursor CLI** | `npm install -g @anthropic-ai/cursor-cli` | For Cursor IDE users |
+| **Cursor CLI** | `npm install -g cursor-cli` | For Cursor IDE users |
 | **Codex CLI** | `npm install -g @openai/codex` | Requires `OPENAI_API_KEY` env var |
 
 After installing, verify it works:
