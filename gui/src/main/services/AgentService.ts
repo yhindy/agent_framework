@@ -55,6 +55,11 @@ export class AgentService {
 
   private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
+  // Cache for agent/assignment-to-project mapping to avoid repeated git worktree list calls
+  private agentProjectCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
+  private assignmentProjectCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
+  private readonly AGENT_PROJECT_CACHE_TTL_MS = 30 * 1000 // 30 seconds
+
   constructor() {
     this.sessions = new Map()
   }
@@ -535,8 +540,22 @@ export class AgentService {
   }
 
   async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
+    // Check cache first to avoid spawning git processes
+    const cached = this.agentProjectCache.get(agentId)
+    if (cached && Date.now() - cached.timestamp < this.AGENT_PROJECT_CACHE_TTL_MS) {
+      if (activeProjectPaths.includes(cached.projectPath)) {
+        return cached.projectPath
+      }
+    }
+
+    // Cache miss - do full lookup
     for (const projectPath of activeProjectPaths) {
       const agents = await this.listAgents(projectPath)
+      // Update cache for all found agents
+      const now = Date.now()
+      for (const agent of agents) {
+        this.agentProjectCache.set(agent.id, { timestamp: now, projectPath })
+      }
       if (agents.some(a => a.id === agentId)) {
         return projectPath
       }
@@ -545,8 +564,22 @@ export class AgentService {
   }
 
   async findProjectForAssignment(activeProjectPaths: string[], assignmentId: string): Promise<string> {
+    // Check cache first to avoid spawning git processes
+    const cached = this.assignmentProjectCache.get(assignmentId)
+    if (cached && Date.now() - cached.timestamp < this.AGENT_PROJECT_CACHE_TTL_MS) {
+      if (activeProjectPaths.includes(cached.projectPath)) {
+        return cached.projectPath
+      }
+    }
+
+    // Cache miss - do full lookup
     for (const projectPath of activeProjectPaths) {
       const { assignments } = await this.getAssignments(projectPath)
+      // Update cache for all found assignments
+      const now = Date.now()
+      for (const assignment of assignments) {
+        this.assignmentProjectCache.set(assignment.id, { timestamp: now, projectPath })
+      }
       if (assignments.some(a => a.id === assignmentId)) {
         return projectPath
       }
@@ -1076,8 +1109,10 @@ export class AgentService {
       log.debug('Teardown script output:', stdout)
       if (stderr) log.warn('Teardown script errors:', stderr)
 
-      // Remove from sessions
+      // Remove from sessions and caches
       this.sessions.delete(agentId)
+      this.agentProjectCache.delete(agentId)
+      this.assignmentProjectCache.delete(agentId)
 
       // No need to update config.json - the .agent-info file is removed with the worktree atomically
     } catch (error: any) {

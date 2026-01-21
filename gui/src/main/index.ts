@@ -863,8 +863,17 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('agents:saveUIState', async (_event, agentId: string, uiState: any) => {
-    const projectPath = await findProjectForAgent(agentId)
-    return services!.agent.saveUIState(projectPath, agentId, uiState)
+    try {
+      const projectPath = await findProjectForAgent(agentId)
+      return services!.agent.saveUIState(projectPath, agentId, uiState)
+    } catch (error) {
+      // Agent may have been deleted while debounced save was pending - this is not a critical error
+      if (error instanceof Error && error.message.includes('not found')) {
+        log.debug(`saveUIState skipped for ${agentId}: agent no longer exists`)
+        return
+      }
+      throw error
+    }
   })
 
   ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
