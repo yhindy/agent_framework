@@ -269,7 +269,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate no session exists
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
         if (cmd === 'tmux' && args?.includes('has-session')) {
           throw new Error('session not found')
         }
@@ -347,7 +347,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate session EXISTS
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
         // Session exists - don't throw
         return Buffer.from('')
       })
@@ -372,7 +372,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate session EXISTS
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
         // Session exists - don't throw
         return Buffer.from('')
       })
@@ -395,7 +395,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate no session exists
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
         if (cmd === 'tmux' && args?.includes('has-session')) {
           throw new Error('session not found')
         }
@@ -433,7 +433,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate no session exists
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
         if (cmd === 'tmux' && args?.includes('has-session')) {
           throw new Error('session not found')
         }
@@ -474,7 +474,7 @@ describe('TerminalService Tmux Integration', () => {
         return Buffer.from('')
       })
       // Mock has-session check using execFileSync to indicate no session exists
-      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
         if (cmd === 'tmux' && args?.includes('has-session')) {
           throw new Error('session not found')
         }
@@ -718,7 +718,7 @@ describe('TerminalService Settings Integration', () => {
       return Buffer.from('')
     })
     // Mock has-session check using execFileSync to indicate no session exists
-    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
       if (cmd === 'tmux' && args?.includes('has-session')) {
         throw new Error('session not found')
       }
@@ -891,7 +891,7 @@ describe('TerminalService tmux two windows', () => {
       return Buffer.from('')
     })
     // Mock has-session check using execFileSync to indicate no session exists
-    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
       if (cmd === 'tmux' && args?.includes('has-session')) {
         throw new Error('session not found')
       }
@@ -920,7 +920,7 @@ describe('TerminalService tmux two windows', () => {
       return Buffer.from('')
     })
     // Mock has-session check using execFileSync to indicate no session exists
-    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
       if (cmd === 'tmux' && args?.includes('has-session')) {
         throw new Error('session not found')
       }
@@ -948,7 +948,7 @@ describe('TerminalService tmux two windows', () => {
       return Buffer.from('')
     })
     // Mock has-session check using execFileSync to indicate session EXISTS
-    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: string[]) => {
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
       // Session exists - don't throw
       return Buffer.from('')
     })
