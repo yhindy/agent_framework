@@ -13,7 +13,14 @@ This document provides essential context for AI assistants working with the Agen
 ### Testing Requirements
 - **Always write tests for new functionality.** No feature is complete without tests.
 - **Run smart tests before proposing commits** - use selective testing to save time and memory: `npm run test:changed`
-- Follow existing test patterns in `gui/src/main/services/__tests__/` - use the established fixtures.
+- **Choose the right test type:**
+  - **Unit tests** (`gui/src/main/services/__tests__/`): For service logic, utility functions, data transformations
+  - **E2E tests** (`gui/e2e/`): For UI components, IPC handlers, user workflows, and integration points
+- **When to write E2E tests:**
+  - Adding or modifying IPC handlers in `gui/src/main/index.ts`
+  - Adding UI components or changing user workflows
+  - Adding `data-testid` attributes to components (see `gui/e2e/README.md` for patterns)
+  - Modifying settings, navigation, or agent lifecycle flows
 - For new services:
   - Add unit tests for new functions/methods
   - Mock external dependencies (child_process, fs, Electron APIs)
