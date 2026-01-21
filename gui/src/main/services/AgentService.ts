@@ -626,17 +626,25 @@ export class AgentService {
     const config = this.getProjectConfig(projectPath)
     const projectName = config.project.name || projectPath.split('/').pop() || 'project'
 
-    // Auto-generate agent ID if not provided
+    // Auto-generate agent ID from branch suffix if not provided
     let agentId = assignment.agentId
+    let branch = assignment.branch!
+
     if (!agentId) {
-      const hash = Math.random().toString(36).substring(2, 9)
-      agentId = `${projectName}-${hash}`
+      // Extract branch suffix and use it for agentId (sanitize for git/filesystem)
+      const branchSuffix = branch.startsWith('feature/')
+        ? branch.replace(/^feature\//, '').split('/').pop() || branch
+        : branch
+      const sanitizedSuffix = branchSuffix
+        .replace(/[^a-zA-Z0-9_-]/g, '-')  // Replace invalid chars with dashes
+        .replace(/-+/g, '-')               // Collapse multiple dashes
+        .replace(/^-|-$/g, '')             // Remove leading/trailing dashes
+      agentId = `${projectName}-${sanitizedSuffix}`
     }
 
     // Auto-generate branch name if not provided
-    let branch = assignment.branch!
     if (!branch.startsWith('feature/')) {
-      branch = `feature/${agentId}/${branch}`
+      branch = `feature/${branch}`
     }
 
     // Calculate worktree path
