@@ -682,7 +682,12 @@ export class ClaudeSessionInfoService {
 
       // Read last ~50KB which should contain recent entries
       // Increased from 10KB to catch AskUserQuestion/ExitPlanMode entries
-      // that may be followed by many other entries before user responds
+      // that may be followed by many other entries before user responds.
+      //
+      // NOTE: 50KB is sufficient for tracking Task subagents because Task invocations
+      // and their tool_results are temporally close in the JSONL (typically seconds to
+      // minutes apart). Even with verbose Task outputs, we capture the invocation-result
+      // pairs needed to determine if Tasks are still running.
       const tail = this.readFileTail(sessionFile, 50000)
       const lines = tail.split('\n').filter(l => l.trim())
 
@@ -785,6 +790,7 @@ export class ClaudeSessionInfoService {
                 // that don't end with colon, but they're still working if tasks are running
                 if (runningTasks.size > 0) {
                   // Super minion still has running Task subagents - definitely working
+                  log.debug(`Session ${sessionId} has ${runningTasks.size} running Task subagents, state=working`)
                   state = 'working'
                 } else {
                   // No running tasks - check colon heuristic
