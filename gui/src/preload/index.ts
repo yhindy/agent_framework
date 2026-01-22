@@ -276,6 +276,36 @@ const api = {
     const subscription = (_event: any, result: any) => callback(result)
     ipcRenderer.on('claudeConfig:updated', subscription)
     return () => ipcRenderer.removeListener('claudeConfig:updated', subscription)
+  },
+
+  // Skills Library APIs
+  scanSkillsLibrary: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:scan', projectPath),
+  getSkillsLibraryScanResult: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:getScanResult', projectPath),
+  refreshSkillsLibrary: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:refresh', projectPath),
+  getSkillsLibrarySettings: () => ipcRenderer.invoke('skillsLibrary:getSettings'),
+  updateSkillsLibrarySettings: (updates: any) => ipcRenderer.invoke('skillsLibrary:updateSettings', updates),
+  getEnabledSkills: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:getEnabledSkills', projectPath),
+
+  // Unified Skills APIs (combines all sources)
+  scanUnifiedSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:scan', projectPath),
+  getUnifiedSkillsScanResult: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getScanResult', projectPath),
+  refreshUnifiedSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:refresh', projectPath),
+  getUnifiedEnabledSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getEnabledSkills', projectPath),
+  getSkillById: (skillId: string, projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getSkillById', skillId, projectPath),
+  setSkillEnabled: (skillId: string, enabled: boolean) => ipcRenderer.invoke('unifiedSkills:setSkillEnabled', skillId, enabled),
+  getSkillsAsSubagentTypes: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getSubagentTypes', projectPath),
+
+  // Skills Library Event Listeners
+  onSkillsLibraryUpdated: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('skillsLibrary:updated', subscription)
+    return () => ipcRenderer.removeListener('skillsLibrary:updated', subscription)
+  },
+
+  onUnifiedSkillsUpdated: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('unifiedSkills:updated', subscription)
+    return () => ipcRenderer.removeListener('unifiedSkills:updated', subscription)
   }
 }
 

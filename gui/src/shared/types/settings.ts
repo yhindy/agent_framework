@@ -57,12 +57,22 @@ export interface ClaudeConfigSettings {
   autoRefresh: boolean           // Watch for config changes
 }
 
+/**
+ * Settings for Skills Library feature.
+ */
+export interface SkillsLibrarySettings {
+  vercelSkillsEnabled: boolean   // Enable ~/.claude/skills/
+  projectSkillsEnabled: boolean  // Enable project-local skills
+  disabledSkillIds: string[]     // Specific skill IDs to disable
+}
+
 export interface AppSettings {
   notifications: NotificationSettings
   defaultTool: DefaultToolSettings
   defaultAgent: DefaultAgentSettings
   terminal: TerminalSettings
   claudeConfig: ClaudeConfigSettings // Claude Code plugin import settings
+  skillsLibrary: SkillsLibrarySettings // Skills Library settings
   version: number // Schema version for migrations
 }
 
@@ -91,7 +101,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
     disabledAgentIds: [],
     autoRefresh: true
   },
-  version: 3
+  skillsLibrary: {
+    vercelSkillsEnabled: true,
+    projectSkillsEnabled: true,
+    disabledSkillIds: []
+  },
+  version: 4
 }
 
 // Display name mappings for UI dropdowns

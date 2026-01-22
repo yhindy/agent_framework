@@ -126,3 +126,17 @@ export function EditIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Skills icon - Stacked layers representing skills library */
+export function SkillsIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="skills-icon">
+      {/* Bottom layer */}
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeLinejoin="round" />
+      {/* Middle layer */}
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeLinejoin="round" />
+      {/* Top layer */}
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeLinejoin="round" />
+    </BaseIcon>
+  )
+}
