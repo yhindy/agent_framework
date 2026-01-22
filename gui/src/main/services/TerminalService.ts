@@ -949,15 +949,16 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         }
       }
 
-      // State polling using lightweight tail-based method (reads only last 10KB, not entire file)
+      // State polling using lightweight tail-based method (reads only last 50KB, not entire file)
       // For super minions, we also check task invocations but only when file changes
       let lastTaskCheckMtime = 0
 
       const checkAndBroadcastState = async (): Promise<void> => {
         if (!effectiveSessionId) return
 
-        // PERFORMANCE: Use lightweight getSessionState which only reads last 10KB of file
+        // PERFORMANCE: Use lightweight getSessionState which only reads last 50KB of file
         // instead of parseSessionInfo which streams the entire file (can be 700MB+)
+        // 50KB is enough to capture AskUserQuestion/ExitPlanMode entries followed by other entries
         const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
 
         tryDetectBranch()
@@ -1388,6 +1389,13 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // Record input to idle detector (handles grace period and state clearing)
       session.idleDetector?.recordInput()
       session.pty.write(data)
+
+      // For Claude agents: immediately signal "working" state when user sends input
+      // This provides instant feedback before the JSONL poll detects the change
+      // The data check filters out control sequences (resize, etc.) that aren't real user input
+      if (session.tool === 'claude' && data.length > 0 && !data.startsWith('\x1b')) {
+        this.safeSendIPC('agent:stateChanged', agentId, 'working')
+      }
     }
   }
 

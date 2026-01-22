@@ -657,17 +657,11 @@ export class ClaudeSessionInfoService {
 
   /**
    * Get session state from the JSONL file with smart caching.
-   * This is a lighter-weight operation that only reads the last few entries.
+   * This is a lighter-weight operation that only reads the last ~10KB of the file.
    *
-   * LIMITATION: This method does NOT track Task tool invocations because it only
-   * reads the tail of the file for performance. For super minions with running
-   * Task subagents, use parseSessionInfo() which properly tracks running tasks
-   * and avoids false "waiting" states between Task invocations.
-   *
-   * This is generally safe because:
-   * 1. The caching mechanism means if parseSessionInfo() was called first (which
-   *    it is during normal polling), this method returns the cached state.
-   * 2. The main notification flow uses parseSessionInfo() which has the fix.
+   * Tracks Task tool invocations in the tail to correctly detect when super minions
+   * have running subagents. This prevents false "waiting" states when a super minion
+   * sends text-only messages between Task invocations.
    */
   getSessionState(sessionId: string, worktreePath: string): 'working' | 'waiting' | 'unknown' {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
@@ -686,11 +680,46 @@ export class ClaudeSessionInfoService {
         return cached.info.state
       }
 
-      // Read last ~10KB which should contain recent entries
-      const tail = this.readFileTail(sessionFile, 10000)
+      // Read last ~50KB which should contain recent entries
+      // Increased from 10KB to catch AskUserQuestion/ExitPlanMode entries
+      // that may be followed by many other entries before user responds.
+      //
+      // NOTE: 50KB is sufficient for tracking Task subagents because Task invocations
+      // and their tool_results are temporally close in the JSONL (typically seconds to
+      // minutes apart). Even with verbose Task outputs, we capture the invocation-result
+      // pairs needed to determine if Tasks are still running.
+      const tail = this.readFileTail(sessionFile, 50000)
       const lines = tail.split('\n').filter(l => l.trim())
 
-      // Process lines from end to find latest state
+      // FIRST PASS: Track running Task subagents
+      // This fixes the bug where getSessionState() would return 'waiting' when
+      // a super minion sent text without a colon but had Tasks still running
+      const runningTasks = new Set<string>()
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line)
+          // Find Task tool_use invocations
+          if (entry.type === 'assistant' && entry.message?.content && Array.isArray(entry.message.content)) {
+            for (const block of entry.message.content) {
+              if (block.type === 'tool_use' && block.name === 'Task' && block.id) {
+                runningTasks.add(block.id)
+              }
+            }
+          }
+          // Find tool_result completions (marks Task as done)
+          if (entry.type === 'user' && entry.message?.content && Array.isArray(entry.message.content)) {
+            for (const block of entry.message.content) {
+              if (block.type === 'tool_result' && block.tool_use_id) {
+                runningTasks.delete(block.tool_use_id)
+              }
+            }
+          }
+        } catch {
+          // Skip malformed lines
+        }
+      }
+
+      // SECOND PASS: Process lines from end to find latest state
       // Same 3-state logic as parseSessionInfo (check stop_reason):
       // - waiting: Claude FINISHED turn and is ready for human input
       // - working: Claude is processing, using tools, or waiting for tool results
@@ -755,19 +784,29 @@ export class ClaudeSessionInfoService {
 
               } else if (hasText && !hasToolUse && !hasThinking) {
                 // Text-only message: Need to distinguish mid-work status updates from completion messages
-                // Extract text content to check for colon heuristic
-                const textContent = content.find(c => c.type === 'text')?.text || ''
-                const trimmedText = textContent.trim()
 
-                if (trimmedText.endsWith(':')) {
-                  // Messages ending with colon are ALWAYS status updates (100% accurate)
-                  // e.g., "Let me search for that:", "Now I'll read the file:"
-                  // These indicate more work is coming (tool_use follows)
+                // CRITICAL: Check for running Task subagents BEFORE applying colon heuristic
+                // Super minions may send text-only messages between Task invocations
+                // that don't end with colon, but they're still working if tasks are running
+                if (runningTasks.size > 0) {
+                  // Super minion still has running Task subagents - definitely working
+                  log.debug(`Session ${sessionId} has ${runningTasks.size} running Task subagents, state=working`)
                   state = 'working'
                 } else {
-                  // Text not ending with colon - likely a completion message
-                  // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
-                  state = 'waiting'
+                  // No running tasks - check colon heuristic
+                  const textContent = content.find(c => c.type === 'text')?.text || ''
+                  const trimmedText = textContent.trim()
+
+                  if (trimmedText.endsWith(':')) {
+                    // Messages ending with colon are ALWAYS status updates (100% accurate)
+                    // e.g., "Let me search for that:", "Now I'll read the file:"
+                    // These indicate more work is coming (tool_use follows)
+                    state = 'working'
+                  } else {
+                    // Text not ending with colon AND no running tasks - likely a completion message
+                    // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
+                    state = 'waiting'
+                  }
                 }
 
               } else {
