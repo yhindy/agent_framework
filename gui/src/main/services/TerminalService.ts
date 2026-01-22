@@ -1098,8 +1098,11 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     if (useTmux && tmuxSessionName) {
       if (attachToExistingTmux) {
         // Session already exists (Claude already running) - just attach to it
+        // Wait for shell to initialize before sending tmux attach command
         log.info(`Attaching to existing tmux session: ${tmuxSessionName}`)
-        terminal.write(`tmux attach-session -t ${tmuxSessionName}\r`)
+        setTimeout(() => {
+          terminal.write(`tmux attach-session -t ${tmuxSessionName}\r`)
+        }, 100)
       } else {
         // Create new tmux session and run the command
         const rawCommand = `${command} ${args.join(' ')}`

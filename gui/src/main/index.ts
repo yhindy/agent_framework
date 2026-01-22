@@ -69,7 +69,7 @@ async function validateTeleportedSession(agent: ResumeableAgent): Promise<boolea
     return false
   }
 
-  const validation = await services.agent.validateTeleportSession(agentInfo)
+  const validation = await services.agent.validateTeleportSession(agentInfo, agent.worktreePath)
 
   if (!validation.isValid) {
     log.warn(`Teleported session ${agent.id} validation failed: ${validation.reason}`)

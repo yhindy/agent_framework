@@ -339,6 +339,8 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('attaches to tmux session when already attached elsewhere (multi-window support)', async () => {
+      vi.useFakeTimers()
+
       // Mock tmux available and session already attached
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -354,6 +356,9 @@ describe('TerminalService Tmux Integration', () => {
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+      // Advance timers to trigger the delayed tmux attach
+      await vi.advanceTimersByTimeAsync(150)
+
       // Should spawn PTY to run tmux attach
       expect(pty.spawn).toHaveBeenCalled()
 
@@ -361,9 +366,13 @@ describe('TerminalService Tmux Integration', () => {
       const writeCalls = mockPty.write.mock.calls
       expect(writeCalls.length).toBeGreaterThanOrEqual(1)
       expect(writeCalls[0][0]).toContain('tmux attach-session -t minion-agent-1')
+
+      vi.useRealTimers()
     })
 
     it('attaches to existing tmux session even if not attached elsewhere', async () => {
+      vi.useFakeTimers()
+
       // Mock tmux available and session exists but not attached
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -379,6 +388,9 @@ describe('TerminalService Tmux Integration', () => {
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+      // Advance timers to trigger the delayed tmux attach
+      await vi.advanceTimersByTimeAsync(150)
+
       // Should spawn PTY and proceed
       expect(pty.spawn).toHaveBeenCalled()
 
@@ -386,6 +398,8 @@ describe('TerminalService Tmux Integration', () => {
       const writeCalls = mockPty.write.mock.calls
       expect(writeCalls.length).toBeGreaterThanOrEqual(1)
       expect(writeCalls[0][0]).toContain('tmux attach-session -t minion-agent-1')
+
+      vi.useRealTimers()
     })
 
     it('writes command to temp script file for tmux mode', async () => {
@@ -941,6 +955,8 @@ describe('TerminalService tmux two windows', () => {
   })
 
   it('attaches to existing tmux session instead of creating new one', async () => {
+    vi.useFakeTimers()
+
     // tmux is available AND session already exists
     vi.mocked(execSync).mockImplementation((cmd: string) => {
       if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -955,6 +971,9 @@ describe('TerminalService tmux two windows', () => {
 
     await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+    // Advance timers to trigger the delayed tmux attach
+    await vi.advanceTimersByTimeAsync(150)
+
     const writeCalls = mockPty.write.mock.calls
     expect(writeCalls.length).toBeGreaterThanOrEqual(1)
     const tmuxCommand = writeCalls[0][0]
@@ -963,6 +982,8 @@ describe('TerminalService tmux two windows', () => {
     expect(tmuxCommand).toContain('tmux attach-session -t minion-agent-1')
     expect(tmuxCommand).not.toContain('new-session')
     expect(tmuxCommand).not.toContain('send-keys')
+
+    vi.useRealTimers()
   })
 })
 
