@@ -43,6 +43,7 @@ interface TerminalSession {
   idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
   statePollingInterval?: NodeJS.Timeout // JSONL-based unified polling for Claude (state + tasks)
   tmuxSession?: string        // Tmux session name (if tmux mode is enabled)
+  claudeSessionId?: string    // Claude session ID for cleanup
 }
 
 interface PlainTerminalSession {
@@ -1083,7 +1084,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       chrome,
       idleDetector,
       statePollingInterval,
-      tmuxSession: tmuxSessionName
+      tmuxSession: tmuxSessionName,
+      claudeSessionId: effectiveSessionId
     }
 
     // Mark if we're attempting to resume (for error detection)
@@ -1328,8 +1330,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }).catch(err => log.error('Failed to clear session', err))
     }
 
-    this.safeDispose(() => session.idleDetector?.dispose(), 'idle detector', agentId)
-    this.safeDispose(() => session.pty.kill(), 'PTY', agentId)
+    // Clean up all resources except tmux session (preserve for restart)
+    this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId, false)
     this.terminals.delete(agentId)
 
     if (session.projectPath) {
@@ -1373,7 +1375,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const session = this.terminals.get(agentId)
     if (!session) return
 
-    this.cleanupTerminalSession(agentId, session, session.tool)
+    this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId)
     this.terminals.delete(agentId)
     this.lastAgentBroadcastTime.delete(agentId)
     this.safeSendIPC('agents:updated')
@@ -1419,9 +1421,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   cleanup(): void {
     for (const [agentId, session] of this.terminals) {
       try {
-        // Don't kill tmux sessions on window close - other windows may use them
-        // Orphaned sessions will be cleaned up on next app startup
-        this.cleanupTerminalSession(agentId, session, session.tool, undefined, false)
+        // Don't kill tmux sessions on app close - they may be attached to another window
+        // or the user may want them to keep running in the background
+        this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId, false)
         this.terminals.delete(agentId)
       } catch (error) {
         log.error(`Cleanup failed for agent ${agentId}`, error)
