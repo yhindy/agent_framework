@@ -1330,7 +1330,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       }).catch(err => log.error('Failed to clear session', err))
     }
 
-    // Clean up all resources except tmux session (preserve for restart)
+    // Clean up all resources but preserve tmux session (killTmux=false).
+    // User may restart the agent, and tmux sessions persist across restarts.
     this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId, false)
     this.terminals.delete(agentId)
 
