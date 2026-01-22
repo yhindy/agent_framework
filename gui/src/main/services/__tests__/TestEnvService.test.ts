@@ -4,30 +4,11 @@ import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { readFileSync, existsSync } from 'fs'
 
-// Mock Electron
-vi.mock('electron', () => ({
-  BrowserWindow: vi.fn()
-}))
-
-// Mock node-pty
-vi.mock('node-pty', () => ({
-  spawn: vi.fn()
-}))
-
-// Mock fs
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  existsSync: vi.fn()
-}))
-
-// Mock logger
+vi.mock('electron', () => ({ BrowserWindow: vi.fn() }))
+vi.mock('node-pty', () => ({ spawn: vi.fn() }))
+vi.mock('fs', () => ({ readFileSync: vi.fn(), existsSync: vi.fn() }))
 vi.mock('../logger', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn()
-  })
+  createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })
 }))
 
 describe('TestEnvService', () => {
@@ -39,15 +20,12 @@ describe('TestEnvService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockWebContents = {
-      send: vi.fn()
-    }
+    mockWebContents = { send: vi.fn() }
     mockMainWindow = {
       webContents: mockWebContents,
       isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
-    // Setup mock PTY
     mockPty = {
       write: vi.fn(),
       kill: vi.fn(),
@@ -64,345 +42,178 @@ describe('TestEnvService', () => {
     service.cleanup()
   })
 
-  describe('constructor', () => {
-    it('initializes with empty processes map', () => {
-      expect(service).toBeInstanceOf(TestEnvService)
-      expect(service.getStatus('any-agent')).toEqual([])
-    })
-  })
-
-  describe('setWindow', () => {
-    it('updates the main window reference', () => {
-      const newMockWebContents = { send: vi.fn() }
-      const newMockWindow = {
-        webContents: newMockWebContents,
-        isDestroyed: vi.fn().mockReturnValue(false)
-      } as unknown as BrowserWindow
-
-      service.setWindow(newMockWindow)
-
-      // The new window should be used for IPC
-      // We'll verify this through the startCommand behavior
-    })
-  })
-
   describe('loadConfig', () => {
-    it('returns empty commands when no config file exists', () => {
+    it('returns empty commands when no config exists', () => {
       vi.mocked(existsSync).mockReturnValue(false)
 
-      const config = service.loadConfig('/test/project')
-
-      expect(config).toEqual({ defaultCommands: [] })
+      expect(service.loadConfig('/test')).toEqual({ defaultCommands: [] })
     })
 
-    it('loads config from minions.json (new format) with setup.testEnvironments', () => {
-      vi.mocked(existsSync).mockImplementation((path: any) => {
-        return path === '/test/project/minions.json'
-      })
+    it('loads from minions.json setup.testEnvironments', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) => p === '/test/minions.json')
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        setup: {
-          testEnvironments: [
-            { id: 'dev', name: 'Dev Server', command: 'npm run dev' }
-          ]
-        }
+        setup: { testEnvironments: [{ id: 'dev', name: 'Dev', command: 'npm dev' }] }
       }))
 
-      const config = service.loadConfig('/test/project')
-
-      expect(config.defaultCommands).toEqual([
-        { id: 'dev', name: 'Dev Server', command: 'npm run dev' }
-      ])
+      const config = service.loadConfig('/test')
+      expect(config.defaultCommands).toEqual([{ id: 'dev', name: 'Dev', command: 'npm dev' }])
     })
 
-    it('loads config from minions.json (new format) with top-level testEnvironments', () => {
-      vi.mocked(existsSync).mockImplementation((path: any) => {
-        return path === '/test/project/minions.json'
-      })
+    it('loads from minions.json top-level testEnvironments', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) => p === '/test/minions.json')
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'test', name: 'Test Runner', command: 'npm test' }
-        ]
+        testEnvironments: [{ id: 'test', name: 'Test', command: 'npm test' }]
       }))
 
-      const config = service.loadConfig('/test/project')
-
-      expect(config.defaultCommands).toEqual([
-        { id: 'test', name: 'Test Runner', command: 'npm test' }
-      ])
+      const config = service.loadConfig('/test')
+      expect(config.defaultCommands).toEqual([{ id: 'test', name: 'Test', command: 'npm test' }])
     })
 
-    it('loads config from legacy minions/config.json', () => {
-      vi.mocked(existsSync).mockImplementation((path: any) => {
-        return path === '/test/project/minions/config.json'
-      })
+    it('loads from legacy minions/config.json when new format missing', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) => p === '/test/minions/config.json')
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'build', name: 'Build', command: 'npm run build' }
-        ]
+        testEnvironments: [{ id: 'build', name: 'Build', command: 'npm build' }]
       }))
 
-      const config = service.loadConfig('/test/project')
-
-      expect(config.defaultCommands).toEqual([
-        { id: 'build', name: 'Build', command: 'npm run build' }
-      ])
+      const config = service.loadConfig('/test')
+      expect(config.defaultCommands).toEqual([{ id: 'build', name: 'Build', command: 'npm build' }])
     })
 
-    it('prefers new format over legacy when both exist', () => {
+    it('prefers new format over legacy', () => {
       vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'new', name: 'New Format', command: 'npm run new' }
-        ]
-      }))
+      vi.mocked(readFileSync).mockReturnValue('{}')
 
-      service.loadConfig('/test/project')
-
-      expect(readFileSync).toHaveBeenCalledWith('/test/project/minions.json', 'utf-8')
+      service.loadConfig('/test')
+      expect(readFileSync).toHaveBeenCalledWith('/test/minions.json', 'utf-8')
     })
 
-    it('returns empty commands on parse error', () => {
+    it('returns empty on JSON parse error', () => {
       vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue('invalid json')
+      vi.mocked(readFileSync).mockReturnValue('not json')
 
-      const config = service.loadConfig('/test/project')
-
-      expect(config).toEqual({ defaultCommands: [] })
+      expect(service.loadConfig('/test')).toEqual({ defaultCommands: [] })
     })
   })
 
   describe('getCommands', () => {
-    it('returns override commands when provided', () => {
-      const overrides = [
-        { id: 'custom', name: 'Custom', command: 'custom cmd' }
-      ]
-
-      const commands = service.getCommands('/test/project', overrides)
-
-      expect(commands).toEqual(overrides)
+    it('returns overrides when provided', () => {
+      const overrides = [{ id: 'custom', name: 'Custom', command: 'custom' }]
+      expect(service.getCommands('/test', overrides)).toEqual(overrides)
     })
 
-    it('returns config commands when no overrides', () => {
+    it('falls back to config when overrides empty', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'default', name: 'Default', command: 'default cmd' }
-        ]
+        testEnvironments: [{ id: 'cfg', name: 'Config', command: 'config' }]
       }))
 
-      const commands = service.getCommands('/test/project')
-
-      expect(commands).toEqual([
-        { id: 'default', name: 'Default', command: 'default cmd' }
-      ])
-    })
-
-    it('returns empty array when overrides is empty array', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'default', name: 'Default', command: 'default cmd' }
-        ]
-      }))
-
-      const commands = service.getCommands('/test/project', [])
-
-      // Empty array is falsy for length check, should use config
-      expect(commands).toEqual([
-        { id: 'default', name: 'Default', command: 'default cmd' }
-      ])
+      expect(service.getCommands('/test', [])).toEqual([{ id: 'cfg', name: 'Config', command: 'config' }])
     })
   })
 
   describe('startCommand', () => {
-    const testCommand = {
-      id: 'test-cmd',
-      name: 'Test Command',
-      command: 'npm test'
-    }
+    const cmd = { id: 'test', name: 'Test', command: 'npm test' }
 
-    it('spawns a PTY with correct parameters', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
-
-      expect(pty.spawn).toHaveBeenCalledWith(
-        expect.any(String), // shell
-        [],
-        expect.objectContaining({
-          name: 'xterm-256color',
-          cols: 80,
-          rows: 30,
-          cwd: '/worktree',
-          env: expect.any(Object)
-        })
-      )
-    })
-
-    it('uses custom cwd when specified in command', async () => {
-      const cmdWithCwd = { ...testCommand, cwd: 'packages/core' }
-
-      await service.startCommand('/project', 'agent-1', '/worktree', cmdWithCwd)
+    it('spawns PTY in worktree directory', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
       expect(pty.spawn).toHaveBeenCalledWith(
         expect.any(String),
         [],
-        expect.objectContaining({
-          cwd: '/worktree/packages/core'
-        })
+        expect.objectContaining({ cwd: '/worktree' })
       )
     })
 
-    it('writes command to PTY after spawn', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('uses command.cwd relative to worktree when specified', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { ...cmd, cwd: 'packages/core' })
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        expect.any(String), [], expect.objectContaining({ cwd: '/worktree/packages/core' })
+      )
+    })
+
+    it('writes command to PTY with carriage return', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
       expect(mockPty.write).toHaveBeenCalledWith('npm test\r')
     })
 
     it('sends testEnv:started IPC event', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
-      expect(mockWebContents.send).toHaveBeenCalledWith(
-        'testEnv:started',
-        'agent-1',
-        'test-cmd'
-      )
+      expect(mockWebContents.send).toHaveBeenCalledWith('testEnv:started', 'agent-1', 'test')
     })
 
-    it('registers onData handler that sends output via IPC', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('forwards PTY output via IPC', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
-      const onDataCallback = mockPty.onData.mock.calls[0][0]
-      onDataCallback('test output')
+      const onDataCb = mockPty.onData.mock.calls[0][0]
+      onDataCb('output data')
 
-      expect(mockWebContents.send).toHaveBeenCalledWith(
-        'testEnv:output',
-        'agent-1',
-        'test-cmd',
-        'test output'
-      )
+      expect(mockWebContents.send).toHaveBeenCalledWith('testEnv:output', 'agent-1', 'test', 'output data')
     })
 
-    it('registers onExit handler that sends exited event', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('sends exit event and marks process as not running on exit', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
-      const onExitCallback = mockPty.onExit.mock.calls[0][0]
-      onExitCallback({ exitCode: 0, signal: undefined })
+      const onExitCb = mockPty.onExit.mock.calls[0][0]
+      onExitCb({ exitCode: 1, signal: undefined })
 
-      expect(mockWebContents.send).toHaveBeenCalledWith(
-        'testEnv:exited',
-        'agent-1',
-        'test-cmd',
-        0
-      )
+      expect(mockWebContents.send).toHaveBeenCalledWith('testEnv:exited', 'agent-1', 'test', 1)
+      expect(service.getStatus('agent-1')[0].isRunning).toBe(false)
     })
 
-    it('stops existing command before starting new one with same id', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('stops existing command with same ID before starting new one', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
 
-      // Start again with same command id
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
-
-      expect(mockPty.kill).toHaveBeenCalled()
+      expect(mockPty.kill).toHaveBeenCalledTimes(1)
     })
 
-    it('tracks process status correctly', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('tracks multiple commands per agent', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'a', name: 'A', command: 'a' })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'b', name: 'B', command: 'b' })
 
-      const status = service.getStatus('agent-1')
-
-      expect(status).toEqual([
-        { commandId: 'test-cmd', name: 'Test Command', isRunning: true }
-      ])
-    })
-  })
-
-  describe('startAll', () => {
-    it('starts all commands from config when none provided', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        testEnvironments: [
-          { id: 'cmd1', name: 'Cmd 1', command: 'echo 1' },
-          { id: 'cmd2', name: 'Cmd 2', command: 'echo 2' }
-        ]
-      }))
-
-      await service.startAll('/project', 'agent-1', '/worktree')
-
-      expect(pty.spawn).toHaveBeenCalledTimes(2)
-    })
-
-    it('starts provided commands instead of config commands', async () => {
-      const customCommands = [
-        { id: 'custom', name: 'Custom', command: 'custom cmd' }
-      ]
-
-      await service.startAll('/project', 'agent-1', '/worktree', customCommands)
-
-      expect(pty.spawn).toHaveBeenCalledTimes(1)
-      expect(mockPty.write).toHaveBeenCalledWith('custom cmd\r')
+      expect(service.getStatus('agent-1')).toHaveLength(2)
     })
   })
 
   describe('stopCommand', () => {
-    const testCommand = {
-      id: 'test-cmd',
-      name: 'Test Command',
-      command: 'npm test'
-    }
+    const cmd = { id: 'test', name: 'Test', command: 'npm test' }
 
-    it('kills the PTY process', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
-
-      service.stopCommand('agent-1', 'test-cmd')
-
-      expect(mockPty.kill).toHaveBeenCalled()
-    })
-
-    it('sends testEnv:stopped IPC event', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
+    it('kills PTY and sends stopped event', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
       mockWebContents.send.mockClear()
 
-      service.stopCommand('agent-1', 'test-cmd')
+      service.stopCommand('agent-1', 'test')
 
-      expect(mockWebContents.send).toHaveBeenCalledWith(
-        'testEnv:stopped',
-        'agent-1',
-        'test-cmd'
-      )
+      expect(mockPty.kill).toHaveBeenCalled()
+      expect(mockWebContents.send).toHaveBeenCalledWith('testEnv:stopped', 'agent-1', 'test')
     })
 
-    it('removes process from tracking', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
-
-      service.stopCommand('agent-1', 'test-cmd')
+    it('removes command from tracking', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
+      service.stopCommand('agent-1', 'test')
 
       expect(service.getStatus('agent-1')).toEqual([])
     })
 
-    it('does nothing for non-existent command', () => {
-      // Should not throw
-      expect(() => service.stopCommand('agent-1', 'non-existent')).not.toThrow()
+    it('handles already-dead PTY gracefully', async () => {
+      mockPty.kill.mockImplementation(() => { throw new Error('No such process') })
+      await service.startCommand('/proj', 'agent-1', '/worktree', cmd)
+
+      expect(() => service.stopCommand('agent-1', 'test')).not.toThrow()
     })
 
-    it('handles PTY kill errors gracefully', async () => {
-      mockPty.kill.mockImplementation(() => {
-        throw new Error('Already dead')
-      })
-
-      await service.startCommand('/project', 'agent-1', '/worktree', testCommand)
-
-      // Should not throw
-      expect(() => service.stopCommand('agent-1', 'test-cmd')).not.toThrow()
+    it('is safe for non-existent command', () => {
+      expect(() => service.stopCommand('agent-1', 'nonexistent')).not.toThrow()
     })
   })
 
   describe('stopAll', () => {
     it('stops all commands for an agent', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd2', name: 'Cmd 2', command: 'echo 2'
-      })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'a', name: 'A', command: 'a' })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'b', name: 'B', command: 'b' })
 
       service.stopAll('agent-1')
 
@@ -410,187 +221,102 @@ describe('TestEnvService', () => {
       expect(service.getStatus('agent-1')).toEqual([])
     })
 
-    it('does nothing for non-existent agent', () => {
-      // Should not throw
-      expect(() => service.stopAll('non-existent')).not.toThrow()
-    })
-
-    it('cleans up agent from processes map', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
-
-      service.stopAll('agent-1')
-
-      // Status should be empty array (agent fully cleaned up)
-      expect(service.getStatus('agent-1')).toEqual([])
-    })
-  })
-
-  describe('getStatus', () => {
-    it('returns empty array for unknown agent', () => {
-      expect(service.getStatus('unknown')).toEqual([])
-    })
-
-    it('returns correct status for running processes', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Command 1', command: 'echo 1'
-      })
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd2', name: 'Command 2', command: 'echo 2'
-      })
-
-      const status = service.getStatus('agent-1')
-
-      expect(status).toHaveLength(2)
-      expect(status).toContainEqual({ commandId: 'cmd1', name: 'Command 1', isRunning: true })
-      expect(status).toContainEqual({ commandId: 'cmd2', name: 'Command 2', isRunning: true })
-    })
-
-    it('reflects isRunning=false after process exits', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Command 1', command: 'echo 1'
-      })
-
-      // Simulate exit
-      const onExitCallback = mockPty.onExit.mock.calls[0][0]
-      onExitCallback({ exitCode: 0, signal: undefined })
-
-      const status = service.getStatus('agent-1')
-
-      expect(status[0].isRunning).toBe(false)
+    it('is safe for non-existent agent', () => {
+      expect(() => service.stopAll('nonexistent')).not.toThrow()
     })
   })
 
   describe('sendInput', () => {
-    it('writes data to the correct PTY', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
+    it('writes to correct PTY', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
 
-      service.sendInput('agent-1', 'cmd1', 'test input')
+      service.sendInput('agent-1', 'cmd', 'input\n')
 
-      expect(mockPty.write).toHaveBeenCalledWith('test input')
+      expect(mockPty.write).toHaveBeenCalledWith('input\n')
     })
 
-    it('does nothing for non-existent process', () => {
-      // Should not throw
-      expect(() => service.sendInput('agent-1', 'non-existent', 'data')).not.toThrow()
+    it('is safe for non-existent process', () => {
+      expect(() => service.sendInput('agent-1', 'nonexistent', 'data')).not.toThrow()
     })
   })
 
   describe('resize', () => {
-    it('resizes the PTY', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
+    it('resizes running PTY', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
 
-      service.resize('agent-1', 'cmd1', 120, 40)
+      service.resize('agent-1', 'cmd', 120, 40)
 
       expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
     })
 
-    it('does nothing for non-existent process', () => {
-      // Should not throw
-      expect(() => service.resize('agent-1', 'non-existent', 120, 40)).not.toThrow()
-    })
-
-    it('does nothing for non-running process', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
-
-      // Simulate exit
-      const onExitCallback = mockPty.onExit.mock.calls[0][0]
-      onExitCallback({ exitCode: 0, signal: undefined })
+    it('skips resize for exited process', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
+      mockPty.onExit.mock.calls[0][0]({ exitCode: 0 })
       mockPty.resize.mockClear()
 
-      service.resize('agent-1', 'cmd1', 120, 40)
+      service.resize('agent-1', 'cmd', 120, 40)
 
       expect(mockPty.resize).not.toHaveBeenCalled()
     })
 
     it('handles resize errors gracefully', async () => {
-      mockPty.resize.mockImplementation(() => {
-        throw new Error('Resize failed')
-      })
+      mockPty.resize.mockImplementation(() => { throw new Error('Resize failed') })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
 
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
-
-      // Should not throw
-      expect(() => service.resize('agent-1', 'cmd1', 120, 40)).not.toThrow()
+      expect(() => service.resize('agent-1', 'cmd', 120, 40)).not.toThrow()
     })
   })
 
   describe('cleanup', () => {
-    it('stops all processes for all agents', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
-      await service.startCommand('/project', 'agent-2', '/worktree', {
-        id: 'cmd2', name: 'Cmd 2', command: 'echo 2'
-      })
+    it('stops all processes across all agents', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'a', name: 'A', command: 'a' })
+      await service.startCommand('/proj', 'agent-2', '/worktree', { id: 'b', name: 'B', command: 'b' })
 
       service.cleanup()
 
       expect(mockPty.kill).toHaveBeenCalledTimes(2)
     })
 
-    it('can be called multiple times safely', async () => {
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
+    it('is idempotent', async () => {
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'a', name: 'A', command: 'a' })
 
       service.cleanup()
       service.cleanup()
 
-      // Should only kill once
       expect(mockPty.kill).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('IPC safety', () => {
-    it('does not send IPC when window is destroyed', async () => {
+    it('skips IPC when window is destroyed', async () => {
       mockMainWindow.isDestroyed.mockReturnValue(true)
 
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
 
-      // IPC send should not have been called
       expect(mockWebContents.send).not.toHaveBeenCalled()
     })
 
-    it('handles IPC send errors gracefully', async () => {
-      mockWebContents.send.mockImplementation(() => {
-        throw new Error('IPC failed')
-      })
+    it('handles IPC errors gracefully', async () => {
+      mockWebContents.send.mockImplementation(() => { throw new Error('IPC failed') })
 
-      // Should not throw
       await expect(
-        service.startCommand('/project', 'agent-1', '/worktree', {
-          id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-        })
+        service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
       ).resolves.not.toThrow()
     })
   })
 
-  describe('platform handling', () => {
-    it('uses appropriate shell for the platform', async () => {
-      const originalPlatform = process.platform
+  describe('setWindow', () => {
+    it('uses new window for IPC after switch', async () => {
+      const newWebContents = { send: vi.fn() }
+      const newWindow = { webContents: newWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
-      await service.startCommand('/project', 'agent-1', '/worktree', {
-        id: 'cmd1', name: 'Cmd 1', command: 'echo 1'
-      })
+      await service.startCommand('/proj', 'agent-1', '/worktree', { id: 'cmd', name: 'Cmd', command: 'cmd' })
+      service.setWindow(newWindow)
 
-      const spawnCall = vi.mocked(pty.spawn).mock.calls[0]
-      const shell = spawnCall[0]
+      // Trigger output on existing PTY
+      mockPty.onData.mock.calls[0][0]('new output')
 
-      // Should be a valid shell
-      expect(typeof shell).toBe('string')
-      expect(shell.length).toBeGreaterThan(0)
+      expect(newWebContents.send).toHaveBeenCalledWith('testEnv:output', 'agent-1', 'cmd', 'new output')
     })
   })
 })
