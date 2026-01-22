@@ -567,8 +567,9 @@ describe('TerminalService Tmux Integration', () => {
       terminalService.setSettingsService(mockSettingsService)
     })
 
-    it('does NOT kill tmux sessions on cleanup (preserves for other windows)', async () => {
+    it('preserves tmux sessions on cleanup (may be attached elsewhere)', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
 
       // Start multiple agents
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
@@ -581,7 +582,7 @@ describe('TerminalService Tmux Integration', () => {
       // Cleanup all
       terminalService.cleanup()
 
-      // Should NOT have killed tmux sessions (preserves for other windows)
+      // Should NOT kill tmux sessions - they may be attached to another window
       // Check execFileSync since that's what's used for kill-session
       const killCalls = vi.mocked(execFileSync).mock.calls.filter(
         call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
