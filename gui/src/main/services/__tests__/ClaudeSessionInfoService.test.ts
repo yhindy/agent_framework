@@ -485,6 +485,110 @@ not valid json
       // Should be waiting because last CONVERSATION entry is assistant with text only
       expect(state).toBe('waiting')
     })
+
+    it('returns working when Task subagent is still running (no colon in text)', () => {
+      // REGRESSION TEST: This was the main bug - getSessionState() would return 'waiting'
+      // when a super minion sent text not ending with colon, even with running Tasks
+      const content = `
+{"type":"user","message":{"role":"user","content":"Help me implement both features"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"I'll spawn two subagents."},{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Frontend","subagent_type":"general-purpose","prompt":"Create components..."}},{"type":"tool_use","id":"toolu_task_002","name":"Task","input":{"description":"Backend","subagent_type":"general-purpose","prompt":"Create API..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Frontend done."}]},"timestamp":"2026-01-07T10:05:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"The frontend is complete. Still waiting for backend task to finish."}],"stop_reason":null},"timestamp":"2026-01-07T10:05:05.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'working' because toolu_task_002 is still running
+      // NOT 'waiting' even though the text doesn't end with colon
+      expect(state).toBe('working')
+    })
+
+    it('returns waiting when all Task subagents completed and text has no colon', () => {
+      const content = `
+{"type":"user","message":{"role":"user","content":"Help me implement features"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_task_001","name":"Task","input":{"description":"Frontend","subagent_type":"general-purpose","prompt":"..."}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:05.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task_001","content":"Task done."}]},"timestamp":"2026-01-07T10:05:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"All tasks are complete. Let me know if you need anything else."}],"stop_reason":null},"timestamp":"2026-01-07T10:05:05.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'waiting' because all tasks completed and text doesn't end with colon
+      expect(state).toBe('waiting')
+    })
+
+    it('returns working when multiple Tasks running even with non-colon text', () => {
+      const content = `
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"task_a","name":"Task","input":{}},{"type":"tool_use","id":"task_b","name":"Task","input":{}},{"type":"tool_use","id":"task_c","name":"Task","input":{}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"task_a","content":"Done"}]},"timestamp":"2026-01-07T10:01:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"One task done, two still running."}],"stop_reason":null},"timestamp":"2026-01-07T10:01:05.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // task_b and task_c still running
+      expect(state).toBe('working')
+    })
+
+    it('only tracks Task tool invocations, not other tools like Bash', () => {
+      // Bash tool_use should not be tracked as a "running task"
+      const content = `
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bash_001","name":"Bash","input":{"command":"ls"}}],"stop_reason":"tool_use"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"bash_001","content":"file1.txt"}]},"timestamp":"2026-01-07T10:00:01.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Done listing files."}],"stop_reason":null},"timestamp":"2026-01-07T10:00:02.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'waiting' - Bash is not a Task subagent
+      expect(state).toBe('waiting')
+    })
+
+    it('returns waiting when AskUserQuestion is in the tail', () => {
+      // REGRESSION TEST: AskUserQuestion should trigger 'waiting' state
+      const content = `
+{"type":"user","message":{"role":"user","content":"Help me with this task"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"I have a question."},{"type":"tool_use","id":"toolu_ask_001","name":"AskUserQuestion","input":{"questions":[{"question":"Which approach?","header":"Approach","options":[{"label":"Option A","description":"First approach"},{"label":"Option B","description":"Second approach"}],"multiSelect":false}]}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:05.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'waiting' - AskUserQuestion is a human input tool
+      expect(state).toBe('waiting')
+    })
+
+    it('returns waiting when ExitPlanMode is in the tail', () => {
+      // REGRESSION TEST: ExitPlanMode should trigger 'waiting' state
+      const content = `
+{"type":"user","message":{"role":"user","content":"Plan this feature"},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Here's my plan:"},{"type":"tool_use","id":"toolu_exit_001","name":"ExitPlanMode","input":{}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:05.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'waiting' - ExitPlanMode is a human input tool
+      expect(state).toBe('waiting')
+    })
+
+    it('returns working after user responds to AskUserQuestion', () => {
+      // When user responds to AskUserQuestion, state should be 'working'
+      const content = `
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_ask_001","name":"AskUserQuestion","input":{"questions":[{"question":"Which approach?"}]}}],"stop_reason":null},"timestamp":"2026-01-07T10:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_ask_001","content":"User selected: Option A"}]},"timestamp":"2026-01-07T10:00:30.000Z"}
+      `.trim()
+      vi.mocked(existsSync).mockReturnValue(true)
+      setupReadFileTailMock(content)
+
+      const state = service.getSessionState('test', '/Users/test/project')
+      // Should be 'working' - user has responded, Claude is processing
+      expect(state).toBe('working')
+    })
   })
 
   describe('Model Change Detection', () => {
