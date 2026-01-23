@@ -2,22 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { usePRPolling } from '../usePRPolling'
 
-// Mock electron API
-const mockElectronAPI = {
-  startPRPolling: vi.fn(),
-  stopPRPolling: vi.fn(),
-  stopAllPRPolling: vi.fn()
-}
-
-// Set up global window.electronAPI mock
-Object.defineProperty(window, 'electronAPI', {
-  value: mockElectronAPI,
-  writable: true
-})
-
 describe('usePRPolling Hook', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Mock the specific methods we need on the existing electronAPI
+    vi.mocked(window.electronAPI.startPRPolling).mockClear()
+    vi.mocked(window.electronAPI.stopPRPolling).mockClear()
+    vi.mocked(window.electronAPI.stopAllPRPolling).mockClear()
   })
 
   afterEach(() => {
@@ -32,9 +23,9 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledTimes(2)
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', expect.any(String))
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-2', expect.any(String))
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledTimes(2)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', expect.any(String))
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-2', expect.any(String))
   })
 
   it('should not start polling when enabled is false', () => {
@@ -45,7 +36,7 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    expect(mockElectronAPI.startPRPolling).not.toHaveBeenCalled()
+    expect(window.electronAPI.startPRPolling).not.toHaveBeenCalled()
   })
 
   it('should not start polling when assignmentIds is empty', () => {
@@ -56,7 +47,7 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    expect(mockElectronAPI.startPRPolling).not.toHaveBeenCalled()
+    expect(window.electronAPI.startPRPolling).not.toHaveBeenCalled()
   })
 
   it('should stop polling on unmount', () => {
@@ -67,12 +58,12 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalled()
-    const subscriberId = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalled()
+    const subscriberId = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
 
     unmount()
 
-    expect(mockElectronAPI.stopAllPRPolling).toHaveBeenCalledWith(subscriberId)
+    expect(window.electronAPI.stopAllPRPolling).toHaveBeenCalledWith(subscriberId)
   })
 
   it('should update polling when assignmentIds change', () => {
@@ -90,9 +81,9 @@ describe('usePRPolling Hook', () => {
       }
     )
 
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledTimes(1)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledTimes(1)
 
-    const subscriberId = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
+    const subscriberId = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
 
     // Change assignmentIds
     rerender({
@@ -100,9 +91,9 @@ describe('usePRPolling Hook', () => {
       enabled: true
     })
 
-    expect(mockElectronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-2', subscriberId)
+    expect(window.electronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-2', subscriberId)
   })
 
   it('should handle enabling/disabling polling', () => {
@@ -120,8 +111,8 @@ describe('usePRPolling Hook', () => {
       }
     )
 
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalled()
-    const subscriberId = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalled()
+    const subscriberId = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
 
     vi.clearAllMocks()
 
@@ -131,8 +122,8 @@ describe('usePRPolling Hook', () => {
       enabled: false
     })
 
-    expect(mockElectronAPI.startPRPolling).not.toHaveBeenCalled()
-    expect(mockElectronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.startPRPolling).not.toHaveBeenCalled()
+    expect(window.electronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
 
     vi.clearAllMocks()
 
@@ -142,7 +133,7 @@ describe('usePRPolling Hook', () => {
       enabled: true
     })
 
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
   })
 
   it('should generate unique subscriberId for each component instance', () => {
@@ -160,8 +151,8 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    const subscriberId1 = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
-    const subscriberId2 = (mockElectronAPI.startPRPolling as any).mock.calls[1][1]
+    const subscriberId1 = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
+    const subscriberId2 = (window.electronAPI.startPRPolling as any).mock.calls[1][1]
 
     expect(subscriberId1).not.toEqual(subscriberId2)
   })
@@ -174,15 +165,15 @@ describe('usePRPolling Hook', () => {
       })
     )
 
-    const subscriberId = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
+    const subscriberId = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
 
     vi.clearAllMocks()
 
     unmount()
 
     // Should call stopAllPRPolling once with the subscriber ID
-    expect(mockElectronAPI.stopAllPRPolling).toHaveBeenCalledTimes(1)
-    expect(mockElectronAPI.stopAllPRPolling).toHaveBeenCalledWith(subscriberId)
+    expect(window.electronAPI.stopAllPRPolling).toHaveBeenCalledTimes(1)
+    expect(window.electronAPI.stopAllPRPolling).toHaveBeenCalledWith(subscriberId)
   })
 
   it('should handle rapid enable/disable cycles', () => {
@@ -199,20 +190,20 @@ describe('usePRPolling Hook', () => {
       }
     )
 
-    const subscriberId = (mockElectronAPI.startPRPolling as any).mock.calls[0][1]
+    const subscriberId = (window.electronAPI.startPRPolling as any).mock.calls[0][1]
 
     vi.clearAllMocks()
 
     // Rapid enable/disable
     rerender({ enabled: false })
-    expect(mockElectronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
 
     rerender({ enabled: true })
-    expect(mockElectronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.startPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
 
     vi.clearAllMocks()
 
     rerender({ enabled: false })
-    expect(mockElectronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
+    expect(window.electronAPI.stopPRPolling).toHaveBeenCalledWith('assignment-1', subscriberId)
   })
 })
