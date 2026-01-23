@@ -27,6 +27,7 @@ interface AgentSession {
   tool?: string
   isSuperMinion?: boolean
   parentAgentId?: string
+  handoffSource?: HandoffSource
   isBaseBranchAgent?: boolean
   branch?: string
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
@@ -200,6 +201,7 @@ export class AgentService {
       tool: agentInfo.tool,
       isSuperMinion: (agentInfo as any).isSuperMinion || false,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       isBaseBranchAgent: isBase,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
@@ -228,6 +230,7 @@ export class AgentService {
       lastActivity: agentInfo.lastActivity,
       isSuperMinion: (agentInfo as any).isSuperMinion,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
       isTeleportedSession: agentInfo.isTeleportedSession,
