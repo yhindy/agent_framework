@@ -531,6 +531,14 @@
   background: #3d2a3d;
 }
 
+.add-mission-submenu-item.teleport-option {
+  color: #4ec9b0;
+}
+
+.add-mission-submenu-item.teleport-option:hover {
+  background: #2a3d3a;
+}
+
 /* ================================================
    MODAL STYLES - Project Picker Modal
    ================================================

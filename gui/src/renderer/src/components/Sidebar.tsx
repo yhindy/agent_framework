@@ -18,7 +18,8 @@ import {
   HourglassIcon,
   CheckIcon,
   XIcon,
-  SkillsIcon
+  SkillsIcon,
+  SatelliteIcon
 } from './icons'
 import './Sidebar.css'
 
@@ -740,6 +741,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                       }}
                     >
                       <BotIcon size="sm" /> New Minion
+                    </div>
+                    <div
+                      className="add-mission-submenu-item teleport-option"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        localStorage.setItem('lastSelectedProjectPath', project.path)
+                        handleTeleport()
+                        setOpenSubmenuProject(null)
+                      }}
+                    >
+                      <SatelliteIcon size="sm" /> Teleport from Cloud
                     </div>
                   </div>
                 </div>
