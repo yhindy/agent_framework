@@ -140,3 +140,28 @@ export function SkillsIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Handoff icon - Arrow passing from one node to another */
+export function HandoffIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="handoff-icon">
+      {/* Source node */}
+      <circle cx="6" cy="12" r="3" stroke="currentColor" />
+      {/* Arrow line */}
+      <path
+        d="M9 12H17"
+        stroke="currentColor"
+        strokeLinecap="round"
+      />
+      {/* Arrow head */}
+      <path
+        d="M14 9L17 12L14 15"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Target node (smaller, representing new agent) */}
+      <circle cx="20" cy="12" r="2" stroke="currentColor" />
+    </BaseIcon>
+  )
+}

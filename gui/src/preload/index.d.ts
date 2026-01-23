@@ -20,7 +20,9 @@ declare const api: {
     saveUIState: (agentId: string, uiState: any) => Promise<any>;
     retryResumeAgent: (agentId: string) => Promise<any>;
     startFreshSession: (agentId: string) => Promise<any>;
-    ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started: boolean; error?: string }>;
+ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started: boolean; error?: string }>;
+    // Handoff APIs
+    handoffAgent: (request: import('../main/services/types/ProjectConfig').HandoffRequest) => Promise<import('../main/services/types/ProjectConfig').HandoffResult>;
     sendTerminalInput: (agentId: string, data: string) => void;
     resizeTerminal: (agentId: string, cols: number, rows: number) => void;
     onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => Electron.IpcRenderer;

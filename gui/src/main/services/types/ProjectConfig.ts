@@ -16,6 +16,31 @@ export {
   DEFAULT_WIZARD_TIMEOUT_MS
 } from './MinionsConfig'
 
+// Handoff types for agent-to-agent delegation
+export interface HandoffSource {
+  agentId: string           // Source agent that initiated the handoff
+  branchMode: 'inherit' | 'fresh'  // Did we branch from source or fresh from main
+  originalBranch: string    // The branch name of the source agent (for reference)
+  handoffTimestamp: string  // ISO timestamp when handoff occurred
+}
+
+export interface HandoffRequest {
+  sourceAgentId: string
+  prompt: string
+  branchMode: 'inherit' | 'fresh'  // 'inherit' = branch from source, 'fresh' = branch from main
+  tool?: string      // Optional: override tool (default: same as source)
+  model?: string     // Optional: override model (default: same as source)
+  shortName?: string // Optional: custom branch suffix (default: auto-generated)
+  yolo?: boolean     // Optional: inherit yolo mode
+  chrome?: boolean   // Optional: inherit chrome flag
+}
+
+export interface HandoffResult {
+  success: boolean
+  newAgent?: AgentInfo
+  error?: string
+}
+
 // UI state for terminal and tab restoration
 export interface UIState {
   lastActiveTab: string          // e.g., 'agent', 'terminal-2', 'test-dev'
@@ -47,6 +72,7 @@ export interface AgentInfo {
   parentAgentId?: string  // Set if this is a child of a super minion
   isBaseBranchAgent?: boolean  // Set for the base branch agent
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
+  handoffSource?: HandoffSource  // Set if this agent was created via handoff from another agent
 
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
@@ -157,6 +183,9 @@ export interface ArchivedAgent {
   // Parent relationship (for super minions)
   parentAgentId?: string
   isSuperMinion?: boolean
+
+  // Handoff source (if created via handoff)
+  handoffSource?: HandoffSource
 }
 
 // @deprecated - Legacy Assignment interface for backward compatibility during migration

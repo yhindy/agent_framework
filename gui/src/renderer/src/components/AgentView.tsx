@@ -32,6 +32,13 @@ interface Assignment {
   isBaseBranchAgent?: boolean
 }
 
+interface HandoffSource {
+  agentId: string
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string
+  handoffTimestamp: string
+}
+
 interface AgentSession {
   id: string
   assignmentId: string | null
@@ -39,6 +46,7 @@ interface AgentSession {
   terminalPid: number | null
   hasUnread: boolean
   lastActivity: string
+  handoffSource?: HandoffSource
   uiState?: {
     lastActiveTab: string
     plainTerminals: string[]
