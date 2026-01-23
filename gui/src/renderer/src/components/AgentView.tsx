@@ -154,6 +154,22 @@ function AgentView({ activeProjects }: AgentViewProps) {
     saveUIStateDebounced(agentId, uiState)
   }, [activeTab, plainTerminals, terminalCounter, agentId, saveUIStateDebounced])
 
+  // Ensure the agent's terminal is running when the view loads
+  // This is particularly important for base branch agents that don't auto-start
+  useEffect(() => {
+    const ensureRunning = async () => {
+      if (agent && !agent.terminalPid && agentId) {
+        const result = await window.electronAPI.ensureAgentRunning(agentId)
+        if (result.started) {
+          console.log(`Started agent ${agentId}`)
+        } else if (result.error) {
+          console.warn(`Could not start agent ${agentId}: ${result.error}`)
+        }
+      }
+    }
+    ensureRunning()
+  }, [agent?.terminalPid, agentId])
+
   // Cleanup debounced save on unmount
   useEffect(() => {
     return () => {

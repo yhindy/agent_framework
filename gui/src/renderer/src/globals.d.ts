@@ -103,6 +103,9 @@ declare global {
       retryResumeAgent: (agentId: string) => Promise<void>
       startFreshSession: (agentId: string) => Promise<void>
 
+      // Agent Start APIs
+      ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started: boolean; error?: string }>
+
       // Settings APIs
       getSettings: () => Promise<import('../../shared/types/settings').AppSettings>
       updateSettings: (updates: Partial<import('../../shared/types/settings').AppSettings>) => Promise<import('../../shared/types/settings').AppSettings>

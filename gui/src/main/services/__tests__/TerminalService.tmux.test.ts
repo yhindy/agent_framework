@@ -341,16 +341,28 @@ describe('TerminalService Tmux Integration', () => {
     it('attaches to tmux session when already attached elsewhere (multi-window support)', async () => {
       vi.useFakeTimers()
 
-      // Mock tmux available and session already attached
+      // Mock tmux available and session already attached WITH Claude running
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
         if (cmd.includes('has-session')) return Buffer.from('') // Session exists
         if (cmd.includes('list-sessions')) return 'minion-agent-1:1\n'  // Session is attached
         return Buffer.from('')
       })
-      // Mock has-session check using execFileSync to indicate session EXISTS
-      vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
-        // Session exists - don't throw
+      // Mock has-session check and Claude detection using execFileSync
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        // Session exists - don't throw for has-session
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          return Buffer.from('')
+        }
+        // Return pane PID for list-panes (Claude detection)
+        if (cmd === 'tmux' && args?.includes('list-panes')) {
+          return '12345\n'
+        }
+        // ps command for Claude detection - show Claude as descendant of pane PID
+        if (cmd === 'ps' && args?.includes('-ax')) {
+          // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+          return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+        }
         return Buffer.from('')
       })
 
@@ -370,19 +382,31 @@ describe('TerminalService Tmux Integration', () => {
       vi.useRealTimers()
     })
 
-    it('attaches to existing tmux session even if not attached elsewhere', async () => {
+    it('attaches to existing tmux session when Claude is running (even if not attached elsewhere)', async () => {
       vi.useFakeTimers()
 
-      // Mock tmux available and session exists but not attached
+      // Mock tmux available and session exists (not attached) WITH Claude running
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
         if (cmd.includes('has-session')) return Buffer.from('') // Session exists
         if (cmd.includes('list-sessions')) return 'minion-agent-1:0\n'
         return Buffer.from('')
       })
-      // Mock has-session check using execFileSync to indicate session EXISTS
-      vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
-        // Session exists - don't throw
+      // Mock has-session check and Claude detection using execFileSync
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        // Session exists - don't throw for has-session
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          return Buffer.from('')
+        }
+        // Return pane PID for list-panes (Claude detection)
+        if (cmd === 'tmux' && args?.includes('list-panes')) {
+          return '12345\n'
+        }
+        // ps command for Claude detection - show Claude as descendant of pane PID
+        if (cmd === 'ps' && args?.includes('-ax')) {
+          // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+          return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+        }
         return Buffer.from('')
       })
 
@@ -394,7 +418,7 @@ describe('TerminalService Tmux Integration', () => {
       // Should spawn PTY and proceed
       expect(pty.spawn).toHaveBeenCalled()
 
-      // Should attach to existing session (not create new)
+      // Should attach to existing session (not create new) because Claude is running
       const writeCalls = mockPty.write.mock.calls
       expect(writeCalls.length).toBeGreaterThanOrEqual(1)
       expect(writeCalls[0][0]).toContain('tmux attach-session -t minion-agent-1')
@@ -954,18 +978,30 @@ describe('TerminalService tmux two windows', () => {
     expect(sendKeysIndex).toBeLessThan(newWindowIndex)
   })
 
-  it('attaches to existing tmux session instead of creating new one', async () => {
+  it('attaches to existing tmux session when Claude is running instead of creating new one', async () => {
     vi.useFakeTimers()
 
-    // tmux is available AND session already exists
+    // tmux is available AND session already exists WITH Claude running
     vi.mocked(execSync).mockImplementation((cmd: string) => {
       if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
       if (cmd.includes('has-session')) return Buffer.from('') // Session exists (no error)
       return Buffer.from('')
     })
-    // Mock has-session check using execFileSync to indicate session EXISTS
-    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
-      // Session exists - don't throw
+    // Mock has-session check and Claude detection using execFileSync
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+      // Session exists - don't throw for has-session
+      if (cmd === 'tmux' && args?.includes('has-session')) {
+        return Buffer.from('')
+      }
+      // Return pane PID for list-panes (Claude detection)
+      if (cmd === 'tmux' && args?.includes('list-panes')) {
+        return '12345\n'
+      }
+      // ps command for Claude detection - show Claude as descendant of pane PID
+      if (cmd === 'ps' && args?.includes('-ax')) {
+        // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+        return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+      }
       return Buffer.from('')
     })
 
@@ -978,7 +1014,7 @@ describe('TerminalService tmux two windows', () => {
     expect(writeCalls.length).toBeGreaterThanOrEqual(1)
     const tmuxCommand = writeCalls[0][0]
 
-    // Should attach to existing session, not create new one
+    // Should attach to existing session, not create new one (because Claude is running)
     expect(tmuxCommand).toContain('tmux attach-session -t minion-agent-1')
     expect(tmuxCommand).not.toContain('new-session')
     expect(tmuxCommand).not.toContain('send-keys')
@@ -1101,6 +1137,212 @@ describe('TerminalService Security - Command Injection Prevention', () => {
         expect(() => terminalService.killTmuxSession(name)).not.toThrow()
       }
     })
+  })
+})
+
+/**
+ * BUG TEST: Base branch agent terminal with orphaned tmux session
+ *
+ * This test catches a bug where clicking on a base branch agent's terminal
+ * when a tmux session already exists (but is empty/orphaned) causes the code
+ * to just attach to the empty session instead of spawning Claude.
+ *
+ * Root cause:
+ * - Lines 688-700: tmuxSessionExists() check sets attachToExistingTmux = true
+ * - Lines 1100-1106: When attachToExistingTmux = true, it just runs `tmux attach-session`
+ *   without spawning Claude
+ *
+ * Expected behavior:
+ * - When clicking on a base agent terminal, if tmux session exists BUT is empty/no Claude
+ *   running, it should kill the session and start fresh with Claude
+ * - OR always ensure Claude gets spawned in the session
+ */
+describe('BUG: Base agent terminal with orphaned tmux session', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+  let mockAgentService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    mockAgentService = {
+      ...createMockAgentService(),
+      // Return base branch agent info
+      readAgentInfo: vi.fn().mockResolvedValue({
+        agentId: 'myproject-base',
+        isBaseBranchAgent: true,
+        tool: 'claude',
+        mode: 'dev',
+        status: 'idle'
+      })
+    }
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('should spawn Claude when tmux session exists but is empty (base agent)', async () => {
+    // Scenario: User has a base agent. The tmux session exists (maybe from a previous
+    // app session, crash, or orphaned state), but Claude is NOT running in it.
+    // User clicks on the base agent terminal to start working.
+
+    // Mock: tmux is available AND session exists (orphaned/empty)
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('') // Session exists
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n' // Not attached
+      return Buffer.from('')
+    })
+    // Mock has-session check using execFileSync to indicate session EXISTS
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      // Session exists - don't throw
+      return Buffer.from('')
+    })
+
+    // Start the base agent (simulating user clicking on the terminal)
+    await terminalService.startAgent(
+      '/path/to/project', // Base agents work in the main project directory
+      'myproject-base',   // Base agent ID pattern
+      'claude',
+      'dev'
+    )
+
+    // Advance timers to trigger any delayed commands
+    await vi.advanceTimersByTimeAsync(150)
+
+    // Get what was written to the terminal
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    const writtenCommand = writeCalls[0][0]
+
+    // BUG FIX: Current code kills orphaned session and creates new with Claude
+    // The fix writes Claude command to a script file, then runs via tmux
+    //
+    // EXPECTED: Claude should be spawned. Either:
+    // 1. Kill the orphaned session and create new with Claude: `tmux new-session ... send-keys 'claude ...'`
+    // 2. OR send Claude command to existing session: `tmux send-keys -t session 'claude ...'`
+    //
+    // Check that Claude command is in the script file (tmux mode uses script files)
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = writtenCommand.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+
+    // Additional verification: it should NOT just be a bare attach-session
+    // A bare attach without Claude spawn is the bug behavior
+    const isBareAttach = writtenCommand.includes('attach-session') && !claudeInScriptFile
+    expect(isBareAttach).toBe(false)
+  })
+
+  it('should ensure Claude is running after connecting to existing tmux session', async () => {
+    // Similar scenario but verifying Claude command is actually sent to the session
+
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('')
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      return Buffer.from('')
+    })
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      return Buffer.from('')
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'myproject-base',
+      'claude',
+      'dev',
+      'Fix the authentication bug' // User provides a prompt
+    )
+
+    await vi.advanceTimersByTimeAsync(150)
+
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    // All write calls combined should include the Claude command
+    const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
+
+    // BUG FIX: Claude command is written to script file in tmux mode
+    // Check that Claude command is in either terminal writes or script file
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = allWrites.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+
+    // The prompt should also be included somewhere (either in command or script file)
+    // With the bug, the prompt "Fix the authentication bug" is never sent
+    // This test will FAIL demonstrating the bug
+    const promptIncluded = allWrites.includes('Fix the authentication bug') ||
+      vi.mocked(fs.writeFileSync).mock.calls.some(
+        (call: any[]) => String(call[1]).includes('Fix the authentication bug')
+      )
+    expect(promptIncluded).toBe(true)
+  })
+
+  it('should handle base agent restart when previous session was killed but tmux session lingers', async () => {
+    // Edge case: User stops an agent (which should kill tmux), but due to timing or error,
+    // the tmux session is still there. On restart, Claude should still be spawned.
+
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('') // Orphaned session still exists
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      return Buffer.from('')
+    })
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      return Buffer.from('')
+    })
+
+    // Agent info shows it was previously stopped but tmux lingers
+    mockAgentService.readAgentInfo.mockResolvedValue({
+      agentId: 'myproject-base',
+      isBaseBranchAgent: true,
+      tool: 'claude',
+      mode: 'dev',
+      status: 'stopped', // Previously stopped
+      claudeSessionId: null, // No active Claude session
+      claudeSessionActive: false
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'myproject-base',
+      'claude',
+      'dev'
+    )
+
+    await vi.advanceTimersByTimeAsync(150)
+
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
+
+    // Even though tmux session exists, Claude should be spawned because
+    // there's no active Claude session (claudeSessionActive: false)
+    // BUG FIX: Code now checks if Claude is running in tmux, kills orphaned sessions
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = allWrites.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
   })
 })
 

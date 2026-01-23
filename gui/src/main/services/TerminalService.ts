@@ -213,6 +213,100 @@ export class TerminalService {
   }
 
   /**
+   * Check if Claude is running inside a tmux session.
+   *
+   * This is used to detect orphaned tmux sessions that exist but don't have
+   * Claude running in them (e.g., from a crash, force-quit, or previous session).
+   *
+   * @param sessionName - The tmux session name to check
+   * @returns true if a process containing "claude" is running in the session
+   */
+  isClaudeRunningInTmux(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      // Get the pane PID from the tmux session
+      const panePidOutput = execFileSync(
+        'tmux',
+        ['list-panes', '-t', sessionName, '-F', '#{pane_pid}'],
+        { encoding: 'utf8', stdio: 'pipe' }
+      )
+
+      const panePids = panePidOutput.trim().split('\n').filter(Boolean)
+      if (panePids.length === 0) {
+        return false
+      }
+
+      // Get all processes with their PIDs, PPIDs, and commands
+      // This approach works reliably on both macOS and Linux
+      const psOutput = execFileSync('ps', ['-ax', '-o', 'pid=,ppid=,comm='], {
+        encoding: 'utf8',
+        stdio: 'pipe'
+      })
+
+      // Build a map of parent -> children for tree traversal
+      const processes: Array<{ pid: number; ppid: number; comm: string }> = []
+      for (const line of psOutput.trim().split('\n')) {
+        const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/)
+        if (match) {
+          processes.push({
+            pid: parseInt(match[1], 10),
+            ppid: parseInt(match[2], 10),
+            comm: match[3].trim()
+          })
+        }
+      }
+
+      // Build parent -> children map
+      const childrenMap = new Map<number, number[]>()
+      for (const proc of processes) {
+        const siblings = childrenMap.get(proc.ppid) || []
+        siblings.push(proc.pid)
+        childrenMap.set(proc.ppid, siblings)
+      }
+
+      // Create a map of pid -> command for quick lookup
+      const commMap = new Map<number, string>()
+      for (const proc of processes) {
+        commMap.set(proc.pid, proc.comm)
+      }
+
+      // Check if any process in the subtree of each pane PID is claude
+      const hasClaudeInSubtree = (pid: number, visited: Set<number>): boolean => {
+        if (visited.has(pid)) return false
+        visited.add(pid)
+
+        const comm = commMap.get(pid) || ''
+        if (comm.toLowerCase().includes('claude')) {
+          return true
+        }
+
+        const children = childrenMap.get(pid) || []
+        for (const childPid of children) {
+          if (hasClaudeInSubtree(childPid, visited)) {
+            return true
+          }
+        }
+        return false
+      }
+
+      for (const panePid of panePids) {
+        const pid = parseInt(panePid, 10)
+        if (hasClaudeInSubtree(pid, new Set())) {
+          return true
+        }
+      }
+
+      return false
+    } catch (error) {
+      log.debug(`Failed to check if Claude is running in tmux session ${sessionName}`, error)
+      return false
+    }
+  }
+
+  /**
    * Kill orphaned minion-* tmux sessions.
    *
    * Called on app startup to clean up sessions left behind from crashes,
@@ -685,6 +779,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const agentInfo = await this.readAgentInfo(worktreePath)
 
     // Check if tmux session already exists - we'll attach to it instead of spawning new Claude
+    // BUT only if Claude is actually running in the session (not orphaned)
     let attachToExistingTmux = false
     const useTmux = this.shouldUseTmux()
     if (useTmux) {
@@ -692,8 +787,15 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       const sessionExists = this.tmuxSessionExists(tmuxSessionName)
       log.info(`[startAgent] agent=${agentId} tmuxSession=${tmuxSessionName} exists=${sessionExists}`)
       if (sessionExists) {
-        log.info(`Attaching to existing tmux session ${tmuxSessionName} instead of spawning new Claude`)
-        attachToExistingTmux = true
+        const isClaudeRunning = this.isClaudeRunningInTmux(tmuxSessionName)
+        if (isClaudeRunning) {
+          log.info(`Attaching to existing tmux session ${tmuxSessionName} with running Claude`)
+          attachToExistingTmux = true
+        } else {
+          log.info(`Tmux session ${tmuxSessionName} exists but Claude not running, killing orphaned session`)
+          this.killTmuxSession(agentId)
+          // attachToExistingTmux stays false, will create new session with Claude
+        }
       }
     } else {
       log.info(`[startAgent] agent=${agentId} NOT using tmux mode`)
