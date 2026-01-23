@@ -1,0 +1,272 @@
+/* ClaudeInputBar.css - Styles for Claude JSON mode input bar */
+
+.claude-input-bar {
+  padding: 12px 16px;
+  background: var(--bg-secondary, #252525);
+  border-top: 1px solid var(--border-color, #333);
+}
+
+/* Input row */
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.input-textarea {
+  flex: 1;
+  min-height: 40px;
+  max-height: 120px;
+  padding: 10px 12px;
+  background: var(--bg-primary, #1a1a1a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 8px;
+  color: var(--text-primary, #fff);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-textarea:focus {
+  border-color: var(--color-purple, #8b5cf6);
+}
+
+.input-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-textarea::placeholder {
+  color: var(--text-secondary, #888);
+}
+
+/* Send button */
+.send-btn {
+  padding: 10px 20px;
+  background: var(--color-purple, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--color-purple-dark, #7c3aed);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Status indicator */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px 0;
+  color: var(--text-secondary, #888);
+  font-size: 12px;
+}
+
+.working-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-green, #22c55e);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Approval mode */
+.claude-input-bar.approval-mode {
+  background: var(--bg-secondary, #252525);
+  border-left: 3px solid var(--color-amber, #f59e0b);
+}
+
+.approval-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.approval-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--color-amber, #f59e0b);
+  border-radius: 50%;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.approval-title {
+  color: var(--text-primary, #fff);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.approval-details {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--bg-primary, #1a1a1a);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.approval-details pre {
+  margin: 0;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-primary, #e0e0e0);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approve-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--color-green, #22c55e);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.approve-btn:hover {
+  background: var(--color-green-dark, #16a34a);
+}
+
+.reject-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--color-red, #ef4444);
+  border-radius: 6px;
+  color: var(--color-red, #ef4444);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.reject-btn:hover {
+  background: var(--color-red, #ef4444);
+  color: white;
+}
+
+/* Question mode */
+.claude-input-bar.question-mode {
+  background: var(--bg-secondary, #252525);
+  border-left: 3px solid var(--color-blue, #3b82f6);
+}
+
+.question-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--color-blue, #3b82f6);
+  border-radius: 50%;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.question-text {
+  color: var(--text-primary, #fff);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Completed mode */
+.claude-input-bar.completed-mode {
+  background: var(--bg-secondary, #252525);
+}
+
+.completed-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}
+
+.success-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--color-green, #22c55e);
+  border-radius: 50%;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--color-red, #ef4444);
+  border-radius: 50%;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Working mode */
+.claude-input-bar.working-mode .input-textarea {
+  border-color: var(--border-color, #333);
+}
+
+/* Waiting mode */
+.claude-input-bar.waiting-mode {
+  border-left: 3px solid var(--color-purple, #8b5cf6);
+}
+
+.claude-input-bar.waiting-mode .input-textarea {
+  border-color: var(--color-purple, #8b5cf6);
+}

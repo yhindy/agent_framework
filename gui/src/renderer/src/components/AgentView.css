@@ -257,6 +257,26 @@
 }
 
 /* =============================================================================
+   JSON UI MODE - Conversation view container
+   ============================================================================= */
+
+.json-ui-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.json-ui-container > .conversation-view {
+  flex: 1;
+  min-height: 0;
+}
+
+.json-ui-container > .claude-input-bar {
+  flex-shrink: 0;
+}
+
+/* =============================================================================
    MODAL STYLES
    ============================================================================= */
 

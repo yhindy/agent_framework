@@ -151,6 +151,27 @@ declare global {
       setClaudeConfigEnabled: (updates: Partial<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>) => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>
       getClaudeConfigScanResult: () => Promise<import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult>
       onClaudeConfigUpdated: (callback: (result: import('../../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult) => void) => () => void
+
+      // Claude JSON Mode APIs
+      startJsonAgent: (options: import('../../shared/types/claudeJson').JsonClaudeStartOptions) => Promise<void>
+      stopJsonAgent: (agentId: string) => Promise<void>
+      sendJsonInput: (agentId: string, input: string) => Promise<void>
+      getJsonConversation: (agentId: string) => Promise<import('../../shared/types/claudeJson').ConversationItem[]>
+      getJsonAgentState: (agentId: string) => Promise<import('../../shared/types/claudeJson').ClaudeAgentState | undefined>
+      getJsonAgentStats: (agentId: string) => Promise<import('../../shared/types/claudeJson').SessionStats | undefined>
+      hasJsonAgent: (agentId: string) => Promise<boolean>
+
+      // Claude JSON Mode Event Listeners
+      onClaudeConversationItem: (callback: (agentId: string, item: import('../../shared/types/claudeJson').ConversationItem) => void) => () => void
+      onClaudeStreamChunk: (callback: (agentId: string, chunk: import('../../shared/types/claudeJson').StreamingChunk) => void) => () => void
+      onClaudeJsonStateChanged: (callback: (agentId: string, state: import('../../shared/types/claudeJson').ClaudeAgentState) => void) => () => void
+      onClaudeWaitingForInput: (callback: (agentId: string, reason: import('../../shared/types/claudeJson').ClaudeWaitingReason) => void) => () => void
+      onClaudeResumedWork: (callback: (agentId: string) => void) => () => void
+      onClaudeSessionEnded: (callback: (agentId: string, info: any) => void) => () => void
+      onClaudeUsageUpdated: (callback: (agentId: string, usage: any) => void) => () => void
+      onClaudeError: (callback: (agentId: string, error: string) => void) => () => void
+      onClaudeSystemMessage: (callback: (agentId: string, info: any) => void) => () => void
+      onClaudeSessionStarted: (callback: (agentId: string, info: any) => void) => () => void
     }
   }
 }

@@ -20,7 +20,9 @@ import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowType
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 import { ClaudeConfigService } from './services/ClaudeConfigService'
+import { JsonClaudeService } from './services/JsonClaudeService'
 import type { ClaudeConfigSettings } from '../shared/types/settings'
+import type { JsonClaudeStartOptions } from '../shared/types/claudeJson'
 
 const log = createLogger('Main')
 
@@ -157,6 +159,7 @@ let services: {
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
   claudeConfig: ClaudeConfigService
+  jsonClaude: JsonClaudeService
 } | null = null
 
 
@@ -257,6 +260,11 @@ function initializeServices(): void {
   const claudeConfigService = new ClaudeConfigService()
   claudeConfigService.setWindow(mainWindow)
 
+  // Create JsonClaudeService for JSON output mode
+  const jsonClaudeService = new JsonClaudeService(mainWindow)
+  jsonClaudeService.setNotificationService(notificationService)
+  jsonClaudeService.setSettingsService(settingsService)
+
   services = {
     project: projectService,
     agent: agentService,
@@ -272,7 +280,8 @@ function initializeServices(): void {
     workflow: new WorkflowService(),
     setupWizard: setupWizardService,
     minionsConfig: minionsConfigService,
-    claudeConfig: claudeConfigService
+    claudeConfig: claudeConfigService,
+    jsonClaude: jsonClaudeService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
@@ -1379,6 +1388,38 @@ function setupIPC(): void {
   ipcMain.handle('claudeConfig:getScanResult', async () => {
     return services!.claudeConfig.getScanResult()
   })
+
+  // ============================================================================
+  // Claude JSON Mode IPC Handlers
+  // ============================================================================
+
+  ipcMain.handle('claudeJson:start', async (_event, agentId: string, options: JsonClaudeStartOptions) => {
+    await services!.jsonClaude.startAgent({ ...options, agentId })
+  })
+
+  ipcMain.handle('claudeJson:stop', async (_event, agentId: string) => {
+    services!.jsonClaude.stopAgent(agentId)
+  })
+
+  ipcMain.handle('claudeJson:sendInput', async (_event, agentId: string, input: string) => {
+    services!.jsonClaude.sendInput(agentId, input)
+  })
+
+  ipcMain.handle('claudeJson:getConversation', async (_event, agentId: string) => {
+    return services!.jsonClaude.getConversation(agentId)
+  })
+
+  ipcMain.handle('claudeJson:getState', async (_event, agentId: string) => {
+    return services!.jsonClaude.getState(agentId)
+  })
+
+  ipcMain.handle('claudeJson:getStats', async (_event, agentId: string) => {
+    return services!.jsonClaude.getStats(agentId)
+  })
+
+  ipcMain.handle('claudeJson:hasAgent', async (_event, agentId: string) => {
+    return services!.jsonClaude.hasAgent(agentId)
+  })
 }
 
 app.whenReady().then(() => {
@@ -1423,6 +1464,7 @@ app.on('window-all-closed', () => {
     services.terminal.cleanup()
     services.testEnv.cleanup()
     services.claudeConfig.cleanup()
+    services.jsonClaude.cleanup()
     // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
     services.claudeSessionInfo.dispose()
     // MEMORY FIX: Dispose PRPollingService to clean up polling jobs

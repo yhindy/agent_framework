@@ -147,6 +147,20 @@
   border-left: 3px solid #dcdcaa;
 }
 
+.beta-notice {
+  font-size: 13px;
+  color: #9cdcfe;
+  background: rgba(156, 220, 254, 0.1);
+  padding: 12px;
+  border-radius: 4px;
+  border-left: 3px solid #9cdcfe;
+  line-height: 1.5;
+}
+
+.beta-notice strong {
+  color: #4fc1ff;
+}
+
 /* Custom Checkbox Styles */
 .checkbox-setting {
   display: flex;

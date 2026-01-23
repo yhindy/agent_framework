@@ -24,6 +24,7 @@ export type CursorCLIModel =
   | 'grok'
 export type CodexModel = 'gpt-5.2-codex'
 export type WorkflowMode = 'planning' | 'dev'
+export type ClaudeOutputMode = 'terminal' | 'json-ui'
 
 export interface NotificationSettings {
   enabled: boolean // Enable/disable OS notifications
@@ -57,12 +58,23 @@ export interface ClaudeConfigSettings {
   autoRefresh: boolean           // Watch for config changes
 }
 
+/**
+ * Settings for Claude output mode (terminal vs JSON UI).
+ */
+export interface ClaudeUISettings {
+  outputMode: ClaudeOutputMode   // 'terminal' (classic) or 'json-ui' (conversation view)
+  showStreamingText: boolean     // Show text as it streams in real-time
+  collapseToolResults: boolean   // Auto-collapse tool results by default
+  maxConversationItems: number   // Memory limit: max items to keep in conversation history
+}
+
 export interface AppSettings {
   notifications: NotificationSettings
   defaultTool: DefaultToolSettings
   defaultAgent: DefaultAgentSettings
   terminal: TerminalSettings
   claudeConfig: ClaudeConfigSettings // Claude Code plugin import settings
+  claudeUI: ClaudeUISettings         // Claude output mode settings (terminal vs JSON UI)
   version: number // Schema version for migrations
 }
 
@@ -91,7 +103,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     disabledAgentIds: [],
     autoRefresh: true
   },
-  version: 3
+  claudeUI: {
+    outputMode: 'terminal',      // Safe default, users can opt-in to json-ui
+    showStreamingText: true,
+    collapseToolResults: true,
+    maxConversationItems: 500    // Memory limit
+  },
+  version: 4
 }
 
 // Display name mappings for UI dropdowns
@@ -133,4 +151,9 @@ export const CURSOR_CLI_MODEL_DISPLAY_NAMES: Record<CursorCLIModel, string> = {
 export const TERMINAL_MODE_DISPLAY_NAMES: Record<TerminalMode, string> = {
   tmux: 'Tmux (recommended)',
   tabs: 'Tabs (legacy)'
+}
+
+export const CLAUDE_OUTPUT_MODE_DISPLAY_NAMES: Record<ClaudeOutputMode, string> = {
+  terminal: 'Terminal (classic)',
+  'json-ui': 'Conversation UI (beta)'
 }

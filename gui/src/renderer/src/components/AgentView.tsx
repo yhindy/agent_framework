@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
+import ConversationView from './ConversationView'
+import ClaudeInputBar from './ClaudeInputBar'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
 import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon } from './icons'
@@ -11,6 +13,8 @@ import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
+import type { ClaudeAgentState, ClaudeWaitingReason } from '../../../shared/types/claudeJson'
+import type { ClaudeOutputMode } from '../../../shared/types/settings'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -62,6 +66,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
+  // JSON mode state (for Claude agents)
+  const [outputMode, setOutputMode] = useState<ClaudeOutputMode>('terminal')
+  const [claudeState, setClaudeState] = useState<ClaudeAgentState>('initializing')
+  const [waitingReason, setWaitingReason] = useState<ClaudeWaitingReason | undefined>(undefined)
+
   // Track if we've auto-focused on initial load
   const hasAutoFocused = useRef(false)
 
@@ -91,6 +100,52 @@ function AgentView({ activeProjects }: AgentViewProps) {
     assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
     enabled: assignment?.status === 'pr_open' || false
   })
+
+  // Load settings and determine output mode for Claude agents
+  useEffect(() => {
+    window.electronAPI.getSettings().then((settings) => {
+      if (settings?.claudeUI?.outputMode) {
+        setOutputMode(settings.claudeUI.outputMode)
+      }
+    })
+  }, [])
+
+  // Subscribe to JSON mode events when in json-ui mode with Claude
+  useEffect(() => {
+    if (outputMode !== 'json-ui' || !agentId) return
+
+    // Load initial state
+    window.electronAPI.getJsonAgentState(agentId).then((state) => {
+      if (state) setClaudeState(state)
+    })
+
+    // Subscribe to state changes
+    const unsubState = window.electronAPI.onClaudeJsonStateChanged((id, state) => {
+      if (id === agentId) {
+        setClaudeState(state)
+      }
+    })
+
+    // Subscribe to waiting events
+    const unsubWaiting = window.electronAPI.onClaudeWaitingForInput((id, reason) => {
+      if (id === agentId) {
+        setWaitingReason(reason)
+      }
+    })
+
+    // Subscribe to resumed work
+    const unsubResumed = window.electronAPI.onClaudeResumedWork((id) => {
+      if (id === agentId) {
+        setWaitingReason(undefined)
+      }
+    })
+
+    return () => {
+      unsubState()
+      unsubWaiting()
+      unsubResumed()
+    }
+  }, [outputMode, agentId])
 
   useEffect(() => {
     if (!agentId) return
@@ -337,6 +392,15 @@ function AgentView({ activeProjects }: AgentViewProps) {
     setActiveTab(newTerminalId)
   }
 
+  // Handler for sending input in JSON mode
+  const handleJsonSendInput = useCallback((input: string) => {
+    if (!agentId) return
+    window.electronAPI.sendJsonInput(agentId, input)
+  }, [agentId])
+
+  // Check if we should use JSON mode for this agent
+  const useJsonMode = outputMode === 'json-ui' && assignment?.tool === 'claude'
+
   const handleCloseTerminal = (terminalId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     
@@ -577,7 +641,19 @@ function AgentView({ activeProjects }: AgentViewProps) {
                   <p>Click "Open in Cursor" to start working.</p>
                 </div>
               </div>
+            ) : useJsonMode && agentId ? (
+              // JSON UI mode for Claude agents
+              <div className="json-ui-container">
+                <ConversationView agentId={agentId} />
+                <ClaudeInputBar
+                  agentId={agentId}
+                  state={claudeState}
+                  waitingReason={waitingReason}
+                  onSend={handleJsonSendInput}
+                />
+              </div>
             ) : (
+              // Terminal mode (default)
               agentId && <Terminal
                 agentId={agentId}
                 autoFocus={!hasAutoFocused.current}

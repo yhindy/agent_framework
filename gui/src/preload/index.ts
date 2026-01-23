@@ -276,6 +276,106 @@ const api = {
     const subscription = (_event: any, result: any) => callback(result)
     ipcRenderer.on('claudeConfig:updated', subscription)
     return () => ipcRenderer.removeListener('claudeConfig:updated', subscription)
+  },
+
+  // ============================================================================
+  // Claude JSON Mode APIs (for json-ui output mode)
+  // ============================================================================
+
+  // Start a Claude agent in JSON mode
+  startJsonAgent: (agentId: string, options: any) =>
+    ipcRenderer.invoke('claudeJson:start', agentId, options),
+
+  // Stop a JSON mode agent
+  stopJsonAgent: (agentId: string) => ipcRenderer.invoke('claudeJson:stop', agentId),
+
+  // Send input to a JSON mode agent
+  sendJsonInput: (agentId: string, input: string) =>
+    ipcRenderer.invoke('claudeJson:sendInput', agentId, input),
+
+  // Get conversation history for a JSON mode agent
+  getJsonConversation: (agentId: string) =>
+    ipcRenderer.invoke('claudeJson:getConversation', agentId),
+
+  // Get current state of a JSON mode agent
+  getJsonAgentState: (agentId: string) => ipcRenderer.invoke('claudeJson:getState', agentId),
+
+  // Get session stats for a JSON mode agent
+  getJsonAgentStats: (agentId: string) => ipcRenderer.invoke('claudeJson:getStats', agentId),
+
+  // Check if an agent is running in JSON mode
+  hasJsonAgent: (agentId: string) => ipcRenderer.invoke('claudeJson:hasAgent', agentId),
+
+  // Claude JSON Mode Event Listeners
+
+  // Conversation item added (text, tool_use, tool_result, etc.)
+  onClaudeConversationItem: (callback: (agentId: string, item: any) => void) => {
+    const subscription = (_event: any, agentId: string, item: any) => callback(agentId, item)
+    ipcRenderer.on('claude:conversationItem', subscription)
+    return () => ipcRenderer.removeListener('claude:conversationItem', subscription)
+  },
+
+  // Streaming text chunk (real-time text updates)
+  onClaudeStreamChunk: (callback: (agentId: string, chunk: any) => void) => {
+    const subscription = (_event: any, agentId: string, chunk: any) => callback(agentId, chunk)
+    ipcRenderer.on('claude:streamChunk', subscription)
+    return () => ipcRenderer.removeListener('claude:streamChunk', subscription)
+  },
+
+  // State changed (initializing, working, waiting, completed, error)
+  onClaudeJsonStateChanged: (callback: (agentId: string, state: string) => void) => {
+    const subscription = (_event: any, agentId: string, state: string) => callback(agentId, state)
+    ipcRenderer.on('claude:stateChanged', subscription)
+    return () => ipcRenderer.removeListener('claude:stateChanged', subscription)
+  },
+
+  // Waiting for input (with reason: end_turn, permission_required, question, plan_approval)
+  onClaudeWaitingForInput: (callback: (agentId: string, reason: any) => void) => {
+    const subscription = (_event: any, agentId: string, reason: any) => callback(agentId, reason)
+    ipcRenderer.on('claude:waitingForInput', subscription)
+    return () => ipcRenderer.removeListener('claude:waitingForInput', subscription)
+  },
+
+  // Resumed work after waiting
+  onClaudeResumedWork: (callback: (agentId: string) => void) => {
+    const subscription = (_event: any, agentId: string) => callback(agentId)
+    ipcRenderer.on('claude:resumedWork', subscription)
+    return () => ipcRenderer.removeListener('claude:resumedWork', subscription)
+  },
+
+  // Session ended (completed or error)
+  onClaudeSessionEnded: (callback: (agentId: string, info: any) => void) => {
+    const subscription = (_event: any, agentId: string, info: any) => callback(agentId, info)
+    ipcRenderer.on('claude:sessionEnded', subscription)
+    return () => ipcRenderer.removeListener('claude:sessionEnded', subscription)
+  },
+
+  // Token usage updated
+  onClaudeUsageUpdated: (callback: (agentId: string, usage: any) => void) => {
+    const subscription = (_event: any, agentId: string, usage: any) => callback(agentId, usage)
+    ipcRenderer.on('claude:usageUpdated', subscription)
+    return () => ipcRenderer.removeListener('claude:usageUpdated', subscription)
+  },
+
+  // Error occurred
+  onClaudeError: (callback: (agentId: string, error: string) => void) => {
+    const subscription = (_event: any, agentId: string, error: string) => callback(agentId, error)
+    ipcRenderer.on('claude:error', subscription)
+    return () => ipcRenderer.removeListener('claude:error', subscription)
+  },
+
+  // System message (session initialized with model/tools info)
+  onClaudeSystemMessage: (callback: (agentId: string, info: any) => void) => {
+    const subscription = (_event: any, agentId: string, info: any) => callback(agentId, info)
+    ipcRenderer.on('claude:systemMessage', subscription)
+    return () => ipcRenderer.removeListener('claude:systemMessage', subscription)
+  },
+
+  // Session started
+  onClaudeSessionStarted: (callback: (agentId: string, info: any) => void) => {
+    const subscription = (_event: any, agentId: string, info: any) => callback(agentId, info)
+    ipcRenderer.on('claude:sessionStarted', subscription)
+    return () => ipcRenderer.removeListener('claude:sessionStarted', subscription)
   }
 }
 

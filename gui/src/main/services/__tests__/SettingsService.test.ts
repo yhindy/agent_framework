@@ -282,7 +282,7 @@ describe('SettingsService', () => {
       // Recreate service to trigger migration
       settingsService = new SettingsService()
 
-      // Should have migrated to version 3 with terminal and claudeConfig settings
+      // Should have migrated to version 4 with terminal, claudeConfig, and claudeUI settings
       expect(mockStore.set).toHaveBeenCalledWith(
         'settings',
         expect.objectContaining({
@@ -295,7 +295,13 @@ describe('SettingsService', () => {
             disabledAgentIds: [],
             autoRefresh: true
           },
-          version: 3
+          claudeUI: {
+            outputMode: 'terminal',
+            showStreamingText: true,
+            collapseToolResults: true,
+            maxConversationItems: 500
+          },
+          version: 4
         })
       )
     })

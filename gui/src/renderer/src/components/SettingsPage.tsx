@@ -5,7 +5,8 @@ import {
   TOOL_DISPLAY_NAMES,
   CLAUDE_MODEL_DISPLAY_NAMES,
   CURSOR_CLI_MODEL_DISPLAY_NAMES,
-  TERMINAL_MODE_DISPLAY_NAMES
+  TERMINAL_MODE_DISPLAY_NAMES,
+  CLAUDE_OUTPUT_MODE_DISPLAY_NAMES
 } from '../../../shared/types/settings'
 import WorkflowSettings from './WorkflowSettings'
 import ImportedAgentsSettings from './ImportedAgentsSettings'
@@ -144,6 +145,16 @@ function SettingsPage(): JSX.Element {
     updateSettings((prev) => ({
       ...prev,
       terminal: { ...prev.terminal, [key]: value }
+    }))
+  }
+
+  function updateClaudeUI<K extends keyof AppSettings['claudeUI']>(
+    key: K,
+    value: AppSettings['claudeUI'][K]
+  ): void {
+    updateSettings((prev) => ({
+      ...prev,
+      claudeUI: { ...prev.claudeUI, [key]: value }
     }))
   }
 
@@ -368,6 +379,88 @@ function SettingsPage(): JSX.Element {
                   ⚠️ tmux is not installed. Will automatically fall back to tabs mode.
                 </div>
               </div>
+            )}
+          </div>
+        </section>
+
+        {/* Claude Output Mode Section */}
+        <section className="settings-section">
+          <h2 className="section-title">Claude Output Mode</h2>
+          <div className="settings-card">
+            <div className="setting-item">
+              <div className="setting-text full-width">
+                <span className="setting-label">Display mode for Claude agents</span>
+              </div>
+              <div className="workflow-options">
+                {(['terminal', 'json-ui'] as const).map((mode) => (
+                  <label
+                    key={mode}
+                    className={`workflow-radio ${settings.claudeUI?.outputMode === mode ? 'selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="claudeOutputMode"
+                      value={mode}
+                      checked={settings.claudeUI?.outputMode === mode}
+                      onChange={() => updateClaudeUI('outputMode', mode)}
+                    />
+                    <div className="workflow-radio-content">
+                      <span className="workflow-radio-title">
+                        {CLAUDE_OUTPUT_MODE_DISPLAY_NAMES[mode]}
+                      </span>
+                      <span className="workflow-radio-description">
+                        {mode === 'terminal'
+                          ? 'Classic terminal view with raw output. Reliable but 2-second notification delay.'
+                          : 'Rich conversation UI with instant notifications. Beta feature.'}
+                      </span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {settings.claudeUI?.outputMode === 'json-ui' && (
+              <>
+                <div className="setting-item">
+                  <label className="checkbox-setting">
+                    <input
+                      type="checkbox"
+                      checked={settings.claudeUI?.showStreamingText ?? true}
+                      onChange={(e) => updateClaudeUI('showStreamingText', e.target.checked)}
+                    />
+                    <div className="setting-text">
+                      <span className="setting-label">Show streaming text</span>
+                      <span className="setting-description">
+                        Display text as Claude generates it (real-time)
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="setting-item">
+                  <label className="checkbox-setting">
+                    <input
+                      type="checkbox"
+                      checked={settings.claudeUI?.collapseToolResults ?? true}
+                      onChange={(e) => updateClaudeUI('collapseToolResults', e.target.checked)}
+                    />
+                    <div className="setting-text">
+                      <span className="setting-label">Collapse tool results</span>
+                      <span className="setting-description">
+                        Automatically collapse tool output to save space
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="setting-item">
+                  <div className="beta-notice">
+                    <strong>Beta Feature:</strong> Conversation UI provides instant notifications
+                    and a cleaner view, but some features may be limited compared to terminal mode.
+                    You can switch back to terminal mode at any time.
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </section>

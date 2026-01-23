@@ -113,7 +113,26 @@ declare const api: {
     getClaudeConfigSettings: () => Promise<import('../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>;
     setClaudeConfigEnabled: (updates: Partial<import('../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>) => Promise<import('../main/services/types/ClaudeConfigTypes').ClaudeConfigSettings>;
     getClaudeConfigScanResult: () => Promise<import('../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult>;
-    onClaudeConfigUpdated: (callback: (result: import('../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult) => void) => () => Electron.IpcRenderer
+    onClaudeConfigUpdated: (callback: (result: import('../main/services/types/ClaudeConfigTypes').ClaudeConfigScanResult) => void) => () => Electron.IpcRenderer;
+    // Claude JSON Mode APIs
+    startJsonAgent: (agentId: string, options: import('../shared/types/claudeJson').JsonClaudeStartOptions) => Promise<void>;
+    stopJsonAgent: (agentId: string) => Promise<void>;
+    sendJsonInput: (agentId: string, input: string) => Promise<void>;
+    getJsonConversation: (agentId: string) => Promise<import('../shared/types/claudeJson').ConversationItem[]>;
+    getJsonAgentState: (agentId: string) => Promise<import('../shared/types/claudeJson').ClaudeAgentState | undefined>;
+    getJsonAgentStats: (agentId: string) => Promise<import('../shared/types/claudeJson').SessionStats | undefined>;
+    hasJsonAgent: (agentId: string) => Promise<boolean>;
+    // Claude JSON Mode Event Listeners
+    onClaudeConversationItem: (callback: (agentId: string, item: import('../shared/types/claudeJson').ConversationItem) => void) => () => Electron.IpcRenderer;
+    onClaudeStreamChunk: (callback: (agentId: string, chunk: import('../shared/types/claudeJson').StreamingChunk) => void) => () => Electron.IpcRenderer;
+    onClaudeJsonStateChanged: (callback: (agentId: string, state: import('../shared/types/claudeJson').ClaudeAgentState) => void) => () => Electron.IpcRenderer;
+    onClaudeWaitingForInput: (callback: (agentId: string, reason: import('../shared/types/claudeJson').ClaudeWaitingReason) => void) => () => Electron.IpcRenderer;
+    onClaudeResumedWork: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
+    onClaudeSessionEnded: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
+    onClaudeUsageUpdated: (callback: (agentId: string, usage: any) => void) => () => Electron.IpcRenderer;
+    onClaudeError: (callback: (agentId: string, error: string) => void) => () => Electron.IpcRenderer;
+    onClaudeSystemMessage: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
+    onClaudeSessionStarted: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
 };
 export type ElectronAPI = typeof api;
 export {};
