@@ -5,8 +5,7 @@ import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
-import HandoffModal from './HandoffModal'
-import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon, HandoffIcon } from './icons'
+import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon } from './icons'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
@@ -68,8 +67,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [terminalCounter, setTerminalCounter] = useState(1)
   const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
-  const [showHandoffModal, setShowHandoffModal] = useState(false)
-  const [isCreatingHandoff, setIsCreatingHandoff] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
@@ -356,45 +353,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
     console.log('Remove failed agent - not yet implemented')
   }
 
-  const handleOpenHandoffModal = () => {
-    setShowHandoffModal(true)
-  }
-
-  const handleConfirmHandoff = async (request: {
-    prompt: string
-    branchMode: 'inherit' | 'fresh'
-    shortName?: string
-    tool?: string
-    model?: string
-  }) => {
-    if (!agentId) return
-
-    setIsCreatingHandoff(true)
-    try {
-      const result = await window.electronAPI.handoffAgent({
-        sourceAgentId: agentId,
-        prompt: request.prompt,
-        branchMode: request.branchMode,
-        shortName: request.shortName,
-        tool: request.tool || assignment?.tool,
-        model: request.model || assignment?.model
-      })
-
-      if (result.success && result.newAgent) {
-        setShowHandoffModal(false)
-        // Navigate to the new agent
-        navigate(`/agent/${result.newAgent.id}`)
-      } else {
-        alert(`Failed to create handoff: ${result.error || 'Unknown error'}`)
-      }
-    } catch (error: any) {
-      console.error('Handoff failed:', error)
-      alert(`Handoff failed: ${error.message}`)
-    } finally {
-      setIsCreatingHandoff(false)
-    }
-  }
-
   const handleAddTerminal = () => {
     const newCounter = terminalCounter + 1
     const newTerminalId = `terminal-${newCounter}`
@@ -498,18 +456,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         Cursor
       </button>
 
-      {/* Handoff Button - allow delegating to a new agent */}
-      {assignment && !assignment.isBaseBranchAgent && (
-        <button
-          onClick={handleOpenHandoffModal}
-          className="compact-button handoff-button"
-          title="Hand off to a new agent"
-        >
-          <HandoffIcon size="sm" />
-          Handoff
-        </button>
-      )}
-
       {/* Cleanup Dropdown */}
       {assignment && !assignment.isBaseBranchAgent && (
         <AgentCleanupDropdown
@@ -533,33 +479,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
         status={assignment?.status}
         actions={headerActions}
       />
-
-      {/* Handoff Lineage Banner - shows parent relationship */}
-      {agent?.handoffSource && (
-        <div className="lineage-banner">
-          <div className="lineage-banner-content">
-            <div className="lineage-path">
-              <span className="lineage-label">Handed off from</span>
-              <span className="lineage-parent-branch">
-                {extractBranchName(agent.handoffSource.originalBranch)}
-              </span>
-            </div>
-            <div className="lineage-meta">
-              <span className={`lineage-mode lineage-mode--${agent.handoffSource.branchMode}`}>
-                {agent.handoffSource.branchMode === 'inherit' ? 'Inherited work' : 'Fresh start'}
-              </span>
-              <span className="lineage-timestamp">
-                {new Date(agent.handoffSource.handoffTimestamp).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Teleport Failure Recovery UI */}
       {teleportFailure && (
@@ -755,17 +674,6 @@ function AgentView({ activeProjects }: AgentViewProps) {
           </div>
         </div>
       )}
-
-      {/* Handoff Modal */}
-      <HandoffModal
-        isOpen={showHandoffModal}
-        sourceAgentName={extractBranchName(assignment?.branch) || agentId}
-        initialPrompt=""
-        initialBranchMode="inherit"
-        onConfirm={handleConfirmHandoff}
-        onCancel={() => setShowHandoffModal(false)}
-        isLoading={isCreatingHandoff}
-      />
 
     </div>
   )
