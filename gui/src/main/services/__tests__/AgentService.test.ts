@@ -728,3 +728,129 @@ describe('AgentService Dual Config Location Support', () => {
   })
 })
 
+describe('AgentService Reserved Branch Name Validation', () => {
+  let agentService: AgentService
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    agentService = new AgentService()
+  })
+
+  describe('createAssignment', () => {
+    const projectPath = '/path/to/project'
+    const configContent = JSON.stringify({
+      project: { name: 'myrepo', defaultBaseBranch: 'main' },
+      setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+      assignments: [],
+      testEnvironments: []
+    })
+
+    beforeEach(() => {
+      // Mock config file exists
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === join(projectPath, 'minions.json')
+      })
+      vi.mocked(fs.readFileSync).mockReturnValue(configContent)
+    })
+
+    it('should throw error for reserved branch name "base"', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'base',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "base" is reserved')
+    })
+
+    it('should throw error for reserved branch name "main"', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'main',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "main" is reserved')
+    })
+
+    it('should throw error for reserved branch name "master"', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'master',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "master" is reserved')
+    })
+
+    it('should throw error for reserved branch name "origin"', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'origin',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "origin" is reserved')
+    })
+
+    it('should throw error for reserved branch name "head"', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'head',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "head" is reserved')
+    })
+
+    it('should throw error for reserved name with feature/ prefix', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'feature/base',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "base" is reserved')
+    })
+
+    it('should throw error for reserved name case-insensitively (BASE)', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'BASE',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "BASE" is reserved')
+    })
+
+    it('should throw error for reserved name case-insensitively (Main)', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'Main',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Branch name "Main" is reserved')
+    })
+
+    it('should list all reserved names in error message', async () => {
+      await expect(
+        agentService.createAssignment(projectPath, {
+          branch: 'base',
+          feature: 'Test feature',
+          tool: 'claude',
+          mode: 'dev'
+        })
+      ).rejects.toThrow('Reserved names: base, main, master, origin, head')
+    })
+  })
+})
+
