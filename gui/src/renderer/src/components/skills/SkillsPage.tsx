@@ -4,7 +4,7 @@ import { useSnackbar } from '../../contexts/SnackbarContext'
 import './SkillsPage.css'
 
 interface Item {
-  id: string; name: string; description: string; filePath: string; promptContent: string; enabled: boolean
+  id: string; name: string; description: string; filePath: string; promptContent: string
   source: { type: 'command' | 'agent' | 'plugin'; scope: 'global' | 'project'; path: string }
   model?: string; color?: string
   overrides?: string; isOverridden?: boolean; overriddenBy?: string
@@ -27,14 +27,11 @@ const SkillsIcon = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
   </svg>
 }
 
-const ItemCard = ({ item, onToggle, isExpanded, onToggleExpand }: {
-  item: Item; onToggle: (id: string, enabled: boolean) => void; isExpanded: boolean; onToggleExpand: () => void
+const ItemCard = ({ item, isExpanded, onToggleExpand }: {
+  item: Item; isExpanded: boolean; onToggleExpand: () => void
 }) => (
-  <div className={`skill-card ${!item.enabled ? 'skill-card--disabled' : ''} ${item.isOverridden ? 'skill-card--overridden' : ''}`}>
+  <div className={`skill-card ${item.isOverridden ? 'skill-card--overridden' : ''}`}>
     <div className="skill-card-header" onClick={onToggleExpand}>
-      <label className="skill-checkbox" onClick={e => e.stopPropagation()}>
-        <input type="checkbox" checked={item.enabled} disabled={item.isOverridden} onChange={e => onToggle(item.id, e.target.checked)} />
-      </label>
       <div className="skill-info">
         <div className="skill-name-row">
           <span className="skill-name">{item.name}</span>
@@ -91,11 +88,6 @@ export function SkillsPage(): JSX.Element {
     finally { setIsRefreshing(false) }
   }
 
-  const toggle = async (id: string, enabled: boolean) => {
-    try { await window.electronAPI.setSkillEnabled(id, enabled); setResult(await window.electronAPI.getUnifiedSkillsScanResult()) }
-    catch { addSnackbar({ title: 'Error', messages: ['Failed to update'] }) }
-  }
-
   const toggleSet = <T extends string>(set: Set<T>, key: T): Set<T> => {
     const next = new Set(set); next.has(key) ? next.delete(key) : next.add(key); return next
   }
@@ -107,12 +99,10 @@ export function SkillsPage(): JSX.Element {
     </div>
   )
 
-  const total = result?.items.length ?? 0
-  const enabled = result?.items.filter(i => i.enabled && !i.isOverridden).length ?? 0
+  const total = result?.items.filter(i => !i.isOverridden).length ?? 0
 
   const Section = ({ title, sectionKey, items, empty, help }: { title: string; sectionKey: string; items: Item[]; empty: string; help: string }) => {
-    const open = sections.has(sectionKey), count = items.filter(i => i.enabled && !i.isOverridden).length
-    if (items.length === 0 && !open) return null
+    const open = sections.has(sectionKey), count = items.filter(i => !i.isOverridden).length
     return (
       <div className="skills-section">
         <div className="section-header" onClick={() => setSections(toggleSet(sections, sectionKey))}>
@@ -120,13 +110,13 @@ export function SkillsPage(): JSX.Element {
             <svg className={`section-expand-icon ${open ? 'expanded' : ''}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
-            <h2>{title}</h2><span className="section-count">{count}/{items.length}</span>
+            <h2>{title}</h2><span className="section-count">{count}</span>
           </div>
           <span className="section-help">{help}</span>
         </div>
         {open && <div className="section-content">
           {items.length === 0 ? <div className="section-empty">{empty}</div> :
-            items.map(i => <ItemCard key={i.id} item={i} onToggle={toggle} isExpanded={expanded.has(i.id)} onToggleExpand={() => setExpanded(toggleSet(expanded, i.id))} />)}
+            items.map(i => <ItemCard key={i.id} item={i} isExpanded={expanded.has(i.id)} onToggleExpand={() => setExpanded(toggleSet(expanded, i.id))} />)}
         </div>}
       </div>
     )
@@ -137,7 +127,7 @@ export function SkillsPage(): JSX.Element {
       <div className="skills-header">
         <div className="header-title">
           <h1><SkillsIcon size="lg" />Skills & Agents</h1>
-          <span className="skills-summary">{enabled} of {total} enabled</span>
+          <span className="skills-summary">{total} item{plural(total)} available</span>
         </div>
         <button className="refresh-btn" onClick={refresh} disabled={isRefreshing} title="Refresh">
           <RefreshIcon size="sm" className={isRefreshing ? 'spinning' : ''} />{isRefreshing ? 'Refreshing...' : 'Refresh'}

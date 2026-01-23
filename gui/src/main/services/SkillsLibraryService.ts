@@ -1,11 +1,11 @@
 import { homedir } from 'os'
-import { join, basename } from 'path'
+import { join } from 'path'
 import { existsSync, readFileSync, readdirSync } from 'fs'
 import chokidar from 'chokidar'
 import { BrowserWindow } from 'electron'
 import { createLogger } from './logger'
 import {
-  ItemDefinition, ItemSource, LibraryScanResult, SkillsLibrarySettings,
+  ItemDefinition, LibraryScanResult, SkillsLibrarySettings,
   SourceType, Scope, DEFAULT_SKILLS_LIBRARY_SETTINGS
 } from './types/SkillsLibraryTypes'
 import { ScanError } from './types/ClaudeConfigTypes'
@@ -123,6 +123,8 @@ export class SkillsLibraryService {
     const all = [...r.commands, ...r.agents, ...r.projectCommands, ...r.projectAgents]
     return all.filter(i => !this.settings.disabledSkillIds.includes(i.id))
   }
+
+  getEnabledSkills(p?: string) { return this.getEnabledItems(p) }
 
   startWatching() {
     if (this.watcher) return

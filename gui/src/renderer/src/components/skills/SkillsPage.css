@@ -30,12 +30,9 @@
 
 .skill-card { border-bottom: 1px solid var(--border-color); }
 .skill-card:last-child { border-bottom: none; }
-.skill-card--disabled { opacity: 0.6; }
-.skill-card--overridden { background: var(--bg-tertiary); }
+.skill-card--overridden { background: var(--bg-tertiary); opacity: 0.6; }
 .skill-card-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; cursor: pointer; transition: background 0.15s; }
 .skill-card-header:hover { background: var(--bg-hover); }
-.skill-checkbox { flex-shrink: 0; padding-top: 2px; }
-.skill-checkbox input { width: 16px; height: 16px; cursor: pointer; }
 .skill-info { flex: 1; min-width: 0; }
 .skill-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .skill-name { font-weight: 600; font-size: 0.9375rem; }
@@ -53,7 +50,7 @@
 .expand-icon { transition: transform 0.2s; color: var(--text-muted); }
 .expand-icon.expanded { transform: rotate(180deg); }
 
-.skill-details { padding: 12px 20px 16px 48px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); }
+.skill-details { padding: 12px 20px 16px 20px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); }
 .skill-path { display: flex; align-items: center; gap: 8px; }
 .path-label { font-size: 0.75rem; color: var(--text-muted); }
 .skill-path code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 0.6875rem; color: var(--text-muted); }
