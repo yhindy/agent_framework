@@ -1,0 +1,216 @@
+/* HandoffModal specific styles - extends ConfirmModal base styles */
+
+.handoff-modal-content {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  min-width: 520px;
+  max-width: 640px;
+  box-shadow: var(--shadow-xl);
+  animation: springIn var(--transition-spring) ease-out;
+}
+
+.handoff-workflow-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-4) 0;
+  padding: var(--space-3);
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handoff-modal-content {
+    animation: fadeIn var(--transition-fast) ease-out;
+  }
+}
+
+.handoff-source {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+  display: block;
+}
+
+.handoff-form-group {
+  margin-bottom: var(--space-4);
+}
+
+.handoff-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.handoff-form-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.handoff-form-group textarea {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  resize: vertical;
+  min-height: 200px;
+  max-height: 400px;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.handoff-form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+.handoff-form-group textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.handoff-form-group input[type="text"] {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.handoff-form-group input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+.handoff-form-group input[type="text"]::placeholder {
+  color: var(--text-tertiary);
+}
+
+.handoff-branch-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.handoff-radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.handoff-radio-option:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-overlay);
+}
+
+.handoff-radio-option:has(input:checked) {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.handoff-radio-option input[type="radio"] {
+  margin-top: var(--space-1);
+  accent-color: var(--accent-primary);
+}
+
+.handoff-radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.handoff-radio-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.handoff-radio-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.handoff-advanced-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-xs);
+  color: var(--accent-primary);
+  cursor: pointer;
+  margin-bottom: var(--space-3);
+}
+
+.handoff-advanced-toggle:hover {
+  text-decoration: underline;
+}
+
+.handoff-advanced {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+}
+
+.handoff-help-text {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* Handoff indicator for sidebar */
+.handoff-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-2xs);
+  color: var(--accent-primary);
+  padding: var(--space-1) var(--space-2);
+  background: var(--accent-primary-dim);
+  border-radius: var(--radius-xs);
+  margin-left: var(--space-2);
+}
+
+.handoff-indicator svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Handoff button in agent view */
+.handoff-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.handoff-button:hover {
+  background: var(--bg-muted);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.handoff-button svg {
+  width: 14px;
+  height: 14px;
+}

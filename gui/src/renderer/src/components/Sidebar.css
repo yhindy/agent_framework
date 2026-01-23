@@ -532,6 +532,24 @@
 }
 
 /* ================================================
+   HANDOFF INDICATOR STYLES
+   ================================================ */
+
+.handoff-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  color: var(--accent-primary, #569cd6);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.handoff-indicator:hover {
+  opacity: 1;
+}
+
+/* ================================================
    MODAL STYLES - Project Picker Modal
    ================================================
    Clean modal wrapper that lets content breathe

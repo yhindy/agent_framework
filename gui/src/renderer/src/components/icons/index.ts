@@ -61,7 +61,8 @@ export {
   PlusCircleIcon,
   WorkflowIcon,
   EditIcon,
-  SkillsIcon
+SkillsIcon,
+  HandoffIcon
 } from './ActionIcons'
 
 // Archive icons

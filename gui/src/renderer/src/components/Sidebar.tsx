@@ -18,7 +18,8 @@ import {
   HourglassIcon,
   CheckIcon,
   XIcon,
-  SkillsIcon
+SkillsIcon,
+  HandoffIcon
 } from './icons'
 import './Sidebar.css'
 
@@ -35,6 +36,13 @@ interface SidebarProps {
   isCollapsed: boolean
   onToggleCollapse: () => void
   onAgentListChange?: (agents: AgentInfo[]) => void
+}
+
+interface HandoffSource {
+  agentId: string
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string
+  handoffTimestamp: string
 }
 
 interface AgentSession {
@@ -55,6 +63,7 @@ interface AgentSession {
   failureReason?: string  // Why session resume failed
   resumeAttempts?: number  // Number of times we've tried to resume
   currentState?: string  // Current state from backend (waiting, working, etc.)
+  handoffSource?: HandoffSource  // Set if this agent was created via handoff
 }
 
 interface AgentsByProject {
@@ -611,6 +620,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
               <span className="agent-type-icon">{getAgentTypeIcon(agent)}</span>
             </div>
             {getAgentDisplayName(agent)}
+            {agent.handoffSource && (
+              <span
+                className="handoff-indicator"
+                title={`Handed off from ${agent.handoffSource.originalBranch} (${agent.handoffSource.branchMode} mode)`}
+              >
+                <HandoffIcon size="xs" />
+              </span>
+            )}
             {hasTeleportFailure && (
               <div className="failure-badge-container">
                 <div className="failure-badge" title={`Failed to resume: ${teleportFailure.reason}`}><WarningIcon size="sm" /></div>
