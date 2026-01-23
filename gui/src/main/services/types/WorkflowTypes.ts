@@ -166,28 +166,27 @@ export function createAgent(typeId: string): StepAgent {
 export const DEFAULT_WORKFLOW: WorkflowConfig = {
   id: 'default',
   name: 'Standard Workflow',
-  description: 'Standard workflow with 6 phases: acceptance criteria, explore, design, review, implement, validate',
+  description: 'Standard workflow with 5 phases: acceptance criteria, design, review, implement, validate',
   steps: [
     { id: 'step-0', name: 'Acceptance Criteria', agents: [{ id: 'a0', typeId: 'acceptance-criteria' }] },
-    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'Explore' }] },
-    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'Plan' }] },
+    { id: 'step-1', name: 'Engineering Design', agents: [{ id: 'a1', typeId: 'Plan' }] },
     {
-      id: 'step-3',
+      id: 'step-2',
       name: 'Design Review',
       agents: [
-        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
-        { id: 'a4', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
+        { id: 'a2', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
+        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
       ]
     },
-    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'general-purpose' }] },
+    { id: 'step-3', name: 'Implementation', agents: [{ id: 'a4', typeId: 'general-purpose' }] },
     {
-      id: 'step-5',
+      id: 'step-4',
       name: 'Validation',
       agents: [
-        { id: 'a6', typeId: 'code-simplifier' },
-        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
-        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
-        { id: 'a9', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
+        { id: 'a5', typeId: 'code-simplifier' },
+        { id: 'a6', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
+        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
+        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
       ]
     }
   ],

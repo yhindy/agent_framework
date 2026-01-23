@@ -110,7 +110,7 @@ describe('WorkflowService', () => {
     it('should return the default workflow', () => {
       const workflow = service.getActiveWorkflow('/some/project')
       expect(workflow).toEqual(DEFAULT_WORKFLOW)
-      expect(workflow.steps).toHaveLength(6)
+      expect(workflow.steps).toHaveLength(5)
     })
   })
 
