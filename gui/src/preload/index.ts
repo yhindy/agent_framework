@@ -28,6 +28,8 @@ const api = {
   saveUIState: (agentId: string, uiState: any) => ipcRenderer.invoke('agents:saveUIState', agentId, uiState),
   retryResumeAgent: (agentId: string) => ipcRenderer.invoke('agents:retry-resume', agentId),
   startFreshSession: (agentId: string) => ipcRenderer.invoke('agents:start-fresh', agentId),
+  ensureAgentRunning: (agentId: string, projectPath?: string) =>
+    ipcRenderer.invoke('agents:ensureRunning', agentId, projectPath),
 
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>

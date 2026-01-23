@@ -623,6 +623,63 @@ function setupIPC(): void {
     return services!.agent.getSuperAgentDetails(projectPath, agentId)
   })
 
+  // Ensure an agent is running (start if not active)
+  // Used by AgentView to start base branch agents when clicked
+  ipcMain.handle('agents:ensureRunning', async (_event, agentId: string, projectPath?: string) => {
+    try {
+      const project = projectPath || services!.project.getCurrentProject()?.path
+      if (!project) {
+        return { started: false, error: 'No project selected' }
+      }
+
+      // Check if terminal is already active
+      if (services!.terminal.hasActiveTerminal(agentId)) {
+        return { started: false } // Already running, no action needed
+      }
+
+      // Get agent info by finding the agent in the list
+      const agents = await services!.agent.listAgents(project)
+      const agent = agents.find(a => a.id === agentId)
+      if (!agent) {
+        return { started: false, error: 'Agent not found' }
+      }
+
+      // Read full agent info from disk
+      const agentInfo = services!.agent.readAgentInfo(agent.worktreePath, agentId, project)
+      if (!agentInfo) {
+        return { started: false, error: 'Could not read agent info' }
+      }
+
+      // Only start if agent has a tool configured
+      if (!agentInfo.tool) {
+        return { started: false, error: 'Agent has no tool configured' }
+      }
+
+      // For base branch agents, don't pass a prompt - just start Claude normally
+      // This lets the user interact with Claude directly without a pre-set task
+      const isBaseBranchAgent = agent.isBaseBranchAgent
+      const promptToUse = isBaseBranchAgent ? undefined : agentInfo.prompt
+
+      // Start the agent
+      log.info(`[agents:ensureRunning] Starting agent ${agentId} (isBase=${isBaseBranchAgent})`)
+      await services!.terminal.startAgent(
+        project,
+        agentId,
+        agentInfo.tool,
+        agentInfo.mode || 'dev',
+        promptToUse,
+        agentInfo.model,
+        agentInfo.yolo || false,
+        agentInfo.chrome !== false
+      )
+
+      return { started: true }
+    } catch (error) {
+      log.error(`[agents:ensureRunning] Failed to start agent ${agentId}:`, error)
+      return { started: false, error: String(error) }
+    }
+  })
+
   // Validate and potentially retry a teleported session
   ipcMain.handle('agents:validateTeleport', async (_event, agentId: string) => {
     try {
