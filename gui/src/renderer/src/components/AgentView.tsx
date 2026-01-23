@@ -33,6 +33,13 @@ interface Assignment {
   isBaseBranchAgent?: boolean
 }
 
+interface HandoffSource {
+  agentId: string
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string
+  handoffTimestamp: string
+}
+
 interface AgentSession {
   id: string
   assignmentId: string | null
@@ -40,6 +47,7 @@ interface AgentSession {
   terminalPid: number | null
   hasUnread: boolean
   lastActivity: string
+  handoffSource?: HandoffSource
   uiState?: {
     lastActiveTab: string
     plainTerminals: string[]
@@ -525,6 +533,33 @@ function AgentView({ activeProjects }: AgentViewProps) {
         status={assignment?.status}
         actions={headerActions}
       />
+
+      {/* Handoff Lineage Banner - shows parent relationship */}
+      {agent?.handoffSource && (
+        <div className="lineage-banner">
+          <div className="lineage-banner-content">
+            <div className="lineage-path">
+              <span className="lineage-label">Handed off from</span>
+              <span className="lineage-parent-branch">
+                {extractBranchName(agent.handoffSource.originalBranch)}
+              </span>
+            </div>
+            <div className="lineage-meta">
+              <span className={`lineage-mode lineage-mode--${agent.handoffSource.branchMode}`}>
+                {agent.handoffSource.branchMode === 'inherit' ? 'Inherited work' : 'Fresh start'}
+              </span>
+              <span className="lineage-timestamp">
+                {new Date(agent.handoffSource.handoffTimestamp).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Teleport Failure Recovery UI */}
       {teleportFailure && (

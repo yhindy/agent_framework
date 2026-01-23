@@ -18,8 +18,7 @@ import {
   HourglassIcon,
   CheckIcon,
   XIcon,
-SkillsIcon,
-  HandoffIcon
+  SkillsIcon
 } from './icons'
 import './Sidebar.css'
 
@@ -622,10 +621,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             {getAgentDisplayName(agent)}
             {agent.handoffSource && (
               <span
-                className="handoff-indicator"
-                title={`Handed off from ${agent.handoffSource.originalBranch} (${agent.handoffSource.branchMode} mode)`}
+                className="handoff-lineage-badge"
+                title={`Handed off from ${extractBranchName(agent.handoffSource.originalBranch)} (${agent.handoffSource.branchMode} mode)`}
               >
-                <HandoffIcon size="xs" />
+                <span className="lineage-connector"></span>
+                <span className="lineage-origin">{extractBranchName(agent.handoffSource.originalBranch)}</span>
               </span>
             )}
             {hasTeleportFailure && (
@@ -775,10 +775,19 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     <div className="empty-state">No minions working</div>
                   )}
                   {(() => {
-                    const roots = sortedAgents.filter(a => !a.parentAgentId)
+                    // NEW: Handoff agents are now top-level, not nested under parents
+                    // We still show the parent-child relationship via visual indicators
+                    //
+                    // Root agents: no parentAgentId AND no handoffSource (original agents)
+                    // Handoff agents: have handoffSource (shown as top-level with lineage badge)
+                    // Child agents: have parentAgentId but no handoffSource (super minion subagents)
+
+                    const roots = sortedAgents.filter(a => !a.parentAgentId && !a.handoffSource)
+                    const handoffAgents = sortedAgents.filter(a => a.handoffSource)
+
                     const childrenMap: Record<string, AgentSession[]> = {}
                     sortedAgents.forEach(a => {
-                      if (a.parentAgentId) {
+                      if (a.parentAgentId && !a.handoffSource) {
                         if (!childrenMap[a.parentAgentId]) childrenMap[a.parentAgentId] = []
                         childrenMap[a.parentAgentId].push(a)
                       }
@@ -812,7 +821,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                         })
                       }
 
-                      // Render child agents
+                      // Render non-handoff child agents nested (super minion subagents)
                       const children = childrenMap[agent.id] || []
                       if (children.length > 0 && !collapsedSuperMinions.has(agent.id)) {
                         children.forEach(child => {
@@ -822,7 +831,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                       return items
                     }
 
-                    return roots.map(root => renderWithChildren(root))
+                    // Render original root agents with their children
+                    const rootItems = roots.flatMap(root => renderWithChildren(root))
+
+                    // Render handoff agents as top-level items (depth 0)
+                    // They display the lineage badge showing their origin
+                    const handoffItems = handoffAgents.map(agent => renderAgent(agent, project.path, 0))
+
+                    return [...rootItems, ...handoffItems]
                   })()}
                 </div>
               )}

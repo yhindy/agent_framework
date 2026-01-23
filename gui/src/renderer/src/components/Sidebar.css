@@ -532,21 +532,75 @@
 }
 
 /* ================================================
-   HANDOFF INDICATOR STYLES
+   HANDOFF LINEAGE STYLES
+   A subtle origin badge showing where this agent
+   was handed off from - visible but unobtrusive
    ================================================ */
 
-.handoff-indicator {
+.handoff-lineage-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin-left: 4px;
-  color: var(--accent-primary, #569cd6);
-  opacity: 0.7;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+  max-width: 100px;
+  overflow: hidden;
+}
+
+/* Small visual connector indicating lineage */
+.lineage-connector {
+  width: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-purple-alt) 100%);
+  opacity: 0.5;
   flex-shrink: 0;
 }
 
-.handoff-indicator:hover {
+/* Origin branch name - subtle, truncated */
+.lineage-origin {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-purple-alt);
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.02em;
+  transition: opacity var(--transition-fast);
+}
+
+/* Hover state reveals full opacity */
+.agent-item:hover .lineage-origin {
   opacity: 1;
+}
+
+.agent-item:hover .lineage-connector {
+  opacity: 0.8;
+}
+
+/* Active state - more prominent */
+.agent-item.active .lineage-origin {
+  opacity: 0.85;
+  color: var(--color-purple);
+}
+
+.agent-item.active .lineage-connector {
+  background: linear-gradient(90deg, transparent 0%, var(--color-purple) 100%);
+  opacity: 0.7;
+}
+
+/* Handoff agents get a subtle left border accent */
+.agent-item-container:has(.handoff-lineage-badge) .agent-item {
+  border-left: 2px solid rgba(197, 134, 192, 0.3);
+}
+
+.agent-item-container:has(.handoff-lineage-badge) .agent-item:hover {
+  border-left-color: rgba(197, 134, 192, 0.5);
+}
+
+.agent-item-container:has(.handoff-lineage-badge) .agent-item.active {
+  border-left-color: var(--color-purple-alt);
 }
 
 /* ================================================
@@ -839,5 +893,53 @@
 
 .sidebar.collapsed .settings-nav-item .nav-label {
   display: none !important;
+}
+
+/* ============================================
+   Handoff Lineage Badge
+   Shows origin branch for handed-off agents
+   ============================================ */
+
+.handoff-lineage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+  max-width: 100px;
+}
+
+.lineage-connector {
+  width: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #c586c0 100%);
+  opacity: 0.5;
+}
+
+.lineage-origin {
+  font-size: 10px;
+  font-weight: 500;
+  color: #c586c0;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+  transition: opacity 0.15s ease;
+}
+
+.agent-item:hover .lineage-origin {
+  opacity: 1;
+}
+
+/* Subtle left border for handoff agents */
+.agent-item-container:has(.handoff-lineage-badge) .agent-item {
+  border-left: 2px solid rgba(197, 134, 192, 0.3);
+  margin-left: -2px;
+}
+
+.agent-item-container:has(.handoff-lineage-badge) .agent-item:hover {
+  border-left-color: rgba(197, 134, 192, 0.6);
 }
 
