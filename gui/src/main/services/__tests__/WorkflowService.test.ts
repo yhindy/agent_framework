@@ -74,9 +74,9 @@ describe('WorkflowService', () => {
     it('should return default subagent types', () => {
       const types = service.getSubagentTypes()
       expect(types).toEqual(DEFAULT_SUBAGENT_TYPES)
-      expect(types).toHaveLength(6)
+      expect(types).toHaveLength(7)
       expect(types.map(t => t.id)).toEqual([
-        'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
+        'acceptance-criteria', 'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
       ])
     })
   })
@@ -110,7 +110,7 @@ describe('WorkflowService', () => {
     it('should return the default workflow', () => {
       const workflow = service.getActiveWorkflow('/some/project')
       expect(workflow).toEqual(DEFAULT_WORKFLOW)
-      expect(workflow.steps).toHaveLength(5)
+      expect(workflow.steps).toHaveLength(6)
     })
   })
 
@@ -512,8 +512,8 @@ describe('WorkflowService', () => {
 
         const types = service.getSubagentTypes()
 
-        // Should have 6 built-in + 2 imported
-        expect(types).toHaveLength(8)
+        // Should have 7 built-in + 2 imported
+        expect(types).toHaveLength(9)
       })
 
       it('should list built-in types first', () => {
@@ -522,12 +522,12 @@ describe('WorkflowService', () => {
 
         const types = service.getSubagentTypes()
 
-        // First 6 should be built-in
-        expect(types.slice(0, 6).map(t => t.id)).toEqual([
-          'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
+        // First 7 should be built-in (including acceptance-criteria)
+        expect(types.slice(0, 7).map(t => t.id)).toEqual([
+          'acceptance-criteria', 'Explore', 'Plan', 'general-purpose', 'debugger', 'code-simplifier', 'bold-frontend-designer'
         ])
         // Last 2 should be imported
-        expect(types.slice(6).map(t => t.id)).toEqual([
+        expect(types.slice(7).map(t => t.id)).toEqual([
           'imported:my-plugin:custom-agent',
           'imported:my-plugin:skill:my-skill'
         ])
