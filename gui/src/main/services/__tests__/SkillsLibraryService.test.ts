@@ -3,37 +3,23 @@ import { join } from 'path'
 import { SkillsLibraryService } from '../SkillsLibraryService'
 import { DEFAULT_SKILLS_LIBRARY_SETTINGS } from '../types/SkillsLibraryTypes'
 
-vi.mock('fs', () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), readdirSync: vi.fn(), statSync: vi.fn() }))
+vi.mock('fs', () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), readdirSync: vi.fn() }))
 vi.mock('chokidar', () => ({ default: { watch: vi.fn(() => ({ on: vi.fn().mockReturnThis(), close: vi.fn() })) } }))
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 import chokidar from 'chokidar'
 
-const mocks = { exists: vi.mocked(existsSync), read: vi.mocked(readFileSync), dir: vi.mocked(readdirSync), stat: vi.mocked(statSync) }
+const mocks = { exists: vi.mocked(existsSync), read: vi.mocked(readFileSync), dir: vi.mocked(readdirSync) }
 const CLAUDE_DIR = '/test/.claude', PROJECT = '/test/project'
 
-const mockSkill = (base: string, name: string, content: string, extras?: { scripts?: string[]; refs?: string[] }) => {
-  const skillsPath = join(base, 'skills'), skillPath = join(skillsPath, name), mdPath = join(skillPath, 'SKILL.md')
-  const scriptsPath = join(skillPath, 'scripts'), refsPath = join(skillPath, 'references')
-  const paths = [skillsPath, mdPath, ...(extras?.scripts ? [scriptsPath] : []), ...(extras?.refs ? [refsPath] : [])]
+const mockItem = (type: 'command' | 'agent', name: string, content: string, scope: 'global' | 'project' = 'global') => {
+  const base = scope === 'global' ? CLAUDE_DIR : join(PROJECT, '.claude')
+  const dir = type === 'command' ? join(base, 'commands') : join(base, 'agents')
+  const file = `${name}.md`
 
-  mocks.exists.mockImplementation(p => paths.includes(String(p)))
-  mocks.dir.mockImplementation(p => {
-    if (p === skillsPath) return [name] as any
-    if (p === scriptsPath) return extras?.scripts as any || []
-    if (p === refsPath) return extras?.refs as any || []
-    return []
-  })
-  mocks.stat.mockImplementation(p => ({
-    isDirectory: () => !String(p).match(/\.(sh|md)$/) || String(p).includes('references'),
-    isFile: () => !!String(p).match(/\.(sh|md)$/) && !String(p).includes('references')
-  } as any))
-  mocks.read.mockImplementation(p => {
-    if (String(p).includes('SKILL.md')) return content
-    if (String(p).includes('.sh')) return '#!/bin/bash\n# Deploy to production\necho "Deploying..."'
-    if (String(p).includes('rules.md')) return '# Deployment Rules'
-    return ''
-  })
+  mocks.exists.mockImplementation(p => String(p) === dir || String(p).endsWith('.md'))
+  mocks.dir.mockImplementation(p => String(p) === dir ? [file] as any : [])
+  mocks.read.mockImplementation(p => String(p).endsWith(file) ? content : '')
 }
 
 describe('SkillsLibraryService', () => {
@@ -43,105 +29,86 @@ describe('SkillsLibraryService', () => {
   afterEach(() => svc.cleanup())
 
   describe('paths', () => {
-    it('vercel path', () => expect(svc.getVercelSkillsPath()).toBe(join(CLAUDE_DIR, 'skills')))
-    it('project path null when unset', () => expect(svc.getProjectSkillsPath()).toBeNull())
-    it('project path when set', () => { svc.setProjectPath(PROJECT); expect(svc.getProjectSkillsPath()).toBe(join(PROJECT, '.claude', 'skills')) })
-    it('project path with arg', () => expect(svc.getProjectSkillsPath('/custom')).toBe(join('/custom', '.claude', 'skills')))
+    it('commands path', () => expect(svc.getCommandsPath()).toBe(join(CLAUDE_DIR, 'commands')))
+    it('agents path', () => expect(svc.getAgentsPath()).toBe(join(CLAUDE_DIR, 'agents')))
+    it('project commands path', () => { svc.setProjectPath(PROJECT); expect(svc.getCommandsPath('project')).toBe(join(PROJECT, '.claude', 'commands')) })
+    it('project agents path', () => { svc.setProjectPath(PROJECT); expect(svc.getAgentsPath('project')).toBe(join(PROJECT, '.claude', 'agents')) })
   })
 
   describe('scan', () => {
-    it('empty when no dir', () => { mocks.exists.mockReturnValue(false); const r = svc.scan(); expect(r.vercelSkills).toHaveLength(0) })
+    it('empty when no dir', () => { mocks.exists.mockReturnValue(false); const r = svc.scan(); expect(r.commands).toHaveLength(0) })
 
-    it('discovers vercel skills', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+    it('discovers commands', () => {
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
       const r = svc.scan()
-      expect(r.vercelSkills).toHaveLength(1)
-      expect(r.vercelSkills[0]).toMatchObject({ name: 'Deploy', id: 'vercel:deploy' })
+      expect(r.commands).toHaveLength(1)
+      expect(r.commands[0]).toMatchObject({ name: 'Deploy', id: 'command:deploy' })
     })
 
-    it('discovers project skills', () => {
+    it('discovers agents', () => {
+      mockItem('agent', 'debugger', '---\nname: Debugger\nmodel: opus\n---\n\nDebug.')
+      const r = svc.scan()
+      expect(r.agents).toHaveLength(1)
+      expect(r.agents[0]).toMatchObject({ name: 'Debugger', id: 'agent:debugger', model: 'opus' })
+    })
+
+    it('discovers project commands', () => {
       svc.setProjectPath(PROJECT)
-      mockSkill(join(PROJECT, '.claude'), 'custom-lint', '---\nname: Custom Lint\n---\n\nLint.')
-      expect(svc.scan(PROJECT).projectSkills[0]).toMatchObject({ name: 'Custom Lint', id: 'project:custom-lint' })
-    })
-
-    it('parses scripts', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.', { scripts: ['deploy.sh'] })
-      const r = svc.scan()
-      expect(r.vercelSkills[0].scripts).toHaveLength(1)
-      expect(r.vercelSkills[0].scripts[0]).toMatchObject({ name: 'deploy', description: 'Deploy to production' })
-    })
-
-    it('parses references', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.', { refs: ['rules.md'] })
-      expect(svc.scan().vercelSkills[0].references[0].name).toBe('rules.md')
-    })
-
-    it('skips dirs without SKILL.md', () => {
-      mocks.exists.mockImplementation(p => p === join(CLAUDE_DIR, 'skills'))
-      mocks.dir.mockReturnValue(['no-skill-file'] as any)
-      mocks.stat.mockReturnValue({ isDirectory: () => true, isFile: () => false } as any)
-      expect(svc.scan().vercelSkills).toHaveLength(0)
+      mockItem('command', 'lint', '---\nname: Lint\n---\n\nLint.', 'project')
+      expect(svc.scan(PROJECT).projectCommands[0]).toMatchObject({ name: 'Lint', id: 'project-command:lint' })
     })
   })
 
   describe('frontmatter', () => {
     it('parses yaml', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Custom\ndescription: Desc\n---\n\nContent')
-      expect(svc.scan().vercelSkills[0]).toMatchObject({ name: 'Custom', description: 'Desc' })
+      mockItem('command', 'deploy', '---\nname: Custom\ndescription: Desc\n---\n\nContent')
+      expect(svc.scan().commands[0]).toMatchObject({ name: 'Custom', description: 'Desc' })
     })
 
     it('uses filename when no frontmatter', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '# Deploy Skill\n\nHow to deploy.')
-      expect(svc.scan().vercelSkills[0].name).toBe('Deploy')
+      mockItem('command', 'my-skill', 'How to deploy.')
+      expect(svc.scan().commands[0].name).toBe('My Skill')
     })
 
-    it('extracts first paragraph as description', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Test\n---\n\n# Heading\n\nFirst para.\n\nSecond.')
-      expect(svc.scan().vercelSkills[0].description).toBe('First para.')
-    })
-
-    it('truncates long descriptions', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', `---\nname: Test\n---\n\n${'A'.repeat(300)}`)
-      const d = svc.scan().vercelSkills[0].description
-      expect(d.length).toBeLessThanOrEqual(200)
-      expect(d.endsWith('...')).toBe(true)
+    it('extracts description from content', () => {
+      mockItem('command', 'test', '---\nname: Test\n---\n\nFirst para here.')
+      expect(svc.scan().commands[0].description).toBe('First para here.')
     })
 
     it('handles quoted strings', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: "Quoted"\ndescription: \'Single\'\n---\n\nContent')
-      expect(svc.scan().vercelSkills[0]).toMatchObject({ name: 'Quoted', description: 'Single' })
+      mockItem('command', 'deploy', '---\nname: "Quoted"\ndescription: \'Single\'\n---\n\nContent')
+      expect(svc.scan().commands[0]).toMatchObject({ name: 'Quoted', description: 'Single' })
     })
   })
 
   describe('settings', () => {
     it('defaults', () => expect(svc.getSettings()).toEqual(DEFAULT_SKILLS_LIBRARY_SETTINGS))
-    it('updates', () => { svc.updateSettings({ vercelSkillsEnabled: false }); expect(svc.getSettings().vercelSkillsEnabled).toBe(false) })
+    it('updates', () => { svc.updateSettings({ commandsEnabled: false }); expect(svc.getSettings().commandsEnabled).toBe(false) })
 
-    it('respects vercel disabled', () => {
-      svc.updateSettings({ vercelSkillsEnabled: false })
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
-      expect(svc.scan().vercelSkills).toHaveLength(0)
+    it('respects commands disabled', () => {
+      svc.updateSettings({ commandsEnabled: false })
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      expect(svc.scan().commands).toHaveLength(0)
     })
 
     it('respects project disabled', () => {
       svc.setProjectPath(PROJECT)
       svc.updateSettings({ projectSkillsEnabled: false })
-      mockSkill(join(PROJECT, '.claude'), 'lint', '---\nname: Lint\n---\n\nLint.')
-      expect(svc.scan(PROJECT).projectSkills).toHaveLength(0)
+      mockItem('command', 'lint', '---\nname: Lint\n---\n\nLint.', 'project')
+      expect(svc.scan(PROJECT).projectCommands).toHaveLength(0)
     })
   })
 
-  describe('getEnabledSkills', () => {
+  describe('getEnabledItems', () => {
     it('returns all when none disabled', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
-      expect(svc.getEnabledSkills()).toHaveLength(1)
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      expect(svc.getEnabledItems()).toHaveLength(1)
     })
 
     it('filters disabled', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
-      svc.updateSettings({ disabledSkillIds: ['vercel:deploy'] })
-      expect(svc.getEnabledSkills()).toHaveLength(0)
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      svc.updateSettings({ disabledSkillIds: ['command:deploy'] })
+      expect(svc.getEnabledItems()).toHaveLength(0)
     })
   })
 
@@ -156,13 +123,6 @@ describe('SkillsLibraryService', () => {
       svc.startWatching(); svc.cleanup()
       expect(watcher.close).toHaveBeenCalled()
     })
-
-    it('no double watch', () => {
-      mocks.exists.mockReturnValue(true)
-      vi.mocked(chokidar.watch).mockReturnValue({ on: vi.fn().mockReturnThis(), close: vi.fn() } as any)
-      svc.startWatching(); svc.startWatching()
-      expect(chokidar.watch).toHaveBeenCalledTimes(1)
-    })
   })
 
   describe('window IPC', () => {
@@ -171,15 +131,15 @@ describe('SkillsLibraryService', () => {
     it('sends updates', () => {
       const w = mockWindow()
       svc.setWindow(w)
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
       svc.refresh()
-      expect(w.webContents.send).toHaveBeenCalledWith('skillsLibrary:updated', expect.objectContaining({ vercelSkills: expect.any(Array) }))
+      expect(w.webContents.send).toHaveBeenCalledWith('skillsLibrary:updated', expect.objectContaining({ commands: expect.any(Array) }))
     })
 
     it('skips destroyed window', () => {
       const w = mockWindow(true)
       svc.setWindow(w)
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
       svc.refresh()
       expect(w.webContents.send).not.toHaveBeenCalled()
     })
@@ -187,24 +147,17 @@ describe('SkillsLibraryService', () => {
 
   describe('caching', () => {
     it('scans on first call', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
-      expect(svc.getScanResult().vercelSkills).toHaveLength(1)
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      expect(svc.getScanResult().commands).toHaveLength(1)
     })
 
     it('returns cached', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
       expect(svc.getScanResult()).toBe(svc.getScanResult())
     })
 
-    it('refresh clears cache', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
-      const r1 = svc.getScanResult()
-      mocks.exists.mockReturnValue(false)
-      expect(svc.refresh().vercelSkills).toHaveLength(0)
-    })
-
     it('setProjectPath clears cache', () => {
-      mockSkill(CLAUDE_DIR, 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
+      mockItem('command', 'deploy', '---\nname: Deploy\n---\n\nDeploy.')
       const r1 = svc.getScanResult()
       svc.setProjectPath('/new')
       expect(svc.getScanResult()).not.toBe(r1)

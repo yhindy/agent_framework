@@ -2,91 +2,37 @@ import { ScanError } from './ClaudeConfigTypes'
 export type { SkillsLibrarySettings } from '../../../shared/types/settings'
 import { DEFAULT_SETTINGS } from '../../../shared/types/settings'
 
-export type SkillSourceType = 'claude-plugin' | 'vercel-skill' | 'project-skill'
+export type SourceType = 'command' | 'agent' | 'plugin'
+export type Scope = 'global' | 'project'
 
-export interface SkillSource {
-  type: SkillSourceType
-  name: string
-  path: string
+export interface ItemSource { type: SourceType; scope: Scope; path: string }
+
+export interface ItemDefinition {
+  id: string; name: string; description: string; source: ItemSource
+  filePath: string; promptContent: string
+  model?: string; color?: string
 }
 
-export interface SkillScript {
-  name: string
-  filename: string
-  path: string
-  content: string
-  description?: string
-}
-
-export interface SkillReference {
-  name: string
-  path: string
-  content: string
-}
-
-export interface SkillDefinition {
-  id: string
-  name: string
-  description: string
-  source: SkillSource
-  filePath: string
-  promptContent: string
-  scripts: SkillScript[]
-  references: SkillReference[]
-  overrides?: string
-}
-
-export interface SkillMdFrontmatter {
-  name?: string
-  description?: string
-  triggers?: string[]
-  model?: string
-  tools?: string[]
-  [key: string]: unknown
-}
-
-export interface SkillsLibraryScanResult {
-  vercelSkills: SkillDefinition[]
-  projectSkills: SkillDefinition[]
-  errors: ScanError[]
-  lastScanned: string
-}
-
-export interface UnifiedSkill {
-  id: string
-  name: string
-  description: string
-  sourceType: SkillSourceType
-  sourceName: string
-  filePath: string
-  promptContent: string
-  scripts: SkillScript[]
-  references: SkillReference[]
-  overrides?: string
-  isOverridden?: boolean
-  overriddenBy?: string
+export interface UnifiedItem extends ItemDefinition {
   enabled: boolean
+  overrides?: string; isOverridden?: boolean; overriddenBy?: string
 }
 
-export interface SkillsBySource {
-  claudePlugins: UnifiedSkill[]
-  vercelSkills: UnifiedSkill[]
-  projectSkills: UnifiedSkill[]
+export interface ItemsBySource {
+  commands: UnifiedItem[]; agents: UnifiedItem[]; plugins: UnifiedItem[]
+  projectCommands: UnifiedItem[]; projectAgents: UnifiedItem[]
 }
 
-export interface SkillOverride {
-  overridingSkillId: string
-  overriddenSkillId: string
-  overridingName: string
-  overriddenName: string
+export interface LibraryScanResult {
+  commands: ItemDefinition[]; agents: ItemDefinition[]
+  projectCommands: ItemDefinition[]; projectAgents: ItemDefinition[]
+  errors: ScanError[]; lastScanned: string
 }
 
-export interface UnifiedSkillsScanResult {
-  skills: UnifiedSkill[]
-  skillsBySource: SkillsBySource
-  overrides: SkillOverride[]
-  errors: ScanError[]
-  lastScanned: string
+export interface UnifiedScanResult {
+  items: UnifiedItem[]; itemsBySource: ItemsBySource
+  overrides: { overridingId: string; overriddenId: string }[]
+  errors: ScanError[]; lastScanned: string
 }
 
 export const DEFAULT_SKILLS_LIBRARY_SETTINGS = DEFAULT_SETTINGS.skillsLibrary

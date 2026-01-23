@@ -2,19 +2,16 @@ import { BrowserWindow } from 'electron'
 import { createLogger } from './logger'
 import { ClaudeConfigService } from './ClaudeConfigService'
 import { SkillsLibraryService } from './SkillsLibraryService'
-import { ImportedSubagentType, ScanError } from './types/ClaudeConfigTypes'
-import {
-  UnifiedSkill, SkillsBySource, UnifiedSkillsScanResult, SkillOverride,
-  SkillDefinition, SkillSourceType
-} from './types/SkillsLibraryTypes'
+import { ScanError } from './types/ClaudeConfigTypes'
+import { UnifiedItem, ItemsBySource, UnifiedScanResult, ItemDefinition, SourceType } from './types/SkillsLibraryTypes'
 import { SubagentType } from './types/WorkflowTypes'
 
 const log = createLogger('UnifiedSkillsService')
-const PRIORITY: Record<SkillSourceType, number> = { 'project-skill': 0, 'vercel-skill': 1, 'claude-plugin': 2 }
+const PRIORITY: Record<string, number> = { 'project-command': 0, 'project-agent': 1, 'command': 2, 'agent': 3, 'plugin': 4 }
 
 export class UnifiedSkillsService {
   private mainWindow: BrowserWindow | null = null
-  private cachedResult: UnifiedSkillsScanResult | null = null
+  private cachedResult: UnifiedScanResult | null = null
 
   constructor(private claudeConfig: ClaudeConfigService, private skillsLib: SkillsLibraryService) {}
 
@@ -22,59 +19,53 @@ export class UnifiedSkillsService {
   setProjectPath(p: string | null) { this.skillsLib.setProjectPath(p); this.cachedResult = null }
   getScanResult(p?: string) { return this.cachedResult || this.scan(p) }
 
-  scan(projectPath?: string): UnifiedSkillsScanResult {
+  scan(projectPath?: string): UnifiedScanResult {
     const errors: ScanError[] = []
     const libResult = this.skillsLib.getScanResult(projectPath)
     errors.push(...libResult.errors)
 
-    const allSkills: UnifiedSkill[] = [
-      ...this.getClaudePluginSkills(),
-      ...this.toUnified(libResult.vercelSkills, 'vercel-skill'),
-      ...this.toUnified(libResult.projectSkills, 'project-skill')
+    const toUnified = (items: ItemDefinition[], type: string): UnifiedItem[] => {
+      const { disabledSkillIds } = this.skillsLib.getSettings()
+      return items.map(i => ({ ...i, enabled: !disabledSkillIds.includes(i.id) }))
+    }
+
+    const allItems: UnifiedItem[] = [
+      ...toUnified(libResult.commands, 'command'),
+      ...toUnified(libResult.agents, 'agent'),
+      ...toUnified(libResult.projectCommands, 'project-command'),
+      ...toUnified(libResult.projectAgents, 'project-agent'),
+      ...this.getPluginItems()
     ]
 
-    const { skills, overrides } = this.resolveOverrides(allSkills)
-    const skillsBySource = this.groupBySource(skills)
+    const { items, overrides } = this.resolveOverrides(allItems)
+    const itemsBySource = this.groupBySource(items)
 
-    return this.cachedResult = { skills, skillsBySource, overrides, errors, lastScanned: new Date().toISOString() }
+    return this.cachedResult = { items, itemsBySource, overrides, errors, lastScanned: new Date().toISOString() }
   }
 
-  private getClaudePluginSkills(): UnifiedSkill[] {
+  private getPluginItems(): UnifiedItem[] {
     const { disabledAgentIds } = this.claudeConfig.getSettings()
     return this.claudeConfig.getEnabledImports().map(i => ({
-      id: i.id, name: i.name, description: i.description, sourceType: 'claude-plugin' as const,
-      sourceName: i.source.pluginName, filePath: i.filePath || '', promptContent: i.promptContent || '',
-      scripts: [], references: [], enabled: !disabledAgentIds.includes(i.id)
+      id: i.id, name: i.name, description: i.description,
+      source: { type: 'plugin' as SourceType, scope: 'global' as const, path: i.filePath || '' },
+      filePath: i.filePath || '', promptContent: i.promptContent || '',
+      enabled: !disabledAgentIds.includes(i.id)
     }))
   }
 
-  private toUnified(skills: SkillDefinition[], sourceType: SkillSourceType): UnifiedSkill[] {
-    const { disabledSkillIds } = this.skillsLib.getSettings()
-    return skills.map(s => ({
-      id: s.id, name: s.name, description: s.description, sourceType, sourceName: s.source.name,
-      filePath: s.filePath, promptContent: s.promptContent, scripts: s.scripts, references: s.references,
-      enabled: !disabledSkillIds.includes(s.id)
-    }))
-  }
-
-  private resolveOverrides(skills: UnifiedSkill[]): { skills: UnifiedSkill[]; overrides: SkillOverride[] } {
-    const overrides: SkillOverride[] = []
-    const byName = new Map<string, UnifiedSkill[]>()
+  private resolveOverrides(items: UnifiedItem[]): { items: UnifiedItem[]; overrides: { overridingId: string; overriddenId: string }[] } {
+    const overrides: { overridingId: string; overriddenId: string }[] = []
+    const byName = new Map<string, UnifiedItem[]>()
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
-    for (const s of skills) {
-      const key = norm(s.name)
-      byName.set(key, [...(byName.get(key) || []), s])
-    }
+    for (const i of items) byName.set(norm(i.name), [...(byName.get(norm(i.name)) || []), i])
 
     const resolved = [...byName.values()].flatMap(group => {
       if (group.length === 1) return group
-      const sorted = [...group].sort((a, b) => PRIORITY[a.sourceType] - PRIORITY[b.sourceType])
+      const sorted = [...group].sort((a, b) => (PRIORITY[a.id.split(':')[0]] ?? 9) - (PRIORITY[b.id.split(':')[0]] ?? 9))
       const [winner, ...losers] = sorted
 
-      for (const loser of losers) {
-        overrides.push({ overridingSkillId: winner.id, overriddenSkillId: loser.id, overridingName: winner.name, overriddenName: loser.name })
-      }
+      for (const loser of losers) overrides.push({ overridingId: winner.id, overriddenId: loser.id })
 
       return [
         { ...winner, overrides: losers[0]?.id },
@@ -82,18 +73,20 @@ export class UnifiedSkillsService {
       ]
     })
 
-    return { skills: resolved, overrides }
+    return { items: resolved, overrides }
   }
 
-  private groupBySource(skills: UnifiedSkill[]): SkillsBySource {
+  private groupBySource(items: UnifiedItem[]): ItemsBySource {
     return {
-      claudePlugins: skills.filter(s => s.sourceType === 'claude-plugin'),
-      vercelSkills: skills.filter(s => s.sourceType === 'vercel-skill'),
-      projectSkills: skills.filter(s => s.sourceType === 'project-skill')
+      commands: items.filter(i => i.id.startsWith('command:')),
+      agents: items.filter(i => i.id.startsWith('agent:')),
+      plugins: items.filter(i => i.id.startsWith('imported:')),
+      projectCommands: items.filter(i => i.id.startsWith('project-command:')),
+      projectAgents: items.filter(i => i.id.startsWith('project-agent:'))
     }
   }
 
-  refresh(projectPath?: string): UnifiedSkillsScanResult {
+  refresh(projectPath?: string): UnifiedScanResult {
     this.claudeConfig.refresh(); this.skillsLib.refresh(projectPath)
     const result = this.scan(projectPath)
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -102,23 +95,21 @@ export class UnifiedSkillsService {
     return result
   }
 
-  getEnabledSkills(p?: string) { return this.getScanResult(p).skills.filter(s => s.enabled && !s.isOverridden) }
-  getEnabledSkillsAsSubagentTypes(p?: string): SubagentType[] {
-    return this.getEnabledSkills(p).map(({ id, name, description }) => ({ id, name, description }))
+  getEnabledItems(p?: string) { return this.getScanResult(p).items.filter(i => i.enabled && !i.isOverridden) }
+  getEnabledAsSubagentTypes(p?: string): SubagentType[] {
+    return this.getEnabledItems(p).map(({ id, name, description }) => ({ id, name, description }))
   }
-  getSkillById(id: string, p?: string) { return this.getScanResult(p).skills.find(s => s.id === id) }
+  getItemById(id: string, p?: string) { return this.getScanResult(p).items.find(i => i.id === id) }
 
-  setSkillEnabled(skillId: string, enabled: boolean) {
-    const toggle = (ids: string[]) => enabled ? ids.filter(id => id !== skillId) : [...ids, skillId]
+  setItemEnabled(id: string, enabled: boolean) {
+    const toggle = (ids: string[]) => enabled ? ids.filter(i => i !== id) : [...ids, id]
 
-    if (skillId.startsWith('vercel:') || skillId.startsWith('project:')) {
-      const s = this.skillsLib.getSettings()
-      this.skillsLib.updateSettings({ disabledSkillIds: toggle(s.disabledSkillIds) })
-    } else if (skillId.startsWith('imported:')) {
+    if (id.startsWith('imported:')) {
       const s = this.claudeConfig.getSettings()
       this.claudeConfig.updateSettings({ disabledAgentIds: toggle(s.disabledAgentIds) })
     } else {
-      log.warn(`Unknown skill ID format: ${skillId}`)
+      const s = this.skillsLib.getSettings()
+      this.skillsLib.updateSettings({ disabledSkillIds: toggle(s.disabledSkillIds) })
     }
     this.cachedResult = null
   }
