@@ -78,6 +78,26 @@ interface TeleportFailure {
   timestamp: number
 }
 
+/**
+ * Helper to remove an item from a Set, returning the same reference if item wasn't present.
+ */
+function removeFromSet<T>(set: Set<T>, item: T): Set<T> {
+  if (!set.has(item)) return set
+  const next = new Set(set)
+  next.delete(item)
+  return next
+}
+
+/**
+ * Helper to add an item to a Set, returning the same reference if item was already present.
+ */
+function addToSet<T>(set: Set<T>, item: T): Set<T> {
+  if (set.has(item)) return set
+  const next = new Set(set)
+  next.add(item)
+  return next
+}
+
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -85,6 +105,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
+  const [acknowledgedWaitingAgents, setAcknowledgedWaitingAgents] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('collapsedSuperMinions')
@@ -205,28 +226,28 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     const unsubStateChanged = window.electronAPI.onAgentStateChanged((agentId, state) => {
       console.log('[Sidebar] State changed:', agentId, state)
 
-      setWaitingAgents(prev => {
-        const next = new Set(prev)
-        if (state === 'waiting') {
-          next.add(agentId)
-        } else {
-          next.delete(agentId)
-        }
-        return next
-      })
+      if (state === 'waiting') {
+        // Clear acknowledgment so notification shows for new waiting event
+        setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
+        setWaitingAgents(prev => addToSet(prev, agentId))
+      } else {
+        setWaitingAgents(prev => removeFromSet(prev, agentId))
+      }
     })
 
     // Listen for plain terminal waiting state changes
     const unsubPlainWaiting = window.electronAPI.onPlainTerminalWaitingForInput((terminalId) => {
-      setWaitingPlainTerminals(prev => new Set([...prev, terminalId]))
+      // Extract agentId from terminalId (format: "agentId-plain-N" or similar)
+      const parts = terminalId.split('-')
+      const agentId = parts.slice(0, -1).join('-')  // Remove last part to get agentId
+
+      // Clear acknowledgment so notification shows for new waiting event
+      setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
+      setWaitingPlainTerminals(prev => addToSet(prev, terminalId))
     })
 
     const unsubPlainResumed = window.electronAPI.onPlainTerminalResumedWork((terminalId) => {
-      setWaitingPlainTerminals(prev => {
-        const next = new Set(prev)
-        next.delete(terminalId)
-        return next
-      })
+      setWaitingPlainTerminals(prev => removeFromSet(prev, terminalId))
     })
 
     // Listen for teleport validation failures
@@ -410,8 +431,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const handleAgentClick = async (agent: AgentSession, projectPath: string) => {
     localStorage.setItem('lastSelectedProjectPath', projectPath)
     await window.electronAPI.clearUnread(agent.id)
-    const route = agent.isSuperMinion 
-      ? `/workspace/super/${agent.id}` 
+
+    // Acknowledge waiting notification when clicking on a waiting agent
+    if (isAgentWaitingForInput(agent.id)) {
+      setAcknowledgedWaitingAgents(prev => addToSet(prev, agent.id))
+    }
+
+    const route = agent.isSuperMinion
+      ? `/workspace/super/${agent.id}`
       : `/workspace/agent/${agent.id}`
     handleNavigate(route)
     loadAllAgents() // Refresh to clear unread badge
@@ -514,13 +541,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const renderAgent = (agent: AgentSession, projectPath: string, depth = 0) => {
     const isActive = activeAgentId === agent.id
     const isWaiting = isAgentWaitingForInput(agent.id)
+    const isAcknowledged = acknowledgedWaitingAgents.has(agent.id)
     const isCursor = agent.tool === 'cursor'
     const teleportFailure = getTeleportFailure(agent)
     const hasTeleportFailure = !!teleportFailure
     const showSpinner = !isCursor && agent.terminalPid && !isWaiting && !hasTeleportFailure
     const isCollapsed = collapsedSuperMinions.has(agent.id)
     const showUnreadBadge = agent.hasUnread && !isWaiting && !hasTeleportFailure
-    const showAttentionBadge = isWaiting && !isActive && !hasTeleportFailure
+    const showAttentionBadge = isWaiting && !isActive && !isAcknowledged && !hasTeleportFailure
 
     const handleAgentItemClick = () => handleAgentClick(agent, projectPath)
 
@@ -552,7 +580,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     const classNames = [
       'agent-item',
       isActive && 'active',
-      isWaiting && 'waiting',
+      isWaiting && !isAcknowledged && 'waiting',  // Only show waiting style if not acknowledged
       hasTeleportFailure && 'failed',
       agent.isSuperMinion && 'super-minion',
       agent.isBaseBranchAgent && 'base-branch'
