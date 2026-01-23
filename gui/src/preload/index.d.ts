@@ -45,6 +45,8 @@ declare const api: {
     stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<any>;
     stopAllPRPolling: (subscriberId: string) => Promise<any>;
     refreshPRNow: (assignmentId: string) => Promise<any>;
+    forceRefreshPR: (assignmentId: string) => Promise<{ found: boolean; prUrl?: string; prStatus?: string } | null>;
+    onPRCreated: (callback: (data: { assignmentId: string; prUrl: string; prStatus: string }) => void) => () => Electron.IpcRenderer;
     checkDependencies: () => Promise<any>;
     onAgentListUpdate: (callback: () => void) => () => Electron.IpcRenderer;
     onAssignmentsUpdate: (callback: () => void) => () => Electron.IpcRenderer;

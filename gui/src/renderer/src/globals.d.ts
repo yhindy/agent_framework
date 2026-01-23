@@ -64,6 +64,14 @@ declare global {
       stopPRPolling: (assignmentId: string, subscriberId: string) => Promise<void>
       stopAllPRPolling: (subscriberId: string) => Promise<void>
       refreshPRNow: (assignmentId: string) => Promise<void>
+      forceRefreshPR: (assignmentId: string) => Promise<{
+        found: boolean
+        prUrl?: string
+        prStatus?: string
+      } | null>
+
+      // PR Event Listeners
+      onPRCreated: (callback: (data: { assignmentId: string; prUrl: string; prStatus: string }) => void) => () => void
 
       checkDependencies: () => Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }>
 

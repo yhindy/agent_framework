@@ -19,17 +19,30 @@ interface CachedPRStatus {
   status: string
   timestamp: number
   mergedAt?: string
+  isError?: boolean
 }
 
 /**
  * PRPollingService manages automatic polling of PR status across the application.
  * It deduplicates requests so that multiple components watching the same PR
- * result in only a single GitHub API call every 30 seconds.
+ * result in only a single GitHub API call.
  *
- * Uses intelligent polling intervals based on PR age:
+ * Key features:
+ * - Subscription-based polling (components subscribe/unsubscribe with unique IDs)
+ * - Adaptive polling intervals based on PR age
+ * - Differentiated caching for found/not-found/error results
+ * - In-flight request deduplication
+ * - Rate limit detection with automatic backoff
+ *
+ * Polling intervals (based on PR age):
  * - New PRs (< 5 min): 30 seconds
  * - Recent PRs (5-60 min): 90 seconds
  * - Stale PRs (> 60 min): 5 minutes
+ *
+ * Cache TTLs:
+ * - Found PRs: 5 minutes
+ * - Not found: 30 seconds
+ * - API errors: 10 seconds
  */
 export class PRPollingService {
   private mainWindow: BrowserWindow
@@ -48,7 +61,14 @@ export class PRPollingService {
   // Rate limiting state
   private rateLimitedUntil: number = 0
   private rateLimitBackoffMs: number = 10 * 60 * 1000 // 10 minutes
-  private cacheTtlMs: number = 5 * 60 * 1000 // 5 minutes cache TTL
+
+  // Differentiated cache TTLs
+  private readonly POSITIVE_CACHE_TTL_MS = 5 * 60 * 1000  // 5 minutes for found PRs
+  private readonly NEGATIVE_CACHE_TTL_MS = 30 * 1000      // 30 seconds for not-found
+  private readonly ERROR_CACHE_TTL_MS = 10 * 1000         // 10 seconds for API errors
+
+  // Track in-flight detection requests
+  private inFlightDetection: Map<string, Promise<void>> = new Map()
 
   constructor(mainWindow: BrowserWindow, agentService: AgentService) {
     this.mainWindow = mainWindow
@@ -137,24 +157,177 @@ export class PRPollingService {
   }
 
   /**
-   * Manually refresh PR status immediately
+   * Manually refresh PR status immediately.
+   * Works even without an active polling job.
    */
   async refreshPRNow(assignmentId: string): Promise<void> {
-    const job = this.pollingJobs.get(assignmentId)
-    if (!job) return
-
-    // Mark as manual refresh to bypass backoff
-    job.isManualRefresh = true
-    job.errorCount = 0 // Reset error count on manual refresh
-
     // Clear cache to force fresh API call
     this.prStatusCache.delete(assignmentId)
 
-    // Execute check immediately
-    await this.executePollingCheck(job)
+    const job = this.pollingJobs.get(assignmentId)
+    if (job) {
+      // Mark as manual refresh to bypass backoff
+      job.isManualRefresh = true
+      job.errorCount = 0 // Reset error count on manual refresh
 
-    // Reschedule polling
-    this.scheduleNextPoll(job)
+      // Execute check immediately
+      await this.executePollingCheck(job)
+
+      // Reschedule polling
+      this.scheduleNextPoll(job)
+    } else {
+      // No active polling job, but still perform a one-off check
+      await this.performOneOffCheck(assignmentId)
+    }
+  }
+
+  /**
+   * Perform a one-off PR status check without starting polling.
+   * Used for manual refresh when no polling job exists.
+   */
+  private async performOneOffCheck(assignmentId: string): Promise<void> {
+    // Find project path
+    const projectPath = await this.findProjectPathForAssignment(assignmentId)
+    if (!projectPath) return
+
+    try {
+      const result = await this.agentService.checkPullRequestStatus(
+        projectPath,
+        assignmentId,
+        { silent: true }
+      )
+
+      if (!result.error) {
+        // Cache the result
+        this.prStatusCache.set(assignmentId, {
+          status: result.status,
+          timestamp: Date.now(),
+          mergedAt: result.mergedAt
+        })
+
+        // Emit update event to refresh UI
+        if (!this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('assignments:updated')
+        }
+      } else {
+        // Cache error briefly
+        this.prStatusCache.set(assignmentId, {
+          status: 'ERROR',
+          timestamp: Date.now(),
+          isError: true
+        })
+      }
+    } catch (error: any) {
+      log.warn(`One-off PR check failed for ${assignmentId}:`, error.message)
+      this.prStatusCache.set(assignmentId, {
+        status: 'ERROR',
+        timestamp: Date.now(),
+        isError: true
+      })
+    }
+  }
+
+  /**
+   * Handle notification that a PR was just created.
+   * Clears cache and uses retry logic to detect the PR (handles GitHub indexing lag).
+   *
+   * @param projectPath - Path to the project
+   * @param assignmentId - Assignment ID
+   * @returns Promise that resolves when detection completes (non-blocking)
+   */
+  async onPRCreated(projectPath: string, assignmentId: string): Promise<void> {
+    log.info(`onPRCreated: Starting detection for ${assignmentId}`)
+
+    const inFlight = this.inFlightDetection.get(assignmentId)
+    if (inFlight) {
+      log.info(`onPRCreated: Detection already in-flight for ${assignmentId}`)
+      return inFlight
+    }
+
+    this.prStatusCache.delete(assignmentId)
+    this.agentService.clearPRDetectionCache(projectPath, assignmentId)
+
+    const detectionPromise = (async () => {
+      try {
+        const result = await this.agentService.detectExistingPullRequestWithRetry(
+          projectPath,
+          assignmentId,
+          3
+        )
+
+        if (result?.found) {
+          log.info(`onPRCreated: PR detected for ${assignmentId}:`, result.prUrl)
+          this.prStatusCache.set(assignmentId, {
+            status: result.prStatus || 'OPEN',
+            timestamp: Date.now()
+          })
+          this.notifyPRCreated(assignmentId, result.prUrl, result.prStatus)
+        } else {
+          log.warn(`onPRCreated: PR not found after retries for ${assignmentId}`)
+        }
+      } catch (error: any) {
+        log.error(`onPRCreated: Error detecting PR for ${assignmentId}:`, error.message)
+      } finally {
+        this.inFlightDetection.delete(assignmentId)
+      }
+    })()
+
+    this.inFlightDetection.set(assignmentId, detectionPromise)
+    return detectionPromise
+  }
+
+  /**
+   * Notify the UI that a PR was created or detected.
+   */
+  private notifyPRCreated(assignmentId: string, prUrl?: string, prStatus?: string): void {
+    if (this.mainWindow.isDestroyed()) return
+    this.mainWindow.webContents.send('pr:created', { assignmentId, prUrl, prStatus })
+    this.mainWindow.webContents.send('assignments:updated')
+  }
+
+  /**
+   * Force refresh PR status for an assignment, bypassing all caches.
+   * Used when navigating to an agent view to ensure fresh data.
+   *
+   * @param assignmentId - Assignment ID
+   * @returns The detection result
+   */
+  async forceRefreshPR(assignmentId: string): Promise<{
+    found: boolean
+    prUrl?: string
+    prStatus?: string
+  } | null> {
+    // Clear cache
+    this.prStatusCache.delete(assignmentId)
+
+    // Find project path
+    const projectPath = await this.findProjectPathForAssignment(assignmentId)
+    if (!projectPath) return null
+
+    // Clear agent service cache too
+    this.agentService.clearPRDetectionCache(projectPath, assignmentId)
+
+    // Perform detection with force flag
+    const result = await this.agentService.detectExistingPullRequest(
+      projectPath,
+      assignmentId,
+      { force: true }
+    )
+
+    if (result?.found) {
+      // Cache the result
+      this.prStatusCache.set(assignmentId, {
+        status: result.prStatus || 'OPEN',
+        timestamp: Date.now()
+      })
+
+      // Emit update event
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('assignments:updated')
+      }
+    }
+
+    return result
   }
 
   /**
@@ -207,14 +380,23 @@ export class PRPollingService {
   }
 
   /**
-   * Check if there's a fresh cached PR status
+   * Get the appropriate cache TTL based on the cached result type.
+   */
+  private getCacheTTL(cached: CachedPRStatus): number {
+    if (cached.isError) return this.ERROR_CACHE_TTL_MS
+    const isKnownStatus = ['OPEN', 'MERGED', 'CLOSED'].includes(cached.status)
+    return isKnownStatus ? this.POSITIVE_CACHE_TTL_MS : this.NEGATIVE_CACHE_TTL_MS
+  }
+
+  /**
+   * Check if there's a fresh cached PR status.
+   * Uses differentiated TTLs based on status type.
    */
   private getCachedPRStatus(assignmentId: string): CachedPRStatus | null {
     const cached = this.prStatusCache.get(assignmentId)
     if (!cached) return null
 
-    // Return cache if still fresh
-    if (Date.now() - cached.timestamp < this.cacheTtlMs) {
+    if (Date.now() - cached.timestamp < this.getCacheTTL(cached)) {
       return cached
     }
 
@@ -271,6 +453,12 @@ export class PRPollingService {
 
       if (result.error) {
         this.handlePollingError(job, result.error)
+        // Cache error briefly
+        this.prStatusCache.set(job.assignmentId, {
+          status: 'ERROR',
+          timestamp: Date.now(),
+          isError: true
+        })
       } else {
         // Success - reset error count
         job.errorCount = 0
@@ -281,7 +469,7 @@ export class PRPollingService {
           job.prCreatedAt = new Date(result.createdAt).getTime()
         }
 
-        // Cache the result
+        // Cache the result (positive cache)
         this.prStatusCache.set(job.assignmentId, {
           status: result.status,
           timestamp: Date.now(),
@@ -376,5 +564,6 @@ export class PRPollingService {
     this.pollingJobs.clear()
     this.subscriptions.clear()
     this.prStatusCache.clear()
+    this.inFlightDetection.clear()
   }
 }

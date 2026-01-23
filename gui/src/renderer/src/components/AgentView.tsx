@@ -130,6 +130,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
       }
     })
 
+    // Listen for PR created events
+    const unsubscribePRCreated = window.electronAPI.onPRCreated((data) => {
+      if (assignment && data.assignmentId === assignment.id) {
+        // Reload agent data to get updated PR info
+        loadAgentData()
+      }
+    })
+
     return () => {
       unsubscribeUpdate()
       unsubscribeStarted()
@@ -137,8 +145,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
       unsubscribeExited()
       unsubscribeTeleportFailed()
       unsubscribeResumeFailed()
+      unsubscribePRCreated()
     }
-  }, [agentId])
+  }, [agentId, assignment?.id])
 
   // Save UI state when it changes
   useEffect(() => {
@@ -204,10 +213,11 @@ function AgentView({ activeProjects }: AgentViewProps) {
     setAgent(agentData)
     setAssignment(assignmentData)
 
-    // Auto-detect PR if assignment exists but no prUrl
+    // Auto-detect PR if assignment exists but no prUrl (use force refresh to bypass cache)
     if (assignmentData && !assignmentData.prUrl && !assignmentData.isBaseBranchAgent) {
       try {
-        const result = await window.electronAPI.detectPullRequest(assignmentData.id)
+        // Use forceRefreshPR to bypass cache when navigating to agent view
+        const result = await window.electronAPI.forceRefreshPR(assignmentData.id)
         if (result?.found && result.prUrl) {
           // Find the project that contains this agent
           for (const project of activeProjects) {

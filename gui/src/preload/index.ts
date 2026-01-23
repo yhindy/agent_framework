@@ -88,6 +88,15 @@ const api = {
   stopPRPolling: (assignmentId: string, subscriberId: string) => ipcRenderer.invoke('prPolling:stop', assignmentId, subscriberId),
   stopAllPRPolling: (subscriberId: string) => ipcRenderer.invoke('prPolling:stopAll', subscriberId),
   refreshPRNow: (assignmentId: string) => ipcRenderer.invoke('prPolling:refreshNow', assignmentId),
+  forceRefreshPR: (assignmentId: string) => ipcRenderer.invoke('prPolling:forceRefresh', assignmentId),
+
+  // PR Created Event
+  onPRCreated: (callback: (data: { assignmentId: string; prUrl: string; prStatus: string }) => void) => {
+    const subscription = (_event: any, data: { assignmentId: string; prUrl: string; prStatus: string }) =>
+      callback(data)
+    ipcRenderer.on('pr:created', subscription)
+    return () => ipcRenderer.removeListener('pr:created', subscription)
+  },
 
   // Dependency check
   checkDependencies: () => ipcRenderer.invoke('dependencies:check'),

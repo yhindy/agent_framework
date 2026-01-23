@@ -54,9 +54,30 @@ export class AgentService {
     found: boolean
     prUrl?: string
     prStatus?: string
+    isError?: boolean
   }> = new Map()
 
-  private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+  // Differentiated cache TTLs for PR detection
+  private readonly PR_DETECTION_POSITIVE_CACHE_TTL_MS = 5 * 60 * 1000  // 5 minutes for found PRs
+  private readonly PR_DETECTION_NEGATIVE_CACHE_TTL_MS = 30 * 1000      // 30 seconds for not-found
+  private readonly PR_DETECTION_ERROR_CACHE_TTL_MS = 10 * 1000         // 10 seconds for API errors
+
+  /**
+   * Get the appropriate cache TTL based on the cached result type.
+   */
+  private getCacheTTL(cached: { found: boolean; isError?: boolean }): number {
+    if (cached.isError) return this.PR_DETECTION_ERROR_CACHE_TTL_MS
+    if (cached.found) return this.PR_DETECTION_POSITIVE_CACHE_TTL_MS
+    return this.PR_DETECTION_NEGATIVE_CACHE_TTL_MS
+  }
+
+  // Track in-flight detection requests to prevent duplicates
+  private prDetectionInFlight: Map<string, Promise<{
+    found: boolean
+    prUrl?: string
+    prStatus?: string
+    createdAt?: string
+  } | null>> = new Map()
 
   // Cache for agent/assignment ID to project path mapping.
   // Avoids repeated git worktree list calls which can cause EAGAIN spawn errors.
@@ -644,6 +665,18 @@ export class AgentService {
     return config.project?.name || projectPath.split('/').pop() || 'project'
   }
 
+  /**
+   * Calculate the worktree path for an agent given project path and agent ID.
+   * Handles the project name prefix logic consistently.
+   */
+  private getWorktreePath(projectPath: string, agentId: string): string {
+    const projectName = this.getProjectName(projectPath)
+    if (agentId.startsWith(`${projectName}-`)) {
+      return join(dirname(projectPath), agentId)
+    }
+    return join(dirname(projectPath), `${projectName}-${agentId}`)
+  }
+
   private getProjectConfig(projectPath: string): ProjectConfig {
     const configPath = this.getProjectConfigPath(projectPath)
     if (!existsSync(configPath)) {
@@ -707,12 +740,7 @@ export class AgentService {
     }
 
     // Calculate worktree path
-    let worktreePath: string
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${agentId}`)
-    }
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
 
     // Create AgentInfo object
     const agentInfo: AgentInfo = {
@@ -815,18 +843,8 @@ export class AgentService {
       throw new Error('Assignment not found')
     }
 
-    // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
-
     // Update the .agent-info file
+    const worktreePath = this.getWorktreePath(projectPath, assignment.agentId)
     this.updateAgentInfo(worktreePath, updates)
   }
 
@@ -959,16 +977,7 @@ export class AgentService {
     plan.childAgentId = childAgent.agentId
 
     // 5. Update child's .agent-info to set parentAgentId
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-    
-    let childWorktreePath: string
-    if (childAgent.agentId.startsWith(`${projectName}-`)) {
-      childWorktreePath = join(dirname(projectPath), childAgent.agentId)
-    } else {
-      childWorktreePath = join(dirname(projectPath), `${projectName}-${childAgent.agentId}`)
-    }
-
+    const childWorktreePath = this.getWorktreePath(projectPath, childAgent.agentId)
     this.updateAgentInfo(childWorktreePath, {
       parentAgentId: superAgentId
     })
@@ -1009,18 +1018,8 @@ export class AgentService {
       mode: 'planning'
     })
     
-    // Calculate worktree path to update .agent-info with super minion metadata
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-    
-    let worktreePath: string
-    if (result.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), result.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${result.agentId}`)
-    }
-    
     // Update .agent-info with super minion fields
+    const worktreePath = this.getWorktreePath(projectPath, result.agentId)
     const workflowId = assignment.workflow?.id
     this.updateAgentInfo(worktreePath, {
       isSuperMinion: true,
@@ -1154,16 +1153,7 @@ export class AgentService {
 
   async unassignAgent(projectPath: string, agentId: string): Promise<void> {
     // Update the .agent-info to mark as unassigned
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${agentId}`)
-    }
-
+    const worktreePath = this.getWorktreePath(projectPath, agentId)
     // Update status to idle/cancelled
     this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' })
 
@@ -1266,16 +1256,7 @@ export class AgentService {
     }
 
     // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
-
+    const worktreePath = this.getWorktreePath(projectPath, assignment.agentId)
     if (!existsSync(worktreePath)) {
       throw new Error('Agent worktree not found')
     }
@@ -1412,6 +1393,21 @@ export class AgentService {
     }
   }
 
+  /**
+   * Detect if a PR already exists for an assignment's branch.
+   *
+   * Uses differentiated caching:
+   * - Found PRs: cached for 5 minutes
+   * - Not found: cached for 30 seconds
+   * - API errors: cached for 10 seconds
+   *
+   * Deduplicates concurrent requests via in-flight tracking.
+   *
+   * @param projectPath - Path to the project
+   * @param assignmentId - Assignment ID to check
+   * @param options.force - If true, bypasses cache and in-flight deduplication
+   * @returns Detection result with PR URL/status, or null on error
+   */
   async detectExistingPullRequest(
     projectPath: string,
     assignmentId: string,
@@ -1464,12 +1460,12 @@ export class AgentService {
         }
       }
 
-      // 3. Check cache
+      // 3. Check cache with differentiated TTLs
       const cacheKey = `${projectPath}:${assignmentId}`
       const cached = this.prDetectionCache.get(cacheKey)
       if (cached && !options?.force) {
-        const isStillFresh = cached.timestamp + this.PR_DETECTION_CACHE_TTL_MS > Date.now()
-        if (isStillFresh) {
+        const ttl = this.getCacheTTL(cached)
+        if (cached.timestamp + ttl > Date.now()) {
           log.info('detectExistingPullRequest: Returning cached result')
           return {
             found: cached.found,
@@ -1479,115 +1475,217 @@ export class AgentService {
         }
       }
 
-      // 4. Get worktree path
-      const config = this.getProjectConfig(projectPath)
-      const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-      let worktreePath: string
-      if (assignment.agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(dirname(projectPath), assignment.agentId)
-      } else {
-        worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
+      // 3.5 Check for in-flight request to deduplicate concurrent calls
+      const inFlight = this.prDetectionInFlight.get(cacheKey)
+      if (inFlight && !options?.force) {
+        log.info('detectExistingPullRequest: Waiting for in-flight request')
+        return inFlight
       }
 
-      // 5. Get remote
-      const remote = await this.getRemote(worktreePath)
-      if (!remote) {
-        log.info('detectExistingPullRequest: No remote configured')
-        return null
-      }
+      // 4. Create promise for the actual detection and track it
+      const detectionPromise = this.performPRDetection(projectPath, assignmentId, assignment, cacheKey)
 
-      // 6. Get the actual current branch from git (more reliable than stored value)
-      let currentBranch: string
+      // Track in-flight request
+      this.prDetectionInFlight.set(cacheKey, detectionPromise)
+
       try {
-        const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
-        currentBranch = branchOutput.trim()
-        if (!currentBranch) {
-          log.info('detectExistingPullRequest: Could not determine current branch')
-          return null
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: Error getting current branch:', error.message)
-        return null
-      }
-
-      // 7. Check if branch exists on remote
-      try {
-        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
-        if (!remoteRefs.trim()) {
-          log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
-          // Branch not on remote, cache negative result
-          this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
-          return { found: false }
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: Error checking remote refs:', error.message)
-        return null
-      }
-
-      // 8. Run gh pr list to find existing PR
-      let prData: { url: string; state: string; createdAt: string } | null = null
-      try {
-        const { stdout } = await execAsync(
-          `gh pr list --head ${currentBranch} --json number,url,state,createdAt --jq '.[0]'`,
-          { cwd: projectPath }
-        )
-
-        // 9. Parse result
-        if (stdout.trim() && stdout.trim() !== 'null') {
-          prData = JSON.parse(stdout.trim())
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: GitHub CLI error:', error.message)
-        return null
-      }
-
-      if (!prData) {
-        // No PR found
-        log.info('detectExistingPullRequest: No existing PR found')
-        this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
-        return { found: false }
-      }
-
-      // 9. PR found, update .agent-info
-      log.info('detectExistingPullRequest: Found existing PR:', prData.url)
-      const agentInfoPath = join(worktreePath, '.agent-info')
-      if (existsSync(agentInfoPath)) {
-        const updates: Partial<AgentInfo> = {
-          prUrl: prData.url,
-          prStatus: prData.state // OPEN, MERGED, CLOSED
-        }
-
-        if (prData.state === 'OPEN') {
-          updates.status = 'pr_open'
-        } else if (prData.state === 'MERGED') {
-          updates.status = 'merged'
-        } else if (prData.state === 'CLOSED') {
-          updates.status = 'closed'
-        }
-
-        this.updateAgentInfo(worktreePath, updates)
-      }
-
-      // 10. Cache positive result
-      this.prDetectionCache.set(cacheKey, {
-        timestamp: Date.now(),
-        found: true,
-        prUrl: prData.url,
-        prStatus: prData.state
-      })
-
-      return {
-        found: true,
-        prUrl: prData.url,
-        prStatus: prData.state,
-        createdAt: prData.createdAt
+        const result = await detectionPromise
+        return result
+      } finally {
+        // Clean up in-flight tracking
+        this.prDetectionInFlight.delete(cacheKey)
       }
     } catch (error: any) {
       log.error('detectExistingPullRequest: Unexpected error:', error.message)
-      // Don't cache errors
+      // Cache errors briefly
+      const cacheKey = `${projectPath}:${assignmentId}`
+      this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false, isError: true })
       return null
     }
+  }
+
+  /**
+   * Internal method that performs the actual PR detection.
+   * Separated to allow proper in-flight tracking.
+   */
+  private async performPRDetection(
+    projectPath: string,
+    _assignmentId: string,
+    assignment: AgentInfo,
+    cacheKey: string
+  ): Promise<{ found: boolean; prUrl?: string; prStatus?: string; createdAt?: string } | null> {
+    const worktreePath = this.getWorktreePath(projectPath, assignment.agentId)
+
+    // 5. Get remote
+    const remote = await this.getRemote(worktreePath)
+    if (!remote) {
+      log.info('detectExistingPullRequest: No remote configured')
+      return null
+    }
+
+    // 6. Get the actual current branch from git (more reliable than stored value)
+    let currentBranch: string
+    try {
+      const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
+      currentBranch = branchOutput.trim()
+      if (!currentBranch) {
+        log.info('detectExistingPullRequest: Could not determine current branch')
+        return null
+      }
+    } catch (error: any) {
+      log.warn('detectExistingPullRequest: Error getting current branch:', error.message)
+      return null
+    }
+
+    // 7. Check if branch exists on remote
+    try {
+      const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
+      if (!remoteRefs.trim()) {
+        log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
+        // Branch not on remote, cache negative result
+        this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
+        return { found: false }
+      }
+    } catch (error: any) {
+      log.warn('detectExistingPullRequest: Error checking remote refs:', error.message)
+      // Cache error briefly
+      this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false, isError: true })
+      return null
+    }
+
+    // 8. Run gh pr list to find existing PR
+    let prData: { url: string; state: string; createdAt: string } | null = null
+    try {
+      const { stdout } = await execAsync(
+        `gh pr list --head ${currentBranch} --json number,url,state,createdAt --jq '.[0]'`,
+        { cwd: projectPath }
+      )
+
+      // 9. Parse result
+      if (stdout.trim() && stdout.trim() !== 'null') {
+        prData = JSON.parse(stdout.trim())
+      }
+    } catch (error: any) {
+      log.warn('detectExistingPullRequest: GitHub CLI error:', error.message)
+      // Cache error briefly
+      this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false, isError: true })
+      return null
+    }
+
+    if (!prData) {
+      // No PR found
+      log.info('detectExistingPullRequest: No existing PR found')
+      this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
+      return { found: false }
+    }
+
+    // 9. PR found, update .agent-info
+    log.info('detectExistingPullRequest: Found existing PR:', prData.url)
+    const agentInfoPath = join(worktreePath, '.agent-info')
+    if (existsSync(agentInfoPath)) {
+      const updates: Partial<AgentInfo> = {
+        prUrl: prData.url,
+        prStatus: prData.state // OPEN, MERGED, CLOSED
+      }
+
+      if (prData.state === 'OPEN') {
+        updates.status = 'pr_open'
+      } else if (prData.state === 'MERGED') {
+        updates.status = 'merged'
+      } else if (prData.state === 'CLOSED') {
+        updates.status = 'closed'
+      }
+
+      this.updateAgentInfo(worktreePath, updates)
+    }
+
+    // 10. Cache positive result
+    this.prDetectionCache.set(cacheKey, {
+      timestamp: Date.now(),
+      found: true,
+      prUrl: prData.url,
+      prStatus: prData.state
+    })
+
+    return {
+      found: true,
+      prUrl: prData.url,
+      prStatus: prData.state,
+      createdAt: prData.createdAt
+    }
+  }
+
+  /**
+   * Detect PR with retry logic and exponential backoff.
+   * Used after PR creation to handle GitHub indexing lag.
+   *
+   * @param projectPath - Path to the project
+   * @param assignmentId - Assignment ID
+   * @param maxRetries - Maximum number of retries (default 3)
+   * @returns PR detection result or null
+   */
+  async detectExistingPullRequestWithRetry(
+    projectPath: string,
+    assignmentId: string,
+    maxRetries: number = 3
+  ): Promise<{
+    found: boolean
+    prUrl?: string
+    prStatus?: string
+    createdAt?: string
+  } | null> {
+    const baseDelays = [2000, 4000, 8000] // Exponential backoff: 2s, 4s, 8s
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      // Force bypass cache on all attempts
+      const result = await this.detectExistingPullRequest(projectPath, assignmentId, { force: true })
+
+      if (result?.found) {
+        log.info(`detectExistingPullRequestWithRetry: Found PR on attempt ${attempt + 1}`)
+        return result
+      }
+
+      if (attempt < maxRetries) {
+        // Check if agent still exists and needs detection
+        const { assignments } = await this.getAssignments(projectPath)
+        const assignment = assignments.find(a => a.id === assignmentId)
+
+        if (!assignment) {
+          log.info('detectExistingPullRequestWithRetry: Assignment no longer exists, stopping retry')
+          return null
+        }
+
+        // If PR is already tracked, no need to retry
+        if (assignment.prUrl) {
+          log.info('detectExistingPullRequestWithRetry: PR already tracked, stopping retry')
+          return {
+            found: true,
+            prUrl: assignment.prUrl,
+            prStatus: assignment.prStatus
+          }
+        }
+
+        // Add jitter (0-500ms) to prevent thundering herd
+        const jitter = Math.random() * 500
+        const delay = baseDelays[attempt] + jitter
+
+        log.info(`detectExistingPullRequestWithRetry: Attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+
+    log.info('detectExistingPullRequestWithRetry: All retries exhausted')
+    return { found: false }
+  }
+
+  /**
+   * Clear the PR detection cache for a specific assignment.
+   * Used when we know a PR was just created.
+   */
+  clearPRDetectionCache(projectPath: string, assignmentId: string): void {
+    const cacheKey = `${projectPath}:${assignmentId}`
+    this.prDetectionCache.delete(cacheKey)
+    log.info('clearPRDetectionCache: Cleared cache for', cacheKey)
   }
 
   async migrateAssignments(projectPath: string): Promise<void> {
@@ -1679,16 +1777,7 @@ export class AgentService {
       return { status: 'ERROR', error }
     }
 
-    // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
+    const worktreePath = this.getWorktreePath(projectPath, assignment.agentId)
 
     try {
       // Extract PR number from URL
@@ -1801,15 +1890,7 @@ export class AgentService {
     if (agentInfo.isBaseBranchAgent) {
       return projectPath
     }
-
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    if (agentInfo.agentId.startsWith(`${projectName}-`)) {
-      return join(dirname(projectPath), agentInfo.agentId)
-    } else {
-      return join(dirname(projectPath), `${projectName}-${agentInfo.agentId}`)
-    }
+    return this.getWorktreePath(projectPath, agentInfo.agentId)
   }
 
   // Helper method to track if base agent was just created (for auto-start logic)

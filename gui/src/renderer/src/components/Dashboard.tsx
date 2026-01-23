@@ -236,9 +236,15 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       })
     })
 
+    // Listen for PR created events to refresh assignments
+    const unsubscribePRCreated = window.electronAPI.onPRCreated(() => {
+      loadAssignments()
+    })
+
     return () => {
       unsubscribe()
       unsubscribeState()
+      unsubscribePRCreated()
     }
   }, [activeProjects])
 
@@ -279,11 +285,12 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     loadWorkflowData()
   }, [])
 
-  // Auto-poll PR status for all pr_open assignments
-  const prOpenAssignments = assignments.filter(a => a.status === 'pr_open')
+  // Auto-poll PR status for assignments with PRs (either pr_open status or has prUrl)
+  // Only poll agents that actually have PRs to avoid unnecessary API calls
+  const assignmentsWithPRs = assignments.filter(a => a.status === 'pr_open' || a.prUrl)
   usePRPolling({
-    assignmentIds: prOpenAssignments.map(a => a.id),
-    enabled: prOpenAssignments.length > 0
+    assignmentIds: assignmentsWithPRs.map(a => a.id),
+    enabled: assignmentsWithPRs.length > 0
   })
 
   useEffect(() => {

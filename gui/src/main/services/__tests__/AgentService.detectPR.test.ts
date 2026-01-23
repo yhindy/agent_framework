@@ -572,7 +572,7 @@ describe('AgentService - detectExistingPullRequest', () => {
       expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst + 1)
     })
 
-    it('should not cache errors', async () => {
+    it('should cache errors briefly with 10 second TTL', async () => {
       setupStandardFileMocks()
 
       // First call will fail
@@ -599,10 +599,55 @@ describe('AgentService - detectExistingPullRequest', () => {
         String(call[0]).includes('gh pr list')
       ).length
 
-      // Second call - should try again (errors not cached)
+      // Second call immediately - errors ARE cached briefly (10 seconds TTL)
+      // so we should get cached result instead of another API call
       const result2 = await agentService.detectExistingPullRequest(
         mockProjectPath,
         mockAssignmentId
+      )
+      // Error cache returns { found: false } since it's cached
+      expect(result2).toEqual({ found: false, prUrl: undefined, prStatus: undefined })
+
+      const ghCallsAfterSecond = mockExec.mock.calls.filter((call) =>
+        String(call[0]).includes('gh pr list')
+      ).length
+
+      // gh pr list should NOT have been called again (error is cached briefly)
+      expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst)
+    })
+
+    it('should retry errors when using force=true', async () => {
+      setupStandardFileMocks()
+
+      // First call will fail
+      setupExecMock({
+        'git worktree list': {
+          stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
+        },
+        'git remote': { stdout: 'origin\n' },
+        'git branch --show-current': { stdout: `${mockBranch}\n` },
+        'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
+        'gh pr list': { error: new Error('API rate limit exceeded') }
+      })
+
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      // First call - should fail
+      const result1 = await agentService.detectExistingPullRequest(
+        mockProjectPath,
+        mockAssignmentId
+      )
+      expect(result1).toBeNull()
+
+      const ghCallsAfterFirst = mockExec.mock.calls.filter((call) =>
+        String(call[0]).includes('gh pr list')
+      ).length
+
+      // Second call with force=true - should bypass cache and retry
+      const result2 = await agentService.detectExistingPullRequest(
+        mockProjectPath,
+        mockAssignmentId,
+        { force: true }
       )
       expect(result2).toBeNull()
 
@@ -610,7 +655,7 @@ describe('AgentService - detectExistingPullRequest', () => {
         String(call[0]).includes('gh pr list')
       ).length
 
-      // gh pr list should have been called again
+      // gh pr list should have been called again with force
       expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst + 1)
     })
 

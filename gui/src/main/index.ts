@@ -1029,7 +1029,13 @@ function setupIPC(): void {
     log.debug('[PR] Pull request created:', result.url)
 
     mainWindow?.webContents.send('assignments:updated')
-    
+
+    // Trigger PR detection with retry logic (non-blocking)
+    // This handles GitHub indexing lag by retrying with backoff
+    services!.prPolling.onPRCreated(projectPath, assignmentId).catch(err => {
+      log.warn('[PR] onPRCreated background task failed:', err)
+    })
+
     return result
   })
 
@@ -1069,6 +1075,11 @@ function setupIPC(): void {
   ipcMain.handle('prPolling:refreshNow', async (_event, assignmentId: string) => {
     if (!services?.prPolling) return
     await services.prPolling.refreshPRNow(assignmentId)
+  })
+
+  ipcMain.handle('prPolling:forceRefresh', async (_event, assignmentId: string) => {
+    if (!services?.prPolling) return null
+    return services.prPolling.forceRefreshPR(assignmentId)
   })
 
   ipcMain.handle('dependencies:check', async () => {

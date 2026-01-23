@@ -602,6 +602,94 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
 
+### PR Detection and Polling
+
+The framework includes sophisticated PR detection and status polling to track GitHub pull requests created by agents.
+
+**Architecture:**
+- **AgentService**: Handles PR detection with caching and retry logic
+- **PRPollingService**: Manages automatic polling of PR status across the application
+
+**Caching Strategy:**
+
+Both services use differentiated cache TTLs to optimize API usage:
+
+| Result Type | Cache TTL | Rationale |
+|-------------|-----------|-----------|
+| Found PR (positive) | 5 minutes | PRs don't change frequently once detected |
+| No PR found (negative) | 30 seconds | Allow quick re-detection after PR creation |
+| API error | 10 seconds | Retry errors quickly, but avoid hammering failed endpoints |
+
+**In-Flight Request Deduplication:**
+
+Both services track in-flight requests to prevent duplicate API calls when multiple components request the same data simultaneously. This is especially important for:
+- Dashboard polling multiple agents
+- AgentView refreshing on navigation
+- Manual refresh buttons
+
+**PR Detection Flow:**
+
+1. **Initial Detection** (`detectExistingPullRequest`):
+   - Check if PR URL already stored in agent info
+   - Check cache (with differentiated TTLs)
+   - Check for in-flight requests (deduplication)
+   - Query GitHub via `gh pr list --head <branch>`
+   - Update agent info and cache result
+
+2. **Post-Creation Detection** (`detectExistingPullRequestWithRetry`):
+   - Used after `createPullRequest` to handle GitHub indexing lag
+   - Exponential backoff: 2s, 4s, 8s delays between retries
+   - Jitter (0-500ms) added to prevent thundering herd
+   - Maximum 3 retries before giving up
+
+3. **Force Refresh** (`forceRefreshPR`):
+   - Bypasses all caches
+   - Used when navigating to AgentView for fresh data
+
+**Polling Intervals (PRPollingService):**
+
+Polling frequency adapts based on PR age:
+
+| PR Age | Polling Interval |
+|--------|------------------|
+| < 5 minutes | 30 seconds |
+| 5-60 minutes | 90 seconds |
+| > 60 minutes | 5 minutes |
+
+**Error Handling:**
+
+- Rate limiting detection (403/429 errors) triggers 10-minute backoff
+- Exponential backoff for other errors: 30s, 2min, 10min
+- Polling stops after 3 consecutive errors
+
+**IPC Handlers:**
+
+| Handler | Purpose |
+|---------|---------|
+| `prPolling:start` | Start polling for an assignment (subscription-based) |
+| `prPolling:stop` | Stop polling for a specific subscriber |
+| `prPolling:stopAll` | Stop all polling for a subscriber (component unmount) |
+| `prPolling:refreshNow` | Manual refresh with cache bypass |
+| `prPolling:forceRefresh` | Force refresh bypassing all caches, returns result |
+| `assignments:createPR` | Create PR and trigger post-creation detection |
+| `assignments:detectPR` | One-off PR detection |
+| `assignments:checkPR` | Check status of existing PR |
+
+**IPC Events:**
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `pr:created` | `{ assignmentId, prUrl, prStatus }` | Emitted when PR is detected after creation |
+| `assignments:updated` | (none) | Emitted when any assignment data changes |
+
+**Key Implementation Details:**
+
+1. **Subscription Model**: Components subscribe to polling with a unique `subscriberId`. Polling continues while any subscriber exists and stops when all unsubscribe.
+
+2. **Cache Clearing**: When a PR is created via `createPullRequest`, both the AgentService detection cache and PRPollingService status cache are cleared for that assignment.
+
+3. **Non-Blocking Detection**: The `onPRCreated` method runs detection in the background so PR creation returns immediately while detection continues with retries.
+
 ### Claude Code Config Import
 
 The framework can import agents and skills from Claude Code plugins to use as workflow subagent types. This allows reusing Claude Code's plugin ecosystem within the Agent Framework.
@@ -795,8 +883,9 @@ For projects with the old `minions/` folder structure:
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, PR detection with caching |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
+| `gui/src/main/services/PRPollingService.ts` | PR status polling with adaptive intervals and caching |
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
