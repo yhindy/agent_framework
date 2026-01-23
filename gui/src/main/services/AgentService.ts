@@ -13,6 +13,9 @@ const log = createLogger('AgentService')
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
+// Reserved branch name suffixes that would collide with special agents or git references
+const RESERVED_BRANCH_SUFFIXES = ['base', 'main', 'master', 'origin', 'head']
+
 interface AgentSession {
   id: string
   assignmentId: string | null
@@ -686,6 +689,15 @@ export class AgentService {
         .replace(/[^a-zA-Z0-9_-]/g, '-')  // Replace invalid chars with dashes
         .replace(/-+/g, '-')               // Collapse multiple dashes
         .replace(/^-|-$/g, '')             // Remove leading/trailing dashes
+
+      // Validate against reserved names (case-insensitive)
+      if (RESERVED_BRANCH_SUFFIXES.includes(sanitizedSuffix.toLowerCase())) {
+        throw new Error(
+          `Branch name "${sanitizedSuffix}" is reserved. Reserved names: ${RESERVED_BRANCH_SUFFIXES.join(', ')}. ` +
+          `These names conflict with special agents or git references.`
+        )
+      }
+
       agentId = `${projectName}-${sanitizedSuffix}`
     }
 
