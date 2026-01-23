@@ -28,9 +28,10 @@ describe('ChildStatusCard', () => {
 
   it('calls onClick when clicked', () => {
     const handleClick = vi.fn()
-    render(<ChildStatusCard child={mockChild} onClick={handleClick} />)
-    
-    fireEvent.click(screen.getByText('child-1').closest('.child-card')!)
+    const { container } = render(<ChildStatusCard child={mockChild} onClick={handleClick} />)
+
+    const card = container.querySelector('.child-card')!
+    fireEvent.click(card)
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
 

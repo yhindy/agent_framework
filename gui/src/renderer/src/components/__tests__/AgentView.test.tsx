@@ -114,7 +114,7 @@ describe('AgentView Header Consolidation', () => {
     })
   })
 
-  it('renders feature, agent ID, and status badges when assignment exists', async () => {
+  it('renders agent info when assignment exists', async () => {
     render(
       <TestWrapper>
         <AgentView activeProjects={[{ path: '/test/project' }]} />
@@ -122,10 +122,8 @@ describe('AgentView Header Consolidation', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Feature:')).toBeInTheDocument()
-      expect(screen.getByText('Test Feature Implementation')).toBeInTheDocument()
-      expect(screen.getByText('test-agent')).toBeInTheDocument()
-      expect(screen.getByText('working')).toBeInTheDocument()
+      // Shortened branch name should be displayed
+      expect(screen.getByText('add-feature')).toBeInTheDocument()
     })
   })
 
@@ -191,126 +189,6 @@ describe('AgentView Header Consolidation', () => {
     })
   })
 
-  it('renders status dot with correct color class for working status', async () => {
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const statusDot = container.querySelector('.status-dot.working')
-      expect(statusDot).toBeInTheDocument()
-    })
-  })
-
-  it('renders status dot with correct color class for idle status', async () => {
-    const idleAssignment = { ...mockAssignment, status: 'idle' }
-    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
-      assignments: [idleAssignment]
-    })
-
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const statusDot = container.querySelector('.status-dot.idle')
-      expect(statusDot).toBeInTheDocument()
-    })
-  })
-
-  it('renders status dot with correct color class for pr_open status', async () => {
-    const prOpenAssignment = { ...mockAssignment, status: 'pr_open', prUrl: 'https://github.com/test/pr' }
-    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
-      assignments: [prOpenAssignment]
-    })
-
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const statusDot = container.querySelector('.status-dot.pr_open')
-      expect(statusDot).toBeInTheDocument()
-    })
-  })
-
-  it('renders status dot with correct color class for merged status', async () => {
-    const mergedAssignment = { ...mockAssignment, status: 'merged', prUrl: 'https://github.com/test/pr' }
-    vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
-      assignments: [mergedAssignment]
-    })
-
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const statusDot = container.querySelector('.status-dot.merged')
-      expect(statusDot).toBeInTheDocument()
-    })
-  })
-
-  it('renders badges in agent-header-left container', async () => {
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const headerLeft = container.querySelector('.agent-header-left')
-      expect(headerLeft).toBeInTheDocument()
-
-      const featureBadge = headerLeft?.querySelector('.feature-badge')
-      expect(featureBadge).toBeInTheDocument()
-
-      const branchBadge = headerLeft?.querySelector('.branch-badge')
-      expect(branchBadge).toBeInTheDocument()
-
-      const statusBadge = headerLeft?.querySelector('.status-badge')
-      expect(statusBadge).toBeInTheDocument()
-    })
-  })
-
-  it('displays feature badge with label and value', async () => {
-    render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const featureBadge = screen.getByText('Feature:').closest('.feature-badge')
-      expect(featureBadge).toBeInTheDocument()
-      expect(featureBadge?.textContent).toContain('Feature:')
-      expect(featureBadge?.textContent).toContain('Test Feature Implementation')
-    })
-  })
-
-  it('displays branch badge with monospace font styling', async () => {
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const branchBadge = container.querySelector('.branch-badge')
-      expect(branchBadge).toBeInTheDocument()
-
-      const badgeValue = branchBadge?.querySelector('.info-badge-value')
-      expect(badgeValue?.textContent).toBe('feature/test-branch')
-    })
-  })
-
   it('renders action buttons in correct section', async () => {
     render(
       <TestWrapper>
@@ -353,33 +231,7 @@ describe('AgentView Header Consolidation', () => {
     })
   })
 
-  it('renders feature badge with title attribute for truncation', async () => {
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const badgeValue = container.querySelector('.feature-badge .info-badge-value')
-      expect(badgeValue).toHaveAttribute('title', 'Test Feature Implementation')
-    })
-  })
-
-  it('renders agent ID badge with title attribute for truncation', async () => {
-    const { container } = render(
-      <TestWrapper>
-        <AgentView activeProjects={[{ path: '/test/project' }]} />
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const badge = container.querySelector('.agent-id-badge')
-      expect(badge).toHaveAttribute('title', 'test-agent (click to copy)')
-    })
-  })
-
-  it('does not render badges when no assignment exists', async () => {
+  it('does not render feature info when no assignment exists', async () => {
     vi.mocked(window.electronAPI.getAssignmentsForProject).mockResolvedValue({
       assignments: []
     })
@@ -393,9 +245,8 @@ describe('AgentView Header Consolidation', () => {
     await waitFor(() => {
       expect(screen.getByText('test-agent')).toBeInTheDocument()
       expect(container.querySelector('[data-testid="bot-icon"]')).toBeInTheDocument()
-      expect(container.querySelector('.feature-badge')).not.toBeInTheDocument()
-      expect(container.querySelector('.agent-id-badge')).not.toBeInTheDocument()
-      expect(container.querySelector('.status-badge')).not.toBeInTheDocument()
+      // Feature label should not be present when no assignment
+      expect(screen.queryByText('Feature:')).not.toBeInTheDocument()
     })
   })
 })

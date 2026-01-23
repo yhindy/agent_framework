@@ -33,10 +33,10 @@ export default defineConfig({
         'src/renderer/src/main.tsx', // Entry point
       ],
       thresholds: {
-        lines: 50,
-        functions: 50,
-        branches: 50,
-        statements: 50,
+        lines: 60,
+        functions: 60,
+        branches: 60,
+        statements: 60,
       },
     },
   },
