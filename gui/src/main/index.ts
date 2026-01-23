@@ -20,7 +20,9 @@ import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowType
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 import { ClaudeConfigService } from './services/ClaudeConfigService'
-import type { ClaudeConfigSettings } from '../shared/types/settings'
+import { SkillsLibraryService } from './services/SkillsLibraryService'
+import { UnifiedSkillsService } from './services/UnifiedSkillsService'
+import type { ClaudeConfigSettings, SkillsLibrarySettings } from '../shared/types/settings'
 
 const log = createLogger('Main')
 
@@ -157,6 +159,8 @@ let services: {
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
   claudeConfig: ClaudeConfigService
+  skillsLibrary: SkillsLibraryService
+  unifiedSkills: UnifiedSkillsService
 } | null = null
 
 
@@ -257,6 +261,14 @@ function initializeServices(): void {
   const claudeConfigService = new ClaudeConfigService()
   claudeConfigService.setWindow(mainWindow)
 
+  // Create SkillsLibraryService for Vercel and project-local skills
+  const skillsLibraryService = new SkillsLibraryService()
+  skillsLibraryService.setWindow(mainWindow)
+
+  // Create UnifiedSkillsService to combine all skill sources
+  const unifiedSkillsService = new UnifiedSkillsService(claudeConfigService, skillsLibraryService)
+  unifiedSkillsService.setWindow(mainWindow)
+
   services = {
     project: projectService,
     agent: agentService,
@@ -272,7 +284,9 @@ function initializeServices(): void {
     workflow: new WorkflowService(),
     setupWizard: setupWizardService,
     minionsConfig: minionsConfigService,
-    claudeConfig: claudeConfigService
+    claudeConfig: claudeConfigService,
+    skillsLibrary: skillsLibraryService,
+    unifiedSkills: unifiedSkillsService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
@@ -281,10 +295,18 @@ function initializeServices(): void {
   // Wire up ClaudeConfigService to WorkflowService for imported agents
   services.workflow.setClaudeConfigService(services.claudeConfig)
 
+  // Wire up SkillsLibraryService to WorkflowService for Vercel/project skills
+  services.workflow.setSkillsLibraryService(services.skillsLibrary)
+
   // Initialize Claude config settings from saved settings
   const savedSettings = settingsService.getSettings()
   if (savedSettings.claudeConfig) {
     services.claudeConfig.updateSettings(savedSettings.claudeConfig)
+  }
+
+  // Initialize Skills Library settings from saved settings
+  if (savedSettings.skillsLibrary) {
+    services.skillsLibrary.updateSettings(savedSettings.skillsLibrary)
   }
 
   // Start watching for Claude config changes if auto-refresh is enabled
@@ -292,8 +314,12 @@ function initializeServices(): void {
     services.claudeConfig.startWatching()
   }
 
-  // Do initial scan of Claude plugins
+  // Start watching for skills library changes
+  services.skillsLibrary.startWatching()
+
+  // Do initial scan of Claude plugins and skills
   services.claudeConfig.scanConfigs()
+  services.skillsLibrary.scan()
 
   // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
   const activeProjects = services.project.getActiveProjects()
@@ -1436,6 +1462,70 @@ function setupIPC(): void {
   ipcMain.handle('claudeConfig:getScanResult', async () => {
     return services!.claudeConfig.getScanResult()
   })
+
+  // Skills Library handlers
+  ipcMain.handle('skillsLibrary:scan', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.scan(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getScanResult', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:refresh', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.refresh(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getSettings', async () => {
+    return services!.skillsLibrary.getSettings()
+  })
+
+  ipcMain.handle('skillsLibrary:updateSettings', async (_event, updates: Partial<SkillsLibrarySettings>) => {
+    const updatedSettings = services!.skillsLibrary.updateSettings(updates)
+    // Persist to settings service
+    await services!.settings.updateSettings({ skillsLibrary: updatedSettings })
+    return updatedSettings
+  })
+
+  ipcMain.handle('skillsLibrary:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getEnabledSkills(projectPath)
+  })
+
+  // Unified Skills handlers (combines all sources)
+  ipcMain.handle('unifiedSkills:scan', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.scan(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getScanResult', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:refresh', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.refresh(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkills(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getSkillById', async (_event, skillId: string, projectPath?: string) => {
+    return services!.unifiedSkills.getSkillById(skillId, projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:setSkillEnabled', async (_event, skillId: string, enabled: boolean) => {
+    services!.unifiedSkills.setSkillEnabled(skillId, enabled)
+    // Persist settings changes
+    const claudeSettings = services!.claudeConfig.getSettings()
+    const librarySettings = services!.skillsLibrary.getSettings()
+    await services!.settings.updateSettings({
+      claudeConfig: claudeSettings,
+      skillsLibrary: librarySettings
+    })
+  })
+
+  ipcMain.handle('unifiedSkills:getSubagentTypes', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkillsAsSubagentTypes(projectPath)
+  })
 }
 
 app.whenReady().then(() => {
@@ -1480,6 +1570,8 @@ app.on('window-all-closed', () => {
     services.terminal.cleanup()
     services.testEnv.cleanup()
     services.claudeConfig.cleanup()
+    services.skillsLibrary.cleanup()
+    services.unifiedSkills.cleanup()
     // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
     services.claudeSessionInfo.dispose()
     // MEMORY FIX: Dispose PRPollingService to clean up polling jobs

@@ -17,7 +17,8 @@ import {
   ClockIcon,
   HourglassIcon,
   CheckIcon,
-  XIcon
+  XIcon,
+  SkillsIcon
 } from './icons'
 import './Sidebar.css'
 
@@ -473,6 +474,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
   const isArchiveActive = currentPath === '/workspace/archive'
+  const isSkillsActive = currentPath === '/workspace/skills'
   const isSettingsActive = currentPath === '/workspace/settings'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
@@ -822,6 +824,16 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             <ClockIcon size="sm" />
           </span>
           <span className="nav-label">Archive</span>
+        </div>
+        <div
+          className={`nav-item skills-nav-item ${isSkillsActive ? 'active' : ''}`}
+          onClick={() => handleNavigate('/workspace/skills')}
+          title="Skills"
+        >
+          <span className="nav-icon">
+            <SkillsIcon size="sm" />
+          </span>
+          <span className="nav-label">Skills</span>
         </div>
         <div
           className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}

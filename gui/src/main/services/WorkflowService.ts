@@ -13,6 +13,7 @@ import {
   LEGACY_AGENT_ID_MAP
 } from './types/WorkflowTypes'
 import type { ClaudeConfigService } from './ClaudeConfigService'
+import type { SkillsLibraryService } from './SkillsLibraryService'
 
 const log = createLogger('WorkflowService')
 
@@ -52,6 +53,7 @@ export class WorkflowService {
   private workflows: Map<string, WorkflowConfig> = new Map()
   private activeWorkflows: Map<string, WorkflowConfig> = new Map()
   private claudeConfigService: ClaudeConfigService | null = null
+  private skillsLibraryService: SkillsLibraryService | null = null
   private store: Store<WorkflowStoreSchema>
 
   constructor() {
@@ -115,6 +117,13 @@ export class WorkflowService {
   }
 
   /**
+   * Set the SkillsLibraryService for accessing Vercel and project skills.
+   */
+  setSkillsLibraryService(service: SkillsLibraryService): void {
+    this.skillsLibraryService = service
+  }
+
+  /**
    * Get imported subagent types from Claude Code plugins.
    */
   getImportedSubagentTypes(): SubagentType[] {
@@ -129,17 +138,37 @@ export class WorkflowService {
     }))
   }
 
-  getSubagentTypes(): SubagentType[] {
-    return [...DEFAULT_SUBAGENT_TYPES, ...this.getImportedSubagentTypes()]
+  /**
+   * Get skill subagent types from Vercel and project skills.
+   */
+  getSkillSubagentTypes(projectPath?: string): SubagentType[] {
+    if (!this.skillsLibraryService) {
+      return []
+    }
+
+    return this.skillsLibraryService.getEnabledSkills(projectPath).map(({ id, name, description }) => ({
+      id,
+      name,
+      description
+    }))
   }
 
-  getSubagentType(id: string): SubagentType | undefined {
+  getSubagentTypes(projectPath?: string): SubagentType[] {
+    return [
+      ...DEFAULT_SUBAGENT_TYPES,
+      ...this.getImportedSubagentTypes(),
+      ...this.getSkillSubagentTypes(projectPath)
+    ]
+  }
+
+  getSubagentType(id: string, projectPath?: string): SubagentType | undefined {
     // Map legacy IDs to current IDs for backwards compatibility
     const mappedId = LEGACY_AGENT_ID_MAP[id] || id
 
-    // Built-in types take precedence over imported types
+    // Built-in types take precedence, then imported, then skills
     return DEFAULT_SUBAGENT_TYPES.find(t => t.id === mappedId)
       ?? this.getImportedSubagentTypes().find(t => t.id === mappedId)
+      ?? this.getSkillSubagentTypes(projectPath).find(t => t.id === mappedId)
   }
 
   /**
@@ -417,6 +446,16 @@ export class WorkflowService {
       lines.push('### Imported Agents')
       for (const agent of importedAgents) {
         lines.push(`- **${agent.name}** (\`${agent.id}\`): ${agent.description}`)
+      }
+    }
+
+    // Include skills if any
+    const skills = this.getSkillSubagentTypes()
+    if (skills.length > 0) {
+      lines.push('')
+      lines.push('### Skills')
+      for (const skill of skills) {
+        lines.push(`- **${skill.name}** (\`${skill.id}\`): ${skill.description}`)
       }
     }
 

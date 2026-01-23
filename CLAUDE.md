@@ -659,12 +659,61 @@ The framework can import agents and skills from Claude Code plugins to use as wo
 When an imported agent name conflicts with a built-in agent (e.g., `test`, `review`, `implement`), the imported agent is automatically renamed with an `-imported` suffix to avoid collisions.
 
 **UI Access:**
-Settings are accessible via the Settings screen under "Imported Agents" section. Users can:
-- Toggle imports on/off globally
-- Enable/disable individual plugins
-- Enable/disable specific agents within plugins
-- Toggle auto-refresh behavior
+Skills and imported agents are accessible via the dedicated **Skills** page in the sidebar. Users can:
+- View all skills grouped by source (Claude Plugins, Vercel Skills, Project Skills)
+- Enable/disable individual skills
+- See override relationships between project and global skills
 - Manually trigger a refresh
+
+### Skills Library
+
+The Skills Library feature extends the framework to support skills from multiple sources beyond Claude Code plugins.
+
+**Supported Sources:**
+
+| Source | Path | Format |
+|--------|------|--------|
+| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents/skills folders |
+| Vercel Skills | `~/.claude/skills/` | `{skill-name}/SKILL.md` + optional scripts/ |
+| Project Skills | `{project}/.claude/skills/` | Same as Vercel Skills |
+
+**Vercel Skills Structure:**
+```
+~/.claude/skills/
+└── {skill-name}/
+    ├── SKILL.md           # Skill definition with frontmatter
+    ├── scripts/           # Optional executable scripts
+    │   └── *.sh
+    └── references/        # Optional reference files
+        └── *.md
+```
+
+**Installing Vercel Skills:**
+```bash
+npx add-skill vercel-labs/agent-skills
+```
+
+**Override Behavior:**
+Project-local skills override global skills with the same name. This allows projects to customize skills for their specific needs while maintaining access to global skills.
+
+**Configuration (SkillsLibrarySettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `vercelSkillsEnabled` | boolean | `true` | Enable ~/.claude/skills/ scanning |
+| `projectSkillsEnabled` | boolean | `true` | Enable project-local skills |
+| `disabledSkillIds` | string[] | `[]` | Specific skill IDs to disable |
+
+**Key Services:**
+- **SkillsLibraryService**: Scans Vercel and project skills directories
+- **UnifiedSkillsService**: Combines all skill sources with override resolution
+- **WorkflowService**: Consumes skills as subagent types for workflows
+
+**IPC Handlers:**
+- `skillsLibrary:scan` - Scan Vercel/project skills
+- `skillsLibrary:refresh` - Force a rescan
+- `unifiedSkills:getScanResult` - Get all skills from all sources
+- `unifiedSkills:setSkillEnabled` - Enable/disable a specific skill
 
 ## CI/CD Pipeline
 
@@ -753,11 +802,14 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
+| `gui/src/main/services/SkillsLibraryService.ts` | Scan Vercel and project-local skills |
+| `gui/src/main/services/UnifiedSkillsService.ts` | Combine all skill sources with override resolution |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
 | `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
+| `gui/src/main/services/types/SkillsLibraryTypes.ts` | TypeScript types for Skills Library |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
-| `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
+| `gui/src/renderer/src/components/skills/SkillsPage.tsx` | Skills Library UI page |
 | `gui/playwright.config.ts` | E2E test configuration |
 | `gui/e2e/README.md` | E2E testing guide and documentation |
 | `gui/e2e/fixtures.ts` | E2E test fixtures and AppPage class |
