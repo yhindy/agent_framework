@@ -31,6 +31,18 @@ const api = {
   ensureAgentRunning: (agentId: string, projectPath?: string) =>
     ipcRenderer.invoke('agents:ensureRunning', agentId, projectPath),
 
+  // Handoff APIs
+  handoffAgent: (request: {
+    sourceAgentId: string
+    prompt: string
+    branchMode: 'inherit' | 'fresh'
+    tool?: string
+    model?: string
+    shortName?: string
+    yolo?: boolean
+    chrome?: boolean
+  }) => ipcRenderer.invoke('agents:handoff', request),
+
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>
     ipcRenderer.send('terminal:input', agentId, data),

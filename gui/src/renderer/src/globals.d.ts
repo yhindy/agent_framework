@@ -103,8 +103,11 @@ declare global {
       retryResumeAgent: (agentId: string) => Promise<void>
       startFreshSession: (agentId: string) => Promise<void>
 
-      // Agent Start APIs
+// Agent Start APIs
       ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started: boolean; error?: string }>
+
+      // Handoff APIs
+      handoffAgent: (request: import('../../main/services/types/ProjectConfig').HandoffRequest) => Promise<import('../../main/services/types/ProjectConfig').HandoffResult>
 
       // Settings APIs
       getSettings: () => Promise<import('../../shared/types/settings').AppSettings>

@@ -22,6 +22,7 @@ import { MinionsConfigService } from './services/MinionsConfigService'
 import { ClaudeConfigService } from './services/ClaudeConfigService'
 import { SkillsLibraryService } from './services/SkillsLibraryService'
 import { UnifiedSkillsService } from './services/UnifiedSkillsService'
+import { HandoffApiService } from './services/HandoffApiService'
 import type { ClaudeConfigSettings, SkillsLibrarySettings } from '../shared/types/settings'
 
 const log = createLogger('Main')
@@ -159,8 +160,9 @@ let services: {
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
   claudeConfig: ClaudeConfigService
-  skillsLibrary: SkillsLibraryService
+skillsLibrary: SkillsLibraryService
   unifiedSkills: UnifiedSkillsService
+  handoffApi: HandoffApiService
 } | null = null
 
 
@@ -261,13 +263,20 @@ function initializeServices(): void {
   const claudeConfigService = new ClaudeConfigService()
   claudeConfigService.setWindow(mainWindow)
 
-  // Create SkillsLibraryService for Vercel and project-local skills
+// Create SkillsLibraryService for Vercel and project-local skills
   const skillsLibraryService = new SkillsLibraryService()
   skillsLibraryService.setWindow(mainWindow)
 
   // Create UnifiedSkillsService to combine all skill sources
   const unifiedSkillsService = new UnifiedSkillsService(claudeConfigService, skillsLibraryService)
   unifiedSkillsService.setWindow(mainWindow)
+
+  // Create HandoffApiService for Claude Code /handoff command
+  const handoffApiService = new HandoffApiService()
+  handoffApiService.setAgentService(agentService)
+  handoffApiService.setTerminalService(terminalService)
+  handoffApiService.setProjectService(projectService)
+  handoffApiService.setWindow(mainWindow)
 
   services = {
     project: projectService,
@@ -286,7 +295,8 @@ function initializeServices(): void {
     minionsConfig: minionsConfigService,
     claudeConfig: claudeConfigService,
     skillsLibrary: skillsLibraryService,
-    unifiedSkills: unifiedSkillsService
+    unifiedSkills: unifiedSkillsService,
+    handoffApi: handoffApiService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
@@ -320,6 +330,9 @@ function initializeServices(): void {
   // Do initial scan of Claude plugins and skills
   services.claudeConfig.scanConfigs()
   services.skillsLibrary.scan()
+
+  // Start the Handoff API server for Claude Code /handoff command
+  services.handoffApi.start()
 
   // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
   const activeProjects = services.project.getActiveProjects()
@@ -751,6 +764,41 @@ function setupIPC(): void {
     const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
     // Auto-start the child agent with the prompt and model from the plan
     await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode, childAgent.prompt, childAgent.model, childAgent.yolo, childAgent.chrome !== false)
+  })
+
+  // Handoff handler - create a new agent from an existing one
+  ipcMain.handle('agents:handoff', async (_event, request: import('./services/types/ProjectConfig').HandoffRequest) => {
+    const projectPath = await findProjectForAgent(request.sourceAgentId)
+    const result = await services!.agent.handoffAgent(projectPath, request)
+
+    if (result.success && result.newAgent) {
+      // Trigger updates
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+
+      // Auto-start the new agent if it has a prompt
+      if (result.newAgent.prompt) {
+        setTimeout(async () => {
+          try {
+            await services!.terminal.startAgent(
+              projectPath,
+              result.newAgent!.agentId,
+              result.newAgent!.tool,
+              result.newAgent!.mode,
+              result.newAgent!.prompt,
+              result.newAgent!.model,
+              result.newAgent!.yolo,
+              result.newAgent!.chrome !== false
+            )
+            mainWindow?.webContents.send('agents:updated')
+          } catch (error) {
+            log.error('Failed to auto-start handoff agent', error)
+          }
+        }, 2000) // Wait for worktree setup
+      }
+    }
+
+    return result
   })
 
   // Terminal handlers
@@ -1570,8 +1618,10 @@ app.on('window-all-closed', () => {
     services.terminal.cleanup()
     services.testEnv.cleanup()
     services.claudeConfig.cleanup()
-    services.skillsLibrary.cleanup()
+services.skillsLibrary.cleanup()
     services.unifiedSkills.cleanup()
+    // Stop the Handoff API server
+    services.handoffApi.stop()
     // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
     services.claudeSessionInfo.dispose()
     // MEMORY FIX: Dispose PRPollingService to clean up polling jobs

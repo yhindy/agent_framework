@@ -110,6 +110,24 @@ else
     git worktree add -f "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"
 fi
 
+# Set up remote tracking for the new branch
+# If BASE_BRANCH exists on origin, set up tracking so pushes go to the right place
+cd "$WORKTREE_PATH"
+if git ls-remote --exit-code --heads origin "$BASE_BRANCH" > /dev/null 2>&1; then
+    echo -e "${BLUE}🔗 Setting up tracking for origin/$BASE_BRANCH${NC}"
+    git branch --set-upstream-to="origin/$BASE_BRANCH" "$BRANCH" 2>/dev/null || true
+else
+    # Fall back to tracking origin/main or origin/master
+    if git ls-remote --exit-code --heads origin main > /dev/null 2>&1; then
+        echo "   Base branch not on remote, tracking origin/main"
+        git branch --set-upstream-to="origin/main" "$BRANCH" 2>/dev/null || true
+    elif git ls-remote --exit-code --heads origin master > /dev/null 2>&1; then
+        echo "   Base branch not on remote, tracking origin/master"
+        git branch --set-upstream-to="origin/master" "$BRANCH" 2>/dev/null || true
+    fi
+fi
+cd "$REPO_ROOT"
+
 # Add .minion-cmd.sh to git exclude to prevent dirty worktree issues with --teleport
 GIT_EXCLUDE="$REPO_ROOT/.git/info/exclude"
 if [ -f "$GIT_EXCLUDE" ]; then
