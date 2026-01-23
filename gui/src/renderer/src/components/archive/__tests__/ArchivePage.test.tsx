@@ -111,7 +111,15 @@ describe('ArchivePage', () => {
     vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
     vi.mocked(window.electronAPI.restoreArchivedAgent).mockResolvedValue({
       id: 'new-agent-123',
-      agentId: 'restored-agent'
+      agentId: 'restored-agent',
+      branch: 'feature/restored',
+      project: 'test-project',
+      feature: 'Restored feature',
+      status: 'active',
+      tool: 'claude',
+      mode: 'dev',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
     })
 
     renderArchivePage()
@@ -155,7 +163,15 @@ describe('ArchivePage', () => {
     vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
     vi.mocked(window.electronAPI.restoreArchivedAgent).mockResolvedValue({
       id: 'new-agent-123',
-      agentId: 'restored-agent'
+      agentId: 'restored-agent',
+      branch: 'feature/restored',
+      project: 'test-project',
+      feature: 'Restored feature',
+      status: 'active',
+      tool: 'claude',
+      mode: 'dev',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
     })
 
     renderArchivePage()
