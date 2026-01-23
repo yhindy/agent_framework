@@ -944,11 +944,11 @@ export class AgentService {
       const configPath = this.getProjectConfigPath(projectPath)
 
       try {
-        // For inherit mode, we need to pass the base branch to setup.sh
-        const setupArgs = [newAgentInfo.agentId, newAgentInfo.branch, '--config', configPath]
-        if (request.branchMode === 'inherit') {
-          setupArgs.push('--base', baseBranch)
-        }
+        // For inherit mode, pass the base branch as 3rd positional arg (before --config)
+        // setup.sh signature: <agent-id> <branch-name> [base-branch] [--config path]
+        const setupArgs = request.branchMode === 'inherit'
+          ? [newAgentInfo.agentId, newAgentInfo.branch, baseBranch, '--config', configPath]
+          : [newAgentInfo.agentId, newAgentInfo.branch, '--config', configPath]
 
         const { stdout, stderr } = await execFileAsync(
           setupScript,
