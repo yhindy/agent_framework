@@ -460,7 +460,8 @@ Main Process (Node.js)
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
     ├── MinionsConfigService  # Read/write minions.json config
-    └── SetupWizardService    # One-click setup wizard agent
+    ├── SetupWizardService    # One-click setup wizard agent
+    └── HandoffApiService     # HTTP API for /handoff command (port 19234)
          │
          │ IPC (ipcMain.handle)
          ▼
@@ -608,9 +609,10 @@ The Agent Handoff feature allows you to spawn new agents to continue related wor
 
 **How to Trigger Handoff:**
 
-Click the "Handoff" button in the AgentView header to open the HandoffModal. Fill in:
-1. **Work Description** - What the new agent should work on
-2. **Branch Mode** - Whether to inherit current work or start fresh
+Use the `/handoff` command within an agent session. The command instructs the agent to:
+1. Commit all current changes
+2. Create a detailed plan for the new agent
+3. Call the Handoff API to spawn the new agent
 
 **Branch Modes:**
 
@@ -618,6 +620,34 @@ Click the "Handoff" button in the AgentView header to open the HandoffModal. Fil
 |------|-------------|
 | **inherit** | New agent branches from the source agent's current work (continues from same code state) |
 | **fresh** | New agent branches from main/master (starts with clean baseline) |
+
+**Handoff API Service:**
+
+The `HandoffApiService` provides a local HTTP server for programmatic handoff creation:
+
+- **Port**: `19234` (localhost only, bound to `127.0.0.1`)
+- **Endpoints**:
+  - `POST /api/handoff` - Create a handoff agent
+  - `GET /api/health` - Health check
+
+**API Request Format:**
+```typescript
+interface HandoffApiRequest {
+  sourceAgentId: string      // ID of the agent initiating handoff
+  plan: string               // Work description/plan for new agent
+  branchMode: 'inherit' | 'fresh'
+  shortName?: string         // Optional custom branch suffix
+}
+```
+
+**API Response:**
+```typescript
+interface HandoffApiResponse {
+  success: boolean
+  newAgentId?: string        // ID of the created agent (on success)
+  error?: string             // Error message (on failure)
+}
+```
 
 **Data Model:**
 
@@ -638,6 +668,10 @@ interface HandoffSource {
 
 **IPC Handler:**
 - `agents:handoff` - Create a new agent via handoff from an existing agent
+
+**Key Files:**
+- `HandoffApiService.ts` - HTTP server for `/handoff` command API
+- `AgentService.handoffAgent()` - Core handoff logic
 
 ### Claude Code Config Import
 
@@ -835,6 +869,8 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
 | `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
+| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff command API (localhost:19234) |
+| `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
@@ -849,7 +885,6 @@ For projects with the old `minions/` folder structure:
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `gui/src/renderer/src/components/skills/SkillsPage.tsx` | Skills Library UI page |
-| `gui/src/renderer/src/components/HandoffModal.tsx` | Modal for creating handoff agents |
 | `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
 | `gui/playwright.config.ts` | E2E test configuration |
 | `gui/e2e/README.md` | E2E testing guide and documentation |
