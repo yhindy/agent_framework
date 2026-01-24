@@ -685,9 +685,8 @@ export class AgentService {
 
     if (!agentId) {
       // Extract branch suffix and use it for agentId (sanitize for git/filesystem)
-      const branchSuffix = branch.startsWith('feature/')
-        ? branch.replace(/^feature\//, '').split('/').pop() || branch
-        : branch
+      // Use last segment of branch name (e.g., "fix/auth-bug" -> "auth-bug")
+      const branchSuffix = branch.split('/').pop() || branch
       const sanitizedSuffix = branchSuffix
         .replace(/[^a-zA-Z0-9_-]/g, '-')  // Replace invalid chars with dashes
         .replace(/-+/g, '-')               // Collapse multiple dashes
@@ -704,10 +703,7 @@ export class AgentService {
       agentId = `${projectName}-${sanitizedSuffix}`
     }
 
-    // Auto-generate branch name if not provided
-    if (!branch.startsWith('feature/')) {
-      branch = `feature/${branch}`
-    }
+    // Branch name is used as-is (no automatic prefix)
 
     // Calculate worktree path
     let worktreePath: string
@@ -902,7 +898,7 @@ export class AgentService {
         branchSuffix = this.sanitizeBranchName(promptWords) || 'handoff'
       }
 
-      const branch = `feature/${agentId}/${branchSuffix}`
+      const branch = `${agentId}/${branchSuffix}`
 
       // Determine base branch for worktree creation
       // In 'inherit' mode, we branch from the source agent's branch

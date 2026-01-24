@@ -1,20 +1,26 @@
 // Extract descriptive part from branch name
-// Handles both new format (feature/branch-name) and legacy format (feature/project-id/branch-name)
+// Handles various formats:
+// - Simple branch: "my-feature" -> "my-feature"
+// - Prefixed: "fix/auth-bug" -> "auth-bug"
+// - Legacy feature format: "feature/project-id/branch-name" -> "branch-name"
+// - Agent handoff format: "agent-id/branch-name" -> "branch-name"
 export function extractBranchName(branch?: string): string | null {
   if (!branch) return null
 
   const parts = branch.split('/')
 
-  // New format: feature/branch-name -> branch-name
-  if (parts.length === 2 && parts[0] === 'feature') {
-    return parts[1]
+  // Simple branch name with no slashes
+  if (parts.length === 1) {
+    return branch
   }
 
-  // Legacy format: feature/project-id/branch-name -> branch-name
-  if (parts.length >= 3 && parts[0] === 'feature') {
-    return parts.slice(2).join('/') // Handles nested paths
+  // Two-part format: prefix/branch-name -> branch-name
+  if (parts.length === 2) {
+    return parts[1] || branch
   }
 
-  // Fallback: return full branch if format doesn't match
-  return branch
+  // Three+ parts: return last segment(s) after the first two
+  // e.g., "feature/project-id/branch-name" -> "branch-name"
+  // e.g., "agent-id/ui/button-fix" -> "ui/button-fix"
+  return parts.slice(2).join('/')
 }
