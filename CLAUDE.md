@@ -610,16 +610,39 @@ The Agent Handoff feature allows you to spawn new agents to continue related wor
 **How to Trigger Handoff:**
 
 Use the `/handoff` command within an agent session. The command instructs the agent to:
-1. Commit all current changes
-2. Create a detailed plan for the new agent
-3. Call the Handoff API to spawn the new agent
+1. Create a detailed plan for the new agent
+2. Call the Handoff API to spawn the new agent
+
+The orchestrator automatically:
+1. Commits any uncommitted changes in the source agent's worktree before handoff
+2. Detects the appropriate branch mode from the plan text (if not explicitly specified)
+3. Provides parent context to the new agent
 
 **Branch Modes:**
 
 | Mode | Description |
 |------|-------------|
-| **inherit** | New agent branches from the source agent's current work (continues from same code state) |
+| **inherit** (default) | New agent branches from the source agent's current work (continues from same code state) |
 | **fresh** | New agent branches from main/master (starts with clean baseline) |
+
+**Auto-Detection of Branch Mode:**
+If `branchMode` is not specified in the API request, it is detected from the plan text:
+- Phrases like "clean start", "fresh start", "from scratch", "start fresh", or "clean slate" trigger `fresh` mode
+- All other cases default to `inherit` mode
+
+**Parent Context:**
+When a handoff agent is created, its prompt is automatically prefixed with context about the parent feature:
+```
+You are continuing work that was handed off from another agent.
+Parent feature branch: {parentBranchName}
+Parent work description: {parentPrompt}
+
+---
+
+{newAgentPlan}
+```
+
+This helps the new agent understand the broader context of the work.
 
 **Handoff API Service:**
 
@@ -635,7 +658,7 @@ The `HandoffApiService` provides a local HTTP server for programmatic handoff cr
 interface HandoffApiRequest {
   sourceAgentId: string      // ID of the agent initiating handoff
   plan: string               // Work description/plan for new agent
-  branchMode: 'inherit' | 'fresh'
+  branchMode?: 'inherit' | 'fresh'  // Optional, auto-detected from plan if omitted
   shortName?: string         // Optional custom branch suffix
 }
 ```
@@ -660,6 +683,11 @@ interface HandoffSource {
   handoffTimestamp: string  // ISO timestamp when handoff occurred
 }
 ```
+
+**Settings:**
+
+Handoff behavior can be configured in Settings under "Agent Handoff":
+- **YOLO Mode Inheritance**: When enabled (default), child agents inherit the parent's YOLO mode setting
 
 **UI Indication:**
 - Handoff agents appear indented under their parent in the sidebar
