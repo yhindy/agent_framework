@@ -2,6 +2,7 @@
 
 export type AgentTool = 'claude' | 'cursor' | 'cursor-cli' | 'codex'
 export type TerminalMode = 'tmux' | 'tabs'
+export type EditorType = 'cursor' | 'vscode' | 'zed'
 export type ClaudeModel = 'haiku' | 'sonnet' | 'opus' | 'opusplan'
 export type CursorCLIModel =
   | 'composer-1'
@@ -46,6 +47,10 @@ export interface TerminalSettings {
   terminalMode: TerminalMode
 }
 
+export interface EditorSettings {
+  defaultEditor: EditorType
+}
+
 export interface ClaudeConfigSettings {
   enabled: boolean
   enabledPlugins: string[]
@@ -65,6 +70,7 @@ export interface AppSettings {
   defaultTool: DefaultToolSettings
   defaultAgent: DefaultAgentSettings
   terminal: TerminalSettings
+  editor: EditorSettings
   claudeConfig: ClaudeConfigSettings
   skillsLibrary: SkillsLibrarySettings
   version: number
@@ -75,9 +81,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultTool: { tool: 'claude', claudeModel: 'opusplan', cursorCLIModel: 'auto' },
   defaultAgent: { workflowMode: 'planning', yoloMode: true, chromeIntegration: true },
   terminal: { terminalMode: 'tmux' },
+  editor: { defaultEditor: 'cursor' },
   claudeConfig: { enabled: true, enabledPlugins: [], disabledAgentIds: [], autoRefresh: true },
   skillsLibrary: { commandsEnabled: true, agentsEnabled: true, projectSkillsEnabled: true, disabledSkillIds: [] },
-  version: 5
+  version: 6
 }
 
 export const TOOL_DISPLAY_NAMES: Record<AgentTool, string> = {
@@ -102,4 +109,8 @@ export const CURSOR_CLI_MODEL_DISPLAY_NAMES: Record<CursorCLIModel, string> = {
 
 export const TERMINAL_MODE_DISPLAY_NAMES: Record<TerminalMode, string> = {
   tmux: 'Tmux (recommended)', tabs: 'Tabs (legacy)'
+}
+
+export const EDITOR_DISPLAY_NAMES: Record<EditorType, string> = {
+  cursor: 'Cursor', vscode: 'VS Code', zed: 'Zed'
 }

@@ -5,7 +5,8 @@ import {
   TOOL_DISPLAY_NAMES,
   CLAUDE_MODEL_DISPLAY_NAMES,
   CURSOR_CLI_MODEL_DISPLAY_NAMES,
-  TERMINAL_MODE_DISPLAY_NAMES
+  TERMINAL_MODE_DISPLAY_NAMES,
+  EDITOR_DISPLAY_NAMES
 } from '../../../shared/types/settings'
 import WorkflowSettings from './WorkflowSettings'
 import './SettingsPage.css'
@@ -143,6 +144,16 @@ function SettingsPage(): JSX.Element {
     updateSettings((prev) => ({
       ...prev,
       terminal: { ...prev.terminal, [key]: value }
+    }))
+  }
+
+  function updateEditor<K extends keyof AppSettings['editor']>(
+    key: K,
+    value: AppSettings['editor'][K]
+  ): void {
+    updateSettings((prev) => ({
+      ...prev,
+      editor: { ...prev.editor, [key]: value }
     }))
   }
 
@@ -368,6 +379,26 @@ function SettingsPage(): JSX.Element {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Editor Section */}
+        <section className="settings-section">
+          <h2 className="section-title">Editor</h2>
+          <div className="settings-card">
+            <SettingSelect
+              label="Default editor"
+              value={settings.editor?.defaultEditor || 'cursor'}
+              options={EDITOR_DISPLAY_NAMES}
+              onChange={(editor) => updateEditor('defaultEditor', editor)}
+            />
+            <div className="setting-item">
+              <div className="setting-text">
+                <span className="setting-description">
+                  The editor to open when clicking "Open Editor" on an agent.
+                </span>
+              </div>
+            </div>
           </div>
         </section>
 
