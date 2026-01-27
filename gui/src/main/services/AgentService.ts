@@ -50,14 +50,8 @@ interface AgentSession {
 export class AgentService {
   private sessions: Map<string, AgentSession>
   private claudeSessionInfoService?: ClaudeSessionInfoService
-  private prDetectionCache: Map<string, {
-    timestamp: number
-    found: boolean
-    prUrl?: string
-    prStatus?: string
-  }> = new Map()
-
-  private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+  // NOTE: PR detection cache has been consolidated to PRPollingService
+  // No longer maintaining duplicate cache here
 
   // Cache for agent/assignment ID to project path mapping.
   // Avoids repeated git worktree list calls which can cause EAGAIN spawn errors.
@@ -1573,9 +1567,6 @@ export class AgentService {
           status: 'pr_open'
         }, assignment.agentId, projectPath)
 
-        // Clear detection cache for this assignment
-        this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
-
         log.info('PR created:', prUrl)
         return { url: prUrl }
       } catch (prError: any) {
@@ -1596,9 +1587,6 @@ export class AgentService {
             status: 'pr_open'
           }, assignment.agentId, projectPath)
 
-          // Clear detection cache for this assignment
-          this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
-
           return { url: prUrl }
         }
         throw prError
@@ -1612,13 +1600,16 @@ export class AgentService {
   async detectExistingPullRequest(
     projectPath: string,
     assignmentId: string,
-    options?: { force?: boolean }
+    _options?: { force?: boolean }
   ): Promise<{
     found: boolean
     prUrl?: string
     prStatus?: string
     createdAt?: string
   } | null> {
+    // NOTE: Caching is now handled by PRPollingService
+    // This method just performs the actual detection
+
     try {
       // 1. Load assignment
       const { assignments } = await this.getAssignments(projectPath)
@@ -1661,22 +1652,7 @@ export class AgentService {
         }
       }
 
-      // 3. Check cache
-      const cacheKey = `${projectPath}:${assignmentId}`
-      const cached = this.prDetectionCache.get(cacheKey)
-      if (cached && !options?.force) {
-        const isStillFresh = cached.timestamp + this.PR_DETECTION_CACHE_TTL_MS > Date.now()
-        if (isStillFresh) {
-          log.info('detectExistingPullRequest: Returning cached result')
-          return {
-            found: cached.found,
-            prUrl: cached.prUrl,
-            prStatus: cached.prStatus
-          }
-        }
-      }
-
-      // 4. Get worktree path
+      // 3. Get worktree path
       const config = this.getProjectConfig(projectPath)
       const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
 
@@ -1687,14 +1663,14 @@ export class AgentService {
         worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
       }
 
-      // 5. Get remote
+      // 4. Get remote
       const remote = await this.getRemote(worktreePath)
       if (!remote) {
         log.info('detectExistingPullRequest: No remote configured')
         return null
       }
 
-      // 6. Get the actual current branch from git (more reliable than stored value)
+      // 5. Get the actual current branch from git (more reliable than stored value)
       let currentBranch: string
       try {
         const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
@@ -1708,13 +1684,11 @@ export class AgentService {
         return null
       }
 
-      // 7. Check if branch exists on remote
+      // 6. Check if branch exists on remote
       try {
         const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
         if (!remoteRefs.trim()) {
           log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
-          // Branch not on remote, cache negative result
-          this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
           return { found: false }
         }
       } catch (error: any) {
@@ -1722,7 +1696,7 @@ export class AgentService {
         return null
       }
 
-      // 8. Run gh pr list to find existing PR
+      // 7. Run gh pr list to find existing PR
       let prData: { url: string; state: string; createdAt: string } | null = null
       try {
         const { stdout } = await execAsync(
@@ -1730,7 +1704,6 @@ export class AgentService {
           { cwd: projectPath }
         )
 
-        // 9. Parse result
         if (stdout.trim() && stdout.trim() !== 'null') {
           prData = JSON.parse(stdout.trim())
         }
@@ -1742,11 +1715,10 @@ export class AgentService {
       if (!prData) {
         // No PR found
         log.info('detectExistingPullRequest: No existing PR found')
-        this.prDetectionCache.set(cacheKey, { timestamp: Date.now(), found: false })
         return { found: false }
       }
 
-      // 9. PR found, update .agent-info
+      // 8. PR found, update .agent-info
       log.info('detectExistingPullRequest: Found existing PR:', prData.url)
       const agentInfoPath = join(worktreePath, '.agent-info')
       if (existsSync(agentInfoPath)) {
@@ -1766,14 +1738,6 @@ export class AgentService {
         this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
       }
 
-      // 10. Cache positive result
-      this.prDetectionCache.set(cacheKey, {
-        timestamp: Date.now(),
-        found: true,
-        prUrl: prData.url,
-        prStatus: prData.state
-      })
-
       return {
         found: true,
         prUrl: prData.url,
@@ -1782,7 +1746,6 @@ export class AgentService {
       }
     } catch (error: any) {
       log.error('detectExistingPullRequest: Unexpected error:', error.message)
-      // Don't cache errors
       return null
     }
   }

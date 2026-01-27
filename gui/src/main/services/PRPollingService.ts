@@ -19,17 +19,28 @@ interface CachedPRStatus {
   status: string
   timestamp: number
   mergedAt?: string
+  createdAt?: string
+  prUrl?: string
+  found?: boolean  // For PR detection cache
 }
 
 /**
  * PRPollingService manages automatic polling of PR status across the application.
  * It deduplicates requests so that multiple components watching the same PR
- * result in only a single GitHub API call every 30 seconds.
+ * result in only a single GitHub API call.
  *
  * Uses intelligent polling intervals based on PR age:
  * - New PRs (< 5 min): 30 seconds
  * - Recent PRs (5-60 min): 90 seconds
  * - Stale PRs (> 60 min): 5 minutes
+ *
+ * Cache TTLs:
+ * - Found PRs: 15 minutes (PR exists and was checked)
+ * - Not-found PRs: 2 minutes (shorter to retry detection sooner)
+ *
+ * Rate limiting:
+ * - Global backoff of 10 minutes on rate limit detection
+ * - Simple retry (1-2 attempts) on transient failures
  */
 export class PRPollingService {
   private mainWindow: BrowserWindow
@@ -47,8 +58,12 @@ export class PRPollingService {
 
   // Rate limiting state
   private rateLimitedUntil: number = 0
-  private rateLimitBackoffMs: number = 10 * 60 * 1000 // 10 minutes
-  private cacheTtlMs: number = 5 * 60 * 1000 // 5 minutes cache TTL
+  private rateLimitBackoffMs: number = 10 * 60 * 1000 // 10 minutes global backoff
+
+  // Cache TTLs
+  private cacheTtlFoundMs: number = 15 * 60 * 1000 // 15 minutes for found PRs
+  private cacheTtlNotFoundMs: number = 2 * 60 * 1000 // 2 minutes for not-found
+  private cacheStaleMs: number = 1 * 60 * 1000 // 1 minute - considered stale for background refresh
 
   constructor(mainWindow: BrowserWindow, agentService: AgentService) {
     this.mainWindow = mainWindow
@@ -180,17 +195,9 @@ export class PRPollingService {
   }
 
   /**
-   * Calculate backoff delay based on error count (exponential backoff)
+   * Backoff delay for retry (simple: always 30s)
    */
-  private calculateBackoffMs(errorCount: number): number {
-    if (errorCount === 1) {
-      return 30 * 1000 // 30 seconds on first error
-    } else if (errorCount === 2) {
-      return 2 * 60 * 1000 // 2 minutes on second error
-    } else {
-      return 10 * 60 * 1000 // 10 minutes on third+ errors
-    }
-  }
+  private readonly RETRY_BACKOFF_MS = 30 * 1000
 
   /**
    * Schedule the next poll with dynamic interval
@@ -213,14 +220,40 @@ export class PRPollingService {
     const cached = this.prStatusCache.get(assignmentId)
     if (!cached) return null
 
+    // Use different TTLs for found vs not-found PRs
+    const ttl = cached.found !== false ? this.cacheTtlFoundMs : this.cacheTtlNotFoundMs
+
     // Return cache if still fresh
-    if (Date.now() - cached.timestamp < this.cacheTtlMs) {
+    if (Date.now() - cached.timestamp < ttl) {
       return cached
     }
 
     // Cache is stale, remove it
     this.prStatusCache.delete(assignmentId)
     return null
+  }
+
+  /**
+   * Check if cache is stale but still valid (for background refresh)
+   */
+  isCacheStale(assignmentId: string): boolean {
+    const cached = this.prStatusCache.get(assignmentId)
+    if (!cached) return true
+    return Date.now() - cached.timestamp > this.cacheStaleMs
+  }
+
+  /**
+   * Check if we're currently rate limited
+   */
+  isRateLimited(): boolean {
+    return Date.now() < this.rateLimitedUntil
+  }
+
+  /**
+   * Clear cache for a specific agent (called on agent cleanup)
+   */
+  clearCacheForAgent(assignmentId: string): void {
+    this.prStatusCache.delete(assignmentId)
   }
 
   /**
@@ -285,10 +318,13 @@ export class PRPollingService {
         this.prStatusCache.set(job.assignmentId, {
           status: result.status,
           timestamp: Date.now(),
-          mergedAt: result.mergedAt
+          mergedAt: result.mergedAt,
+          createdAt: result.createdAt,
+          found: true
         })
 
-        // Emit update event to refresh UI
+        // Emit update events to refresh UI
+        this.mainWindow.webContents.send('agents:updated')
         this.mainWindow.webContents.send('assignments:updated')
 
         // Stop polling if PR is merged or closed
@@ -305,34 +341,27 @@ export class PRPollingService {
   }
 
   /**
-   * Handle polling errors with exponential backoff retry logic
+   * Handle polling errors with simple retry logic
+   * No complex exponential backoff - just retry once, then stop.
    */
   private handlePollingError(job: PollingJob, errorMessage: string): void {
     job.errorCount++
 
-    // Check for rate limiting
+    // Check for rate limiting (403/429 or explicit rate limit message)
     if (errorMessage.includes('rate limit') || errorMessage.includes('403') || errorMessage.includes('429')) {
-      log.warn(` Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
+      log.warn(`Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
       this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs
       return
     }
 
-    // Use exponential backoff for other errors
-    if (job.errorCount < 3) {
-      const backoffMs = this.calculateBackoffMs(job.errorCount)
-      log.warn(` Error #${job.errorCount} for ${job.assignmentId}, backing off for ${backoffMs / 1000}s`)
+    // Simple retry: try once more, then stop
+    if (job.errorCount < 2) {
+      log.warn(`Error #${job.errorCount} for ${job.assignmentId}, will retry in ${this.RETRY_BACKOFF_MS / 1000}s`)
     } else {
-      // Stop after 3 consecutive errors (this prevents infinite retries)
-      log.warn(` Stopping polling for ${job.assignmentId} after 3 consecutive errors`)
+      // Stop after 2 consecutive errors
+      log.warn(`Stopping polling for ${job.assignmentId} after ${job.errorCount} consecutive errors`)
       this.stopPollingJob(job.assignmentId)
     }
-  }
-
-  /**
-   * Check if we're currently rate limited
-   */
-  private isRateLimited(): boolean {
-    return Date.now() < this.rateLimitedUntil
   }
 
   /**

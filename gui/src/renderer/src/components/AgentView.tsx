@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Terminal from './Terminal'
 import PlainTerminal from './PlainTerminal'
 import TestEnvTerminal from './TestEnvTerminal'
 import AgentHeader, { HeaderBadge } from './AgentHeader'
 import AgentCleanupDropdown from './AgentCleanupDropdown'
-import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon } from './icons'
+import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon, RefreshIcon } from './icons'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
@@ -67,6 +67,8 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [terminalCounter, setTerminalCounter] = useState(1)
   const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
+  const [isRefreshingPR, setIsRefreshingPR] = useState(false)
+  const [refreshCooldown, setRefreshCooldown] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { showLoading: _showLoading, hideLoading: _hideLoading } = useLoadingSnackbar()
 
@@ -94,10 +96,10 @@ function AgentView({ activeProjects }: AgentViewProps) {
     handleConfirmCreatePR: handleConfirmCreatePRHook
   } = usePRCreation()
 
-  // Auto-poll PR status if this agent has an open PR
+  // Auto-poll PR status if this agent has an open PR with OPEN status
   usePRPolling({
-    assignmentIds: assignment?.status === 'pr_open' && assignment?.id ? [assignment.id] : [],
-    enabled: assignment?.status === 'pr_open' || false
+    assignmentIds: assignment?.status === 'pr_open' && assignment?.prStatus === 'OPEN' && assignment?.id ? [assignment.id] : [],
+    enabled: (assignment?.status === 'pr_open' && assignment?.prStatus === 'OPEN') || false
   })
 
   useEffect(() => {
@@ -316,6 +318,27 @@ function AgentView({ activeProjects }: AgentViewProps) {
     await handleConfirmCreatePRHook(assignment.id, loadAgentData)
   }
 
+  /**
+   * Handle manual PR status refresh with 30s cooldown
+   */
+  const handleRefreshPR = useCallback(async () => {
+    if (!assignment || refreshCooldown || isRefreshingPR) return
+
+    setIsRefreshingPR(true)
+    setRefreshCooldown(true)
+
+    try {
+      // refreshPRNow bypasses cache and emits agents:updated which triggers loadAgentData
+      await window.electronAPI.refreshPRNow(assignment.id)
+    } catch (error) {
+      console.error('Failed to refresh PR status:', error)
+    } finally {
+      setIsRefreshingPR(false)
+      // 30 second cooldown on refresh button
+      setTimeout(() => setRefreshCooldown(false), 30000)
+    }
+  }, [assignment, refreshCooldown, isRefreshingPR])
+
   const handleRetryTeleport = async () => {
     if (!agentId) return
 
@@ -412,35 +435,39 @@ function AgentView({ activeProjects }: AgentViewProps) {
     })
   }
 
-  // Build header actions - consistent order: PR Status/Make PR, Cursor, Cleanup
+  // Build header actions - consistent order: PR Status/Make PR, Refresh, Cursor, Cleanup
   const headerActions = (
     <>
       {/* PR Status Badge or Make PR Button */}
       {assignment?.prStatus && assignment.prUrl ? (
-        <button
-          className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
-          onClick={() => window.open(assignment.prUrl, '_blank')}
-          title="Open PR on GitHub"
-        >
-          PR: {assignment.prStatus}
-          <span className="pr-open-icon">↗</span>
+        <div className="pr-actions-group">
+          <button
+            className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
+            onClick={() => window.open(assignment.prUrl, '_blank')}
+            title="Open PR on GitHub"
+          >
+            PR: {assignment.prStatus}
+            <span className="pr-open-icon">↗</span>
+          </button>
+          {/* Separate refresh button with better UX */}
           {assignment.status === 'pr_open' && (
             <button
-              className="pr-refresh-btn"
-              onClick={async (e) => {
+              className={`compact-button pr-refresh-standalone ${isRefreshingPR ? 'refreshing' : ''} ${refreshCooldown ? 'cooldown' : ''}`}
+              onClick={(e) => {
                 e.stopPropagation()
-                try {
-                  await window.electronAPI.checkPullRequestStatus(assignment.id)
-                } catch (err: any) {
-                  console.error('Failed to refresh PR status:', err)
-                }
+                handleRefreshPR()
               }}
-              title="Refresh PR status"
+              disabled={isRefreshingPR || refreshCooldown}
+              title={refreshCooldown ? 'Refresh available in a moment...' : 'Refresh PR status'}
             >
-              ↻
+              {isRefreshingPR ? (
+                <span className="refresh-spinner">↻</span>
+              ) : (
+                <RefreshIcon size="sm" />
+              )}
             </button>
           )}
-        </button>
+        </div>
       ) : assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' ? (
         <button
           onClick={handleCreatePRClick}

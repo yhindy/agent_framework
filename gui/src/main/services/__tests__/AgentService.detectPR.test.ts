@@ -448,8 +448,12 @@ describe('AgentService - detectExistingPullRequest', () => {
     })
   })
 
-  describe('caching', () => {
-    it('should cache positive results', async () => {
+  describe('caching (consolidated to PRPollingService)', () => {
+    // NOTE: Caching behavior has been consolidated to PRPollingService.
+    // AgentService.detectExistingPullRequest no longer caches results itself.
+    // These tests verify that the method performs fresh detection each call.
+
+    it('should perform fresh detection on each call (no local caching)', async () => {
       setupStandardFileMocks()
 
       const prData = {
@@ -480,95 +484,18 @@ describe('AgentService - detectExistingPullRequest', () => {
         String(call[0]).includes('gh pr list')
       ).length
 
-      // Second call - should use cache
+      // Second call - should also make a fresh call (no local caching)
       const result2 = await agentService.detectExistingPullRequest(
         mockProjectPath,
         mockAssignmentId
       )
       expect(result2?.found).toBe(true)
 
-      // gh pr list should NOT have been called again
+      // gh pr list WILL be called again since caching is in PRPollingService
       const ghCallsAfterSecond = mockExec.mock.calls.filter((call) =>
         String(call[0]).includes('gh pr list')
       ).length
 
-      expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst)
-    })
-
-    it('should cache negative results', async () => {
-      setupStandardFileMocks()
-
-      setupExecMock({
-        'git worktree list': {
-          stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
-        },
-        'git remote': { stdout: 'origin\n' },
-        'git branch --show-current': { stdout: `${mockBranch}\n` },
-        'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
-        'gh pr list': { stdout: '' } // No PR found
-      })
-
-      // First call
-      const result1 = await agentService.detectExistingPullRequest(
-        mockProjectPath,
-        mockAssignmentId
-      )
-      expect(result1?.found).toBe(false)
-
-      const ghCallsAfterFirst = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('gh pr list')
-      ).length
-
-      // Second call - should use cache
-      const result2 = await agentService.detectExistingPullRequest(
-        mockProjectPath,
-        mockAssignmentId
-      )
-      expect(result2?.found).toBe(false)
-
-      const ghCallsAfterSecond = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('gh pr list')
-      ).length
-
-      expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst)
-    })
-
-    it('should bypass cache when force=true', async () => {
-      setupStandardFileMocks()
-
-      const prData = {
-        url: 'https://github.com/test/repo/pull/1',
-        state: 'OPEN',
-        createdAt: '2026-01-11T10:00:00Z'
-      }
-
-      setupExecMock({
-        'git worktree list': {
-          stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
-        },
-        'git remote': { stdout: 'origin\n' },
-        'git branch --show-current': { stdout: `${mockBranch}\n` },
-        'git ls-remote': { stdout: `abc123 refs/heads/${mockBranch}\n` },
-        'gh pr list': { stdout: JSON.stringify(prData) }
-      })
-
-      // First call without force
-      await agentService.detectExistingPullRequest(mockProjectPath, mockAssignmentId)
-
-      const ghCallsAfterFirst = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('gh pr list')
-      ).length
-
-      // Second call with force=true
-      await agentService.detectExistingPullRequest(mockProjectPath, mockAssignmentId, {
-        force: true
-      })
-
-      const ghCallsAfterSecond = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('gh pr list')
-      ).length
-
-      // gh pr list should have been called again with force
       expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst + 1)
     })
 
@@ -599,7 +526,7 @@ describe('AgentService - detectExistingPullRequest', () => {
         String(call[0]).includes('gh pr list')
       ).length
 
-      // Second call - should try again (errors not cached)
+      // Second call - should try again
       const result2 = await agentService.detectExistingPullRequest(
         mockProjectPath,
         mockAssignmentId
@@ -612,44 +539,6 @@ describe('AgentService - detectExistingPullRequest', () => {
 
       // gh pr list should have been called again
       expect(ghCallsAfterSecond).toBe(ghCallsAfterFirst + 1)
-    })
-
-    it('should cache branch-not-on-remote results', async () => {
-      setupStandardFileMocks()
-
-      setupExecMock({
-        'git worktree list': {
-          stdout: `worktree ${mockWorktreePath}\nHEAD abc123\nbranch refs/heads/${mockBranch}\n`
-        },
-        'git remote': { stdout: 'origin\n' },
-        'git branch --show-current': { stdout: `${mockBranch}\n` },
-        'git ls-remote': { stdout: '' } // Branch not on remote
-      })
-
-      // First call
-      const result1 = await agentService.detectExistingPullRequest(
-        mockProjectPath,
-        mockAssignmentId
-      )
-      expect(result1?.found).toBe(false)
-
-      const lsRemoteCallsAfterFirst = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('git ls-remote')
-      ).length
-
-      // Second call - should use cache
-      const result2 = await agentService.detectExistingPullRequest(
-        mockProjectPath,
-        mockAssignmentId
-      )
-      expect(result2?.found).toBe(false)
-
-      const lsRemoteCallsAfterSecond = mockExec.mock.calls.filter((call) =>
-        String(call[0]).includes('git ls-remote')
-      ).length
-
-      // git ls-remote should NOT have been called again due to cache
-      expect(lsRemoteCallsAfterSecond).toBe(lsRemoteCallsAfterFirst)
     })
   })
 
