@@ -48,7 +48,8 @@ export {
   SearchIcon,
   ClipboardIcon,
   BugIcon,
-  TerminalIcon
+  TerminalIcon,
+  PaletteIcon
 } from './PersonaIcons'
 
 // Action icons
@@ -59,7 +60,9 @@ export {
   RefreshIcon,
   PlusCircleIcon,
   WorkflowIcon,
-  EditIcon
+  EditIcon,
+SkillsIcon,
+  HandoffIcon
 } from './ActionIcons'
 
 // Archive icons

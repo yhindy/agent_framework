@@ -8,7 +8,7 @@ A desktop application for managing and orchestrating AI coding minions in your p
 - **Missions Dashboard**: Visual kanban-style view of all minion missions
 - **Live Terminal Integration**: Interactive terminal sessions for Claude and Cursor CLI minions
 - **Signal Detection**: Minions can send special signals (PLAN_READY, DEV_COMPLETED, etc.) to update the UI
-- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators
+- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators (click to mark as read)
 - **Multi-tool Support**: Works with Claude, Cursor IDE, and Cursor CLI
 
 ## Prerequisites
@@ -47,24 +47,28 @@ npm run build
 gui/
 ├── src/
 │   ├── main/              # Electron main process
-│   │   ├── index.ts       # Main entry point
-│   │   └── services/      # Backend services
-│   │       ├── ProjectService.ts
+│   │   ├── index.ts       # Main entry point, IPC handlers
+│   │   └── services/      # Backend services (16 total)
 │   │       ├── AgentService.ts
 │   │       ├── TerminalService.ts
-│   │       └── FileWatcherService.ts
+│   │       ├── ProjectService.ts
+│   │       ├── ClaudeSessionInfoService.ts
+│   │       ├── MinionsConfigService.ts
+│   │       ├── SetupWizardService.ts
+│   │       ├── NotificationService.ts
+│   │       ├── PRPollingService.ts
+│   │       └── ...
 │   ├── preload/           # Preload scripts (IPC bridge)
 │   │   └── index.ts
 │   └── renderer/          # React frontend
 │       ├── index.html
 │       └── src/
 │           ├── App.tsx
-│           └── components/
-│               ├── ProjectPicker.tsx
-│               ├── Sidebar.tsx
-│               ├── Dashboard.tsx
-│               ├── AgentView.tsx
-│               └── Terminal.tsx
+│           ├── store/     # Zustand state management
+│           └── components/ # React components (23+)
+├── e2e/                   # E2E tests (Playwright)
+├── vitest.config.ts       # Unit test configuration
+├── playwright.config.ts   # E2E test configuration
 ├── electron.vite.config.ts
 ├── package.json
 └── README.md
@@ -74,9 +78,15 @@ gui/
 
 ### 1. Select a Project
 
-When you first open the app, you'll be prompted to select a project folder. The project must have:
+When you first open the app, you'll be prompted to select a project folder. The project must be a git repository. The framework supports two formats:
+
+**New Format (v2.0)**:
+- `minions.json` at project root
+
+**Legacy Format (v1)**:
 - `minions/` directory structure
-- `assignments.json` file (or run migration script first)
+
+If neither exists, the setup wizard will help configure the project.
 
 ### 2. View Assignments
 
@@ -120,11 +130,15 @@ The UI will automatically:
 
 ## Migration
 
-If you have an existing `ASSIGNMENTS.md` file, migrate it to JSON:
+### Legacy to New Format
 
-```bash
-node ../minions/bin/migrate-assignments.js
-```
+Projects using the legacy `minions/` folder structure can be migrated to the new `minions.json` format:
+
+1. Open the project in the GUI
+2. The GUI will detect the legacy format and offer migration
+3. Click "Migrate" to update to the new format
+
+The migration preserves all configuration and agent state.
 
 ## Configuration
 
@@ -168,11 +182,12 @@ Make sure:
 2. The tool (claude/cursor) is installed and in PATH
 3. Check the main process logs in the Electron developer console
 
-### Assignments not loading
+### Agents not loading
 
-1. Verify `assignments.json` exists in `minions/`
-2. Check the JSON is valid
-3. Try reloading the project
+1. For new format: Verify `minions.json` exists at project root
+2. For legacy format: Verify `minions/config.json` exists
+3. Check the JSON is valid
+4. Try reloading the project
 
 ### Agent worktree not found
 

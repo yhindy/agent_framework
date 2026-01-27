@@ -49,7 +49,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .workflow-builder-header-right {
@@ -58,6 +61,14 @@
   gap: var(--space-3);
   min-width: 150px;
   justify-content: flex-end;
+}
+
+/* Divider between toggle and actions */
+.workflow-builder-header-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-default);
+  margin: 0 var(--space-1);
 }
 
 /* Back button */
@@ -97,6 +108,46 @@
 .workflow-builder-subtitle {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
+}
+
+/* =============================================================================
+   EDITOR MODE TOGGLE
+   ============================================================================= */
+
+.workflow-builder-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-muted);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.mode-toggle-btn {
+  background: transparent;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.mode-toggle-btn:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+.mode-toggle-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.mode-toggle-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
 }
 
 /* Unsaved indicator */
@@ -275,5 +326,418 @@
 
   .workflow-builder-canvas {
     padding: 40px var(--space-4) 100px;
+  }
+}
+
+/* =============================================================================
+   TEXT EDITOR MODE
+   ============================================================================= */
+
+.workflow-text-editor {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 250px);
+  min-height: 400px;
+}
+
+.workflow-text-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.workflow-text-editor-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.workflow-text-editor-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  background: var(--color-error-dim);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.workflow-text-editor-textarea {
+  flex: 1;
+  width: 100%;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  resize: none;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.workflow-text-editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.workflow-text-editor-textarea.has-error {
+  border-color: var(--color-error);
+}
+
+.workflow-text-editor-textarea.has-error:focus {
+  box-shadow: 0 0 0 3px var(--color-error-dim);
+}
+
+.workflow-text-editor-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.workflow-text-editor-hint {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* =============================================================================
+   TEXT EDITOR LAYOUT WITH REFERENCE PANEL
+   Split layout: Editor (flexible) | Toggle | Reference Panel (fixed)
+   ============================================================================= */
+
+.workflow-text-editor-layout {
+  display: flex;
+  height: calc(100vh - 200px);
+  min-height: 500px;
+  gap: 0;
+  position: relative;
+  width: 100%;
+  max-width: none;
+}
+
+.workflow-text-editor-layout.panel-open {
+  /* Editor takes remaining space, panel is fixed */
+}
+
+.workflow-text-editor-layout.panel-closed .workflow-text-editor {
+  flex: 1;
+}
+
+/* Override canvas styles when in text mode for full-width layout */
+.workflow-builder-canvas:has(.workflow-text-editor-layout) {
+  padding: var(--space-5);
+  justify-content: stretch;
+}
+
+.workflow-builder-canvas:has(.workflow-text-editor-layout) .workflow-builder-canvas-inner {
+  max-width: none;
+  width: 100%;
+}
+
+/* Adjust text editor within layout */
+.workflow-text-editor-layout .workflow-text-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-text-editor-layout .workflow-text-editor-textarea {
+  flex: 1;
+}
+
+/* =============================================================================
+   REFERENCE PANEL TOGGLE BUTTON
+   Positioned at the edge between editor and panel
+   ============================================================================= */
+
+.reference-panel-toggle {
+  position: absolute;
+  right: 340px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 24px;
+  height: 48px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition-base);
+}
+
+.reference-panel-toggle:hover {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border-color: var(--border-prominent);
+}
+
+.reference-panel-toggle.open svg {
+  transform: rotate(0deg);
+  transition: transform var(--transition-base);
+}
+
+.reference-panel-toggle.closed {
+  right: 0;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.reference-panel-toggle.closed svg {
+  transform: rotate(180deg);
+}
+
+/* =============================================================================
+   REFERENCE PANEL
+   Fixed-width sidebar with bold visual treatment
+   ============================================================================= */
+
+.workflow-reference-panel {
+  width: 340px;
+  flex-shrink: 0;
+  background: linear-gradient(
+    180deg,
+    var(--bg-base) 0%,
+    color-mix(in srgb, var(--bg-surface) 50%, var(--bg-base) 50%) 100%
+  );
+  border-left: 1px solid var(--border-default);
+  overflow-y: auto;
+  transition: width var(--transition-base), opacity var(--transition-base);
+}
+
+.workflow-reference-panel.closed {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-left: none;
+}
+
+.reference-panel-content {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* =============================================================================
+   REFERENCE SECTIONS
+   Each section has strong visual hierarchy
+   ============================================================================= */
+
+.reference-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reference-section-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--accent-primary);
+}
+
+.reference-section-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+/* =============================================================================
+   AGENT LIST
+   Bold display of available agent types
+   ============================================================================= */
+
+.reference-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reference-agent-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: all var(--transition-base);
+  overflow: hidden;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.reference-agent-item:hover {
+  border-color: var(--border-prominent);
+  background: var(--bg-muted);
+}
+
+.reference-agent-item:active {
+  transform: scale(0.98);
+}
+
+.reference-agent-item.copied {
+  border-color: var(--color-success);
+  background: var(--color-success-dim, rgba(34, 197, 94, 0.1));
+}
+
+.reference-agent-item.copied .reference-agent-name {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.reference-agent-id {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-secondary);
+  background: var(--accent-secondary-dim);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-agent-name {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =============================================================================
+   CODE BLOCK
+   JSON example with syntax-like styling
+   ============================================================================= */
+
+.reference-code-block {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+}
+
+/* =============================================================================
+   TIPS LIST
+   Scannable reference tips
+   ============================================================================= */
+
+.reference-section-tips {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.reference-tips-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reference-tips-list li {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  padding-left: var(--space-4);
+  position: relative;
+}
+
+.reference-tips-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+}
+
+.reference-tips-list code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 10px;
+  background: var(--bg-muted);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+/* =============================================================================
+   RESPONSIVE ADJUSTMENTS FOR TEXT MODE
+   ============================================================================= */
+
+@media (max-width: 900px) {
+  .reference-panel-toggle {
+    right: 280px;
+  }
+
+  .reference-panel-toggle.closed {
+    right: 0;
+  }
+
+  .workflow-reference-panel {
+    width: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* On mobile, panel becomes a bottom sheet or is hidden */
+  .workflow-text-editor-layout {
+    flex-direction: column;
+  }
+
+  .reference-panel-toggle {
+    display: none;
+  }
+
+  .workflow-reference-panel {
+    width: 100%;
+    max-height: 200px;
+    border-left: none;
+    border-top: 1px solid var(--border-default);
+  }
+
+  .workflow-reference-panel.closed {
+    max-height: 0;
+    width: 100%;
+  }
+
+  .reference-panel-content {
+    padding: var(--space-3);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .reference-section {
+    flex: 1 1 200px;
   }
 }

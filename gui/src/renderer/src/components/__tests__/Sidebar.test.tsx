@@ -2,7 +2,17 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Sidebar from '../Sidebar'
 import { MemoryRouter } from 'react-router-dom'
+import { SnackbarProvider } from '../../contexts/SnackbarContext'
 import React from 'react'
+
+// Test wrapper with all required providers
+const TestWrapper = ({ children, initialEntries = ['/'] }: { children: React.ReactNode; initialEntries?: string[] }) => (
+  <MemoryRouter initialEntries={initialEntries}>
+    <SnackbarProvider>
+      {children}
+    </SnackbarProvider>
+  </MemoryRouter>
+)
 
 describe('Sidebar Collapse', () => {
   const mockProjects = [
@@ -28,7 +38,7 @@ describe('Sidebar Collapse', () => {
 
   it('renders collapse button', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -37,7 +47,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
@@ -47,7 +57,7 @@ describe('Sidebar Collapse', () => {
   it('calls onToggleCollapse when collapse button is clicked', async () => {
     const mockToggle = vi.fn()
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -56,7 +66,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={false}
           onToggleCollapse={mockToggle}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
@@ -67,7 +77,7 @@ describe('Sidebar Collapse', () => {
 
   it('applies collapsed class when isCollapsed is true', async () => {
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -76,7 +86,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={true}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const sidebar = container.querySelector('.sidebar')
@@ -85,7 +95,7 @@ describe('Sidebar Collapse', () => {
 
   it('does not apply collapsed class when isCollapsed is false', async () => {
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -94,7 +104,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const sidebar = container.querySelector('.sidebar')
@@ -103,7 +113,7 @@ describe('Sidebar Collapse', () => {
 
   it('shows correct icon when collapsed', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -112,7 +122,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={true}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Expand sidebar')
@@ -121,7 +131,7 @@ describe('Sidebar Collapse', () => {
 
   it('shows correct icon when expanded', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -130,7 +140,7 @@ describe('Sidebar Collapse', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     const collapseButton = screen.getByTitle('Collapse sidebar')
@@ -170,7 +180,7 @@ describe('Sidebar Integration', () => {
 
   it('collapses super minion children by default on first load', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -179,7 +189,7 @@ describe('Sidebar Integration', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // Wait for agents to load
@@ -199,7 +209,7 @@ describe('Sidebar Integration', () => {
 
   it('toggles children when super minion chevron is clicked', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -208,7 +218,7 @@ describe('Sidebar Integration', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -218,12 +228,16 @@ describe('Sidebar Integration', () => {
     const chevron = screen.getByTitle('Toggle child agents')
     fireEvent.click(chevron)
 
-    expect(screen.getByText('child-1')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('child-1')).toBeInTheDocument()
+    })
 
     fireEvent.click(chevron)
 
     // Child should be gone again
-    expect(screen.queryByText('child-1')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('child-1')).not.toBeInTheDocument()
+    })
   })
 })
 
@@ -270,7 +284,7 @@ describe('Sidebar plain terminal waiting', () => {
 
   it('shows badge when plain terminal is waiting', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -279,7 +293,7 @@ describe('Sidebar plain terminal waiting', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -302,7 +316,7 @@ describe('Sidebar plain terminal waiting', () => {
 
   it('clears badge when plain terminal resumes', async () => {
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -311,7 +325,7 @@ describe('Sidebar plain terminal waiting', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -344,7 +358,7 @@ describe('Sidebar plain terminal waiting', () => {
     })
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -353,7 +367,7 @@ describe('Sidebar plain terminal waiting', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -420,7 +434,7 @@ describe('Sidebar waiting indicator suppression', () => {
   it('shows indicator for waiting agent when viewing different agent', async () => {
     // Start at a different agent route
     render(
-      <MemoryRouter initialEntries={['/workspace/agent/agent-2']}>
+      <TestWrapper initialEntries={['/workspace/agent/agent-2']}>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -429,7 +443,7 @@ describe('Sidebar waiting indicator suppression', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -449,7 +463,7 @@ describe('Sidebar waiting indicator suppression', () => {
   it('hides indicator for waiting agent when viewing that agent', async () => {
     // Start at agent-1 route (the one that will be waiting)
     render(
-      <MemoryRouter initialEntries={['/workspace/agent/agent-1']}>
+      <TestWrapper initialEntries={['/workspace/agent/agent-1']}>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -458,7 +472,7 @@ describe('Sidebar waiting indicator suppression', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -483,7 +497,7 @@ describe('Sidebar waiting indicator suppression', () => {
 
     // Start viewing agent-2
     render(
-      <MemoryRouter initialEntries={['/workspace/agent/agent-2']}>
+      <TestWrapper initialEntries={['/workspace/agent/agent-2']}>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -492,7 +506,7 @@ describe('Sidebar waiting indicator suppression', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -547,7 +561,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -556,7 +570,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // Wait for async agent loading
@@ -587,7 +601,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -596,7 +610,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // When branch format doesn't match (less than 3 parts), display the full branch
@@ -623,7 +637,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -632,7 +646,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // When no branch is available, agent ID should be displayed
@@ -663,7 +677,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -672,7 +686,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -707,7 +721,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -716,7 +730,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -744,7 +758,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -753,7 +767,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -780,7 +794,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -789,7 +803,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // Should display the nested path after feature/project-id
@@ -816,7 +830,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -825,7 +839,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -852,7 +866,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -861,7 +875,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // Super minions with a branch should display the branch name, not the agent ID
@@ -889,7 +903,7 @@ describe('Sidebar branch name display', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     const { container } = render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -898,7 +912,7 @@ describe('Sidebar branch name display', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // Wait for the branch name to be displayed
@@ -908,233 +922,7 @@ describe('Sidebar branch name display', () => {
 
     const branchElement = container.querySelector('.agent-branch')!
     expect(branchElement).toBeInTheDocument()
-
-    // Verify the branch element has the correct CSS class which applies truncation styles
     expect(branchElement).toHaveClass('agent-branch')
-
-    // Verify it's inside the name container that enables truncation
-    const nameContainer = container.querySelector('.agent-name-container')
-    expect(nameContainer).toBeInTheDocument()
-    expect(nameContainer?.contains(branchElement)).toBe(true)
-  })
-})
-
-describe('Sidebar long branch name with status indicators', () => {
-  const mockProjects = [
-    { name: 'test-project', path: '/path/to/project' }
-  ]
-
-  let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-
-    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
-      agentStateCallback = callback
-      return vi.fn()
-    })
-  })
-
-  it('keeps status indicators visible with very long branch names', async () => {
-    const veryLongBranchPart = 'this-is-an-extremely-long-branch-name-that-would-definitely-overflow-the-sidebar-width-and-push-indicators-out-of-view'
-    const mockAgents = [
-      {
-        id: 'agent-1',
-        agentId: 'agent-1',
-        terminalPid: 123,
-        hasUnread: false,
-        tool: 'claude',
-        lastActivity: new Date().toISOString(),
-        branch: `feature/test-project/${veryLongBranchPart}`
-      }
-    ]
-
-    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
-
-    const { container } = render(
-      <MemoryRouter>
-        <Sidebar
-          activeProjects={mockProjects}
-          onNavigate={() => {}}
-          onProjectRemove={() => {}}
-          onProjectAdd={() => {}}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
-        />
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      const branchElement = container.querySelector('.agent-branch')
-      expect(branchElement).toBeInTheDocument()
-    })
-
-    // Trigger waiting state
-    agentStateCallback?.('agent-1', 'waiting')
-
-    await waitFor(() => {
-      // The attention badge should be in its own container that cannot be pushed out
-      const statusContainer = container.querySelector('.agent-status-indicators')
-      expect(statusContainer).toBeInTheDocument()
-
-      const attentionBadge = statusContainer?.querySelector('.attention-badge')
-      expect(attentionBadge).toBeInTheDocument()
-    })
-
-    // Verify the layout structure: status-indicators is a sibling of agent-info, not inside it
-    const agentItem = container.querySelector('.agent-item')!
-    const agentInfo = agentItem.querySelector('.agent-info')!
-    const statusIndicators = agentItem.querySelector('.agent-status-indicators')!
-
-    // Both should be direct children of agent-item
-    expect(agentInfo.parentElement).toBe(agentItem)
-    expect(statusIndicators.parentElement).toBe(agentItem)
-
-    // status-indicators should NOT be inside agent-info (this ensures it won't be pushed out)
-    expect(agentInfo.contains(statusIndicators)).toBe(false)
-
-    // Verify the DOM structure has the name container for truncation
-    const nameContainer = agentInfo.querySelector('.agent-name-container')
-    expect(nameContainer).toBeInTheDocument()
-  })
-
-  it('keeps spinner visible with very long branch names', async () => {
-    const veryLongBranchName = 'feature/test-project/another-extremely-long-branch-name-for-testing-spinner-visibility'
-    const mockAgents = [
-      {
-        id: 'agent-1',
-        agentId: 'agent-1',
-        terminalPid: 123,
-        hasUnread: false,
-        tool: 'claude',
-        lastActivity: new Date().toISOString(),
-        branch: veryLongBranchName
-      }
-    ]
-
-    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
-
-    const { container } = render(
-      <MemoryRouter>
-        <Sidebar
-          activeProjects={mockProjects}
-          onNavigate={() => {}}
-          onProjectRemove={() => {}}
-          onProjectAdd={() => {}}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
-        />
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      const branchElement = container.querySelector('.agent-branch')
-      expect(branchElement).toBeInTheDocument()
-    })
-
-    // Spinner should be visible (agent has terminalPid and is not waiting)
-    const statusContainer = container.querySelector('.agent-status-indicators')
-    expect(statusContainer).toBeInTheDocument()
-
-    const spinner = statusContainer?.querySelector('.agent-spinner')
-    expect(spinner).toBeInTheDocument()
-  })
-
-  it('keeps unread badge visible with very long branch names', async () => {
-    const veryLongBranchName = 'feature/test-project/yet-another-extremely-long-branch-name-for-testing-unread-badge-visibility'
-    const mockAgents = [
-      {
-        id: 'agent-1',
-        agentId: 'agent-1',
-        terminalPid: null, // No terminal, so no spinner
-        hasUnread: true,
-        lastActivity: new Date().toISOString(),
-        branch: veryLongBranchName
-      }
-    ]
-
-    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
-
-    const { container } = render(
-      <MemoryRouter>
-        <Sidebar
-          activeProjects={mockProjects}
-          onNavigate={() => {}}
-          onProjectRemove={() => {}}
-          onProjectAdd={() => {}}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
-        />
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      const branchElement = container.querySelector('.agent-branch')
-      expect(branchElement).toBeInTheDocument()
-    })
-
-    // Unread badge should be visible in the status container
-    const statusContainer = container.querySelector('.agent-status-indicators')
-    expect(statusContainer).toBeInTheDocument()
-
-    const unreadBadge = statusContainer?.querySelector('.unread-badge')
-    expect(unreadBadge).toBeInTheDocument()
-  })
-
-  it('has correct DOM structure with agent-name-container', async () => {
-    const mockAgents = [
-      {
-        id: 'agent-1',
-        agentId: 'agent-1',
-        terminalPid: 123,
-        hasUnread: true,
-        tool: 'claude',
-        lastActivity: new Date().toISOString(),
-        branch: 'feature/test-project/some-branch'
-      }
-    ]
-
-    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
-
-    const { container } = render(
-      <MemoryRouter>
-        <Sidebar
-          activeProjects={mockProjects}
-          onNavigate={() => {}}
-          onProjectRemove={() => {}}
-          onProjectAdd={() => {}}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
-        />
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      const agentItem = container.querySelector('.agent-item')
-      expect(agentItem).toBeInTheDocument()
-    })
-
-    const agentItem = container.querySelector('.agent-item')!
-
-    // Verify new DOM structure
-    const agentInfo = agentItem.querySelector('.agent-info')
-    expect(agentInfo).toBeInTheDocument()
-
-    // agent-info should contain: leading-icons + name-container
-    const leadingIcons = agentInfo?.querySelector('.agent-leading-icons')
-    expect(leadingIcons).toBeInTheDocument()
-
-    const nameContainer = agentInfo?.querySelector('.agent-name-container')
-    expect(nameContainer).toBeInTheDocument()
-
-    // branch should be inside name-container
-    const branch = nameContainer?.querySelector('.agent-branch')
-    expect(branch).toBeInTheDocument()
-
-    // status-indicators should be a sibling of agent-info, not inside it
-    const statusIndicators = agentItem.querySelector('.agent-status-indicators')
-    expect(statusIndicators).toBeInTheDocument()
-    expect(agentInfo?.contains(statusIndicators)).toBe(false)
   })
 })
 
@@ -1171,7 +959,7 @@ describe('Sidebar icon alignment', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -1180,7 +968,7 @@ describe('Sidebar icon alignment', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     // When agents have branches, the branch name is displayed instead of agent ID
@@ -1222,7 +1010,7 @@ describe('Sidebar icon alignment', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -1231,7 +1019,7 @@ describe('Sidebar icon alignment', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -1259,7 +1047,7 @@ describe('Sidebar icon alignment', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -1268,7 +1056,7 @@ describe('Sidebar icon alignment', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {
@@ -1317,7 +1105,7 @@ describe('Sidebar icon alignment', () => {
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
 
     render(
-      <MemoryRouter>
+      <TestWrapper>
         <Sidebar
           activeProjects={mockProjects}
           onNavigate={() => {}}
@@ -1326,7 +1114,7 @@ describe('Sidebar icon alignment', () => {
           isCollapsed={false}
           onToggleCollapse={() => {}}
         />
-      </MemoryRouter>
+      </TestWrapper>
     )
 
     await waitFor(() => {

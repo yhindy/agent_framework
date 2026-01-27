@@ -67,6 +67,13 @@ Object.defineProperty(window, 'electronAPI', {
     validateTeleport: vi.fn().mockResolvedValue({ success: true }),
     retryResumeAgent: vi.fn().mockResolvedValue(undefined),
     startFreshSession: vi.fn().mockResolvedValue(undefined),
+    // Archive-related methods
+    listArchivedAgents: vi.fn().mockResolvedValue([]),
+    restoreArchivedAgent: vi.fn().mockResolvedValue({}),
+    getCurrentProject: vi.fn().mockResolvedValue(null),
+    getActiveProjects: vi.fn().mockResolvedValue([{ path: '/test/project' }]),
+    // PR polling methods
+    stopPRPolling: vi.fn().mockResolvedValue(undefined),
   }
 })
 

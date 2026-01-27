@@ -5,6 +5,7 @@ import Dashboard from './Dashboard'
 import AgentView from './AgentView'
 import SuperAgentView from './SuperAgentView'
 import { ArchivePage } from './archive'
+import { SkillsPage } from './skills/SkillsPage'
 import SettingsPage from './SettingsPage'
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
@@ -213,6 +214,7 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
           <Route path="/agent/:agentId" element={<AgentView activeProjects={activeProjects} />} />
           <Route path="/super/:agentId" element={<SuperAgentView activeProjects={activeProjects} />} />
           <Route path="/archive" element={<ArchivePage />} />
+          <Route path="/skills" element={<SkillsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>

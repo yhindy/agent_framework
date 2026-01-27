@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, crashReporter } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ProjectService } from './services/ProjectService'
 import { AgentService } from './services/AgentService'
@@ -18,13 +19,131 @@ import { createLogger } from './services/logger'
 import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowTypes'
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
+import { ClaudeConfigService } from './services/ClaudeConfigService'
+import { SkillsLibraryService } from './services/SkillsLibraryService'
+import { UnifiedSkillsService } from './services/UnifiedSkillsService'
+import { HandoffApiService } from './services/HandoffApiService'
+import type { ClaudeConfigSettings, SkillsLibrarySettings } from '../shared/types/settings'
 
 const log = createLogger('Main')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+function getCurrentBranch(): string {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: join(__dirname, '../../'),
+      encoding: 'utf-8'
+    }).trim()
+    return branch
+  } catch {
+    return 'unknown'
+  }
+}
+
 let mainWindow: BrowserWindow | null = null
+
+// Agent type from listAgents (subset of AgentSession interface)
+interface ResumeableAgent {
+  id: string
+  worktreePath: string
+  claudeSessionId?: string
+  cloudSessionId?: string
+  isTeleportedSession?: boolean
+  tool?: string
+  mode?: string
+  prompt?: string
+  model?: string
+  yolo?: boolean
+  chrome?: boolean
+}
+
+/**
+ * Validates a teleported session and returns whether it can be resumed.
+ * Returns true if the session is valid and resumable, false otherwise.
+ */
+async function validateTeleportedSession(agent: ResumeableAgent): Promise<boolean> {
+  if (!services) return false
+
+  const agentInfo = services.agent.readAgentInfo(agent.worktreePath)
+  if (!agentInfo) {
+    log.debug(`Could not read agent info for ${agent.id}`)
+    return false
+  }
+
+  const validation = await services.agent.validateTeleportSession(agentInfo, agent.worktreePath)
+
+  if (!validation.isValid) {
+    log.warn(`Teleported session ${agent.id} validation failed: ${validation.reason}`)
+    mainWindow?.webContents.send('agent:teleportValidationFailed', {
+      agentId: agent.id,
+      reason: validation.reason,
+      canRetry: validation.canResume
+    })
+    services.agent.updateAgentInfo(agent.worktreePath, { claudeSessionActive: false })
+    return false
+  }
+
+  if (!validation.canResume) {
+    log.debug(`Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Attempts to resume a single agent's Claude session.
+ * Handles teleport validation, session state checking, and terminal startup.
+ */
+async function resumeAgentSession(projectPath: string, agent: ResumeableAgent): Promise<void> {
+  if (!services || !agent.claudeSessionId) return
+
+  // Validate teleported sessions first
+  if (agent.cloudSessionId || agent.isTeleportedSession) {
+    const isValid = await validateTeleportedSession(agent)
+    if (!isValid) return
+  }
+
+  // Check session state from JSONL
+  const sessionState = services.claudeSessionInfo.getSessionState(
+    agent.claudeSessionId,
+    agent.worktreePath
+  )
+
+  if (sessionState === 'unknown') {
+    log.debug(`Skipping ${agent.id} - session not found in JSONL`)
+    return
+  }
+
+  log.debug(`Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
+
+  try {
+    await services.terminal.startAgent(
+      projectPath,
+      agent.id,
+      agent.tool || 'claude',
+      agent.mode || 'dev',
+      agent.prompt,
+      agent.model,
+      agent.yolo || false,
+      agent.chrome !== false
+    )
+
+    mainWindow?.webContents.send('agents:updated')
+
+    if (sessionState === 'waiting') {
+      mainWindow?.webContents.send('agent:waitingForInput', agent.id, 'Claude is waiting for input')
+    }
+  } catch (error) {
+    log.error(`Failed to resume agent ${agent.id}`, error)
+    mainWindow?.webContents.send('agent:resumeFailed', {
+      agentId: agent.id,
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
 let services: {
   project: ProjectService
   agent: AgentService
@@ -40,6 +159,10 @@ let services: {
   workflow: WorkflowService
   setupWizard: SetupWizardService
   minionsConfig: MinionsConfigService
+  claudeConfig: ClaudeConfigService
+skillsLibrary: SkillsLibraryService
+  unifiedSkills: UnifiedSkillsService
+  handoffApi: HandoffApiService
 } | null = null
 
 
@@ -47,6 +170,8 @@ function createWindow(): void {
   // Always use PNG for BrowserWindow icon (cross-platform compatibility)
   const resourcesPath = join(__dirname, '../../resources')
   const iconPath = join(resourcesPath, 'icon.png')
+  const branch = getCurrentBranch()
+  const windowTitle = branch && branch !== 'unknown' ? `Minion Laboratory -- ${branch}` : 'Minion Laboratory'
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -56,10 +181,15 @@ function createWindow(): void {
     icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
+  })
+
+  // Set title after page loads (HTML <title> would otherwise overwrite it)
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.setTitle(windowTitle)
   })
 
   // Update window reference in services if they exist (handling reopen)
@@ -119,6 +249,8 @@ function initializeServices(): void {
   terminalService.setClaudeSessionInfoService(claudeSessionInfoService)
   terminalService.setSettingsService(settingsService)
 
+  // Note: Orphaned tmux session cleanup happens after we know which agents are active (see below)
+
   // WorkflowService will be set after services object is created (below)
 
   // Set service references in AgentService
@@ -126,6 +258,25 @@ function initializeServices(): void {
 
   // Create SetupWizardService (depends on other services)
   const setupWizardService = new SetupWizardService(agentService, terminalService, minionsConfigService)
+
+  // Create ClaudeConfigService for importing Claude Code plugins
+  const claudeConfigService = new ClaudeConfigService()
+  claudeConfigService.setWindow(mainWindow)
+
+// Create SkillsLibraryService for Vercel and project-local skills
+  const skillsLibraryService = new SkillsLibraryService()
+  skillsLibraryService.setWindow(mainWindow)
+
+  // Create UnifiedSkillsService to combine all skill sources
+  const unifiedSkillsService = new UnifiedSkillsService(claudeConfigService, skillsLibraryService)
+  unifiedSkillsService.setWindow(mainWindow)
+
+  // Create HandoffApiService for Claude Code /handoff command
+  const handoffApiService = new HandoffApiService()
+  handoffApiService.setAgentService(agentService)
+  handoffApiService.setTerminalService(terminalService)
+  handoffApiService.setProjectService(projectService)
+  handoffApiService.setWindow(mainWindow)
 
   services = {
     project: projectService,
@@ -141,21 +292,91 @@ function initializeServices(): void {
     teleportMetadata: new TeleportMetadataService(),
     workflow: new WorkflowService(),
     setupWizard: setupWizardService,
-    minionsConfig: minionsConfigService
+    minionsConfig: minionsConfigService,
+    claudeConfig: claudeConfigService,
+    skillsLibrary: skillsLibraryService,
+    unifiedSkills: unifiedSkillsService,
+    handoffApi: handoffApiService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
   terminalService.setWorkflowService(services.workflow)
 
-  // Migrate existing assignments from config.json to .agent-info files
-  const activeProjects = services.project.getActiveProjects()
-  for (const project of activeProjects) {
-    services.agent.migrateAssignments(project.path)
-      .catch(err => log.error(`Failed to migrate assignments for ${project.path}`, err))
+  // Wire up ClaudeConfigService to WorkflowService for imported agents
+  services.workflow.setClaudeConfigService(services.claudeConfig)
 
-    // Ensure base branch agent exists for projects with framework installed
-    if (!project.needsInstall) {
-      services.agent.ensureBaseBranchAgentWithStartup(project.path)
+  // Wire up SkillsLibraryService to WorkflowService for Vercel/project skills
+  services.workflow.setSkillsLibraryService(services.skillsLibrary)
+
+  // Initialize Claude config settings from saved settings
+  const savedSettings = settingsService.getSettings()
+  if (savedSettings.claudeConfig) {
+    services.claudeConfig.updateSettings(savedSettings.claudeConfig)
+  }
+
+  // Initialize Skills Library settings from saved settings
+  if (savedSettings.skillsLibrary) {
+    services.skillsLibrary.updateSettings(savedSettings.skillsLibrary)
+  }
+
+  // Start watching for Claude config changes if auto-refresh is enabled
+  if (savedSettings.claudeConfig?.autoRefresh !== false) {
+    services.claudeConfig.startWatching()
+  }
+
+  // Start watching for skills library changes
+  services.skillsLibrary.startWatching()
+
+  // Start the Handoff API server for Claude Code /handoff command
+  services.handoffApi.start()
+
+  // Set up IPC handlers early so renderer can communicate immediately
+  setupIPC()
+
+  // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
+  const activeProjects = services.project.getActiveProjects()
+
+  // Async initialization: scan plugins/skills, collect agents, cleanup orphans, then auto-resume
+  // This runs asynchronously so it doesn't block the app from becoming responsive
+  ;(async () => {
+    // Scan Claude plugins and skills asynchronously to avoid blocking startup
+    try {
+      services!.claudeConfig.scanConfigs()
+      services!.skillsLibrary.scan()
+    } catch (err) {
+      log.error('Failed to scan plugins/skills during startup', err)
+    }
+    // First pass: collect all active agent IDs and do migrations
+    const allAgentIds: string[] = []
+    const agentsByProject = new Map<string, ResumeableAgent[]>()
+
+    await Promise.all(activeProjects.map(async (project) => {
+      try {
+        await services!.agent.migrateAssignments(project.path)
+      } catch (err) {
+        log.error(`Failed to migrate assignments for ${project.path}`, err)
+      }
+
+      if (!project.needsInstall) {
+        try {
+          const agents = await services!.agent.listAgents(project.path)
+          allAgentIds.push(...agents.map(a => a.id))
+          agentsByProject.set(project.path, agents)
+        } catch (err) {
+          log.error(`Failed to list agents for ${project.path}`, err)
+        }
+      }
+    }))
+
+    // Clean up orphaned tmux sessions (those without active agents)
+    services!.terminal.killOrphanedTmuxSessions(allAgentIds)
+
+    // Second pass: ensure base agents and auto-resume
+    for (const project of activeProjects) {
+      if (project.needsInstall) continue
+
+      // Ensure base branch agent exists
+      services!.agent.ensureBaseBranchAgentWithStartup(project.path)
         .then(result => {
           // Auto-start Claude for newly created base agents
           if (result.shouldStartClaude && result.agentInfo.prompt) {
@@ -180,118 +401,47 @@ function initializeServices(): void {
         })
         .catch(err => log.error(`Failed to ensure base agent for ${project.path}`, err))
 
-      // Auto-resume existing Claude sessions on app startup (JSONL-based detection)
-      services.agent.listAgents(project.path)
-        .then(async agents => {
-          for (const agent of agents) {
-            // Check for Claude sessions with session IDs (use JSONL to verify they exist)
-            if (agent.claudeSessionId && agent.tool === 'claude') {
-              // Special handling for teleported sessions (cloudSessionId present)
-              if (agent.cloudSessionId || agent.isTeleportedSession) {
-                log.debug(`[Startup] Validating teleported session for ${agent.id}`)
+      // Auto-resume existing Claude sessions
+      const agents = agentsByProject.get(project.path) || []
+      const resumePromises = agents
+        .filter(agent => agent.claudeSessionId && agent.tool === 'claude')
+        .map(agent => resumeAgentSession(project.path, agent))
 
-                // Read full agent info from disk to pass to validation
-                const agentInfo = services!.agent.readAgentInfo(agent.worktreePath)
-                if (!agentInfo) {
-                  log.debug(`[Startup] Could not read agent info for ${agent.id}`)
-                  continue
-                }
-
-                // Validate teleported session
-                const validation = await services!.agent.validateTeleportSession(agentInfo)
-
-                if (!validation.isValid) {
-                  log.warn(`[Startup] Teleported session ${agent.id} validation failed: ${validation.reason}`)
-
-                  // Send notification to user about failed validation
-                  mainWindow?.webContents.send('agent:teleportValidationFailed', {
-                    agentId: agent.id,
-                    reason: validation.reason,
-                    canRetry: validation.canResume
-                  })
-
-                  // Update agent info with validation error
-                  services!.agent.updateAgentInfo(agent.worktreePath, {
-                    claudeSessionActive: false
-                  })
-
-                  continue
-                }
-
-                if (!validation.canResume) {
-                  log.debug(`[Startup] Teleported session ${agent.id} cannot be resumed: ${validation.reason}`)
-                  continue
-                }
-
-                log.debug(`[Startup] Teleported session ${agent.id} validated successfully`)
-              }
-
-              // Check actual session state from JSONL
-              const sessionState = services!.claudeSessionInfo.getSessionState(
-                agent.claudeSessionId,
-                agent.worktreePath
-              )
-
-              // Only resume if session exists (not 'unknown')
-              if (sessionState !== 'unknown') {
-                log.debug(`[Startup] Auto-resuming Claude session for ${agent.id} (state: ${sessionState})`)
-
-                // Stagger resumes to avoid overwhelming
-                const delay = 500 + Math.random() * 2000
-
-                setTimeout(async () => {
-                  try {
-                    await services!.terminal.startAgent(
-                      project.path,
-                      agent.id,
-                      agent.tool || 'claude',
-                      agent.mode || 'dev',
-                      agent.prompt,
-                      agent.model,
-                      agent.yolo || false,  // Restore yolo flag for dangerously-skip-permissions
-                      agent.chrome !== false  // Restore chrome flag (default true)
-                    )
-
-                    mainWindow?.webContents.send('agents:updated')
-
-                    // Restore waiting notification based on JSONL state
-                    if (sessionState === 'waiting') {
-                      mainWindow?.webContents.send('agent:waitingForInput',
-                        agent.id,
-                        'Claude is waiting for input'
-                      )
-                    }
-                  } catch (error) {
-                    log.error(`Failed to resume agent ${agent.id}`, error)
-
-                    // Send failure notification to UI
-                    mainWindow?.webContents.send('agent:resumeFailed', {
-                      agentId: agent.id,
-                      error: error instanceof Error ? error.message : String(error)
-                    })
-                  }
-                }, delay)
-              } else {
-                log.debug(`[Startup] Skipping ${agent.id} - session not found in JSONL`)
-              }
-            }
-          }
-        })
+      Promise.all(resumePromises)
         .catch(err => log.error(`Failed to auto-resume agents for ${project.path}`, err))
     }
-  }
-
-  // Set up IPC handlers
-  setupIPC()
+  })().catch(err => log.error('Failed during startup initialization', err))
 }
 
 function setupIPC(): void {
   if (!services) return
 
-  // Helper function to find which project an agent belongs to
+  // Cache for agent -> project mapping to avoid repeated git worktree calls
+  const agentProjectCache = new Map<string, string>()
+
+  // Helper function to find which project an agent belongs to (with caching)
   const findProjectForAgent = async (agentId: string): Promise<string> => {
+    // Check cache first
+    const cached = agentProjectCache.get(agentId)
+    if (cached) {
+      return cached
+    }
+
     const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
-    return services!.agent.findProjectForAgent(activeProjectPaths, agentId)
+    const projectPath = await services!.agent.findProjectForAgent(activeProjectPaths, agentId)
+
+    // Cache the result
+    agentProjectCache.set(agentId, projectPath)
+    return projectPath
+  }
+
+  // Clear agent cache when agent list changes (called after agent operations)
+  const clearAgentCache = (agentId?: string) => {
+    if (agentId) {
+      agentProjectCache.delete(agentId)
+    } else {
+      agentProjectCache.clear()
+    }
   }
 
   // Helper function to find which project an assignment belongs to
@@ -447,13 +597,30 @@ function setupIPC(): void {
 
   ipcMain.handle('agents:listForProject', async (_event, projectPath: string) => {
     const agents = await services!.agent.listAgents(projectPath)
-    
-    // Merge in terminal PIDs from TerminalService
+
+    // Merge in terminal PIDs and current state from TerminalService
+    // This avoids separate getAgentState calls for each agent (major perf improvement)
     const activeTerminals = services!.terminal.getActiveTerminals()
-    return agents.map(agent => ({
-      ...agent,
-      terminalPid: activeTerminals.get(agent.id) ?? null
-    }))
+    return agents.map(agent => {
+      // Populate the agent -> project cache while we have this data
+      agentProjectCache.set(agent.id, projectPath)
+
+      let currentState: string | undefined
+
+      // Get state for active Claude agents
+      if (activeTerminals.has(agent.id) && agent.tool === 'claude' && agent.claudeSessionId) {
+        currentState = services!.claudeSessionInfo.getSessionState(
+          agent.claudeSessionId,
+          agent.worktreePath
+        )
+      }
+
+      return {
+        ...agent,
+        terminalPid: activeTerminals.get(agent.id) ?? null,
+        currentState
+      }
+    })
   })
 
   ipcMain.handle('agents:stop', async (_event, agentId: string) => {
@@ -497,6 +664,63 @@ function setupIPC(): void {
   ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
     return services!.agent.getSuperAgentDetails(projectPath, agentId)
+  })
+
+  // Ensure an agent is running (start if not active)
+  // Used by AgentView to start base branch agents when clicked
+  ipcMain.handle('agents:ensureRunning', async (_event, agentId: string, projectPath?: string) => {
+    try {
+      const project = projectPath || services!.project.getCurrentProject()?.path
+      if (!project) {
+        return { started: false, error: 'No project selected' }
+      }
+
+      // Check if terminal is already active
+      if (services!.terminal.hasActiveTerminal(agentId)) {
+        return { started: false } // Already running, no action needed
+      }
+
+      // Get agent info by finding the agent in the list
+      const agents = await services!.agent.listAgents(project)
+      const agent = agents.find(a => a.id === agentId)
+      if (!agent) {
+        return { started: false, error: 'Agent not found' }
+      }
+
+      // Read full agent info from disk
+      const agentInfo = services!.agent.readAgentInfo(agent.worktreePath, agentId, project)
+      if (!agentInfo) {
+        return { started: false, error: 'Could not read agent info' }
+      }
+
+      // Only start if agent has a tool configured
+      if (!agentInfo.tool) {
+        return { started: false, error: 'Agent has no tool configured' }
+      }
+
+      // For base branch agents, don't pass a prompt - just start Claude normally
+      // This lets the user interact with Claude directly without a pre-set task
+      const isBaseBranchAgent = agent.isBaseBranchAgent
+      const promptToUse = isBaseBranchAgent ? undefined : agentInfo.prompt
+
+      // Start the agent
+      log.info(`[agents:ensureRunning] Starting agent ${agentId} (isBase=${isBaseBranchAgent})`)
+      await services!.terminal.startAgent(
+        project,
+        agentId,
+        agentInfo.tool,
+        agentInfo.mode || 'dev',
+        promptToUse,
+        agentInfo.model,
+        agentInfo.yolo || false,
+        agentInfo.chrome !== false
+      )
+
+      return { started: true }
+    } catch (error) {
+      log.error(`[agents:ensureRunning] Failed to start agent ${agentId}:`, error)
+      return { started: false, error: String(error) }
+    }
   })
 
   // Validate and potentially retry a teleported session
@@ -544,6 +768,41 @@ function setupIPC(): void {
     const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
     // Auto-start the child agent with the prompt and model from the plan
     await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode, childAgent.prompt, childAgent.model, childAgent.yolo, childAgent.chrome !== false)
+  })
+
+  // Handoff handler - create a new agent from an existing one
+  ipcMain.handle('agents:handoff', async (_event, request: import('./services/types/ProjectConfig').HandoffRequest) => {
+    const projectPath = await findProjectForAgent(request.sourceAgentId)
+    const result = await services!.agent.handoffAgent(projectPath, request)
+
+    if (result.success && result.newAgent) {
+      // Trigger updates
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+
+      // Auto-start the new agent if it has a prompt
+      if (result.newAgent.prompt) {
+        setTimeout(async () => {
+          try {
+            await services!.terminal.startAgent(
+              projectPath,
+              result.newAgent!.agentId,
+              result.newAgent!.tool,
+              result.newAgent!.mode,
+              result.newAgent!.prompt,
+              result.newAgent!.model,
+              result.newAgent!.yolo,
+              result.newAgent!.chrome !== false
+            )
+            mainWindow?.webContents.send('agents:updated')
+          } catch (error) {
+            log.error('Failed to auto-start handoff agent', error)
+          }
+        }, 2000) // Wait for worktree setup
+      }
+    }
+
+    return result
   })
 
   // Terminal handlers
@@ -801,8 +1060,17 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('agents:saveUIState', async (_event, agentId: string, uiState: any) => {
-    const projectPath = await findProjectForAgent(agentId)
-    return services!.agent.saveUIState(projectPath, agentId, uiState)
+    try {
+      const projectPath = await findProjectForAgent(agentId)
+      return services!.agent.saveUIState(projectPath, agentId, uiState)
+    } catch (error) {
+      // Agent may have been deleted while debounced save was pending - this is not a critical error
+      if (error instanceof Error && error.message.includes('not found')) {
+        log.debug(`saveUIState skipped for ${agentId}: agent no longer exists`)
+        return
+      }
+      throw error
+    }
   })
 
   ipcMain.handle('assignments:createPR', async (_event, assignmentId: string, autoCommit: boolean = false) => {
@@ -861,18 +1129,32 @@ function setupIPC(): void {
 
   // Cleanup handlers
   ipcMain.handle('agents:teardown', async (_event, agentId: string, force: boolean) => {
-    // Find the project this agent belongs to by searching all active projects
-    const activeProjects = services!.project.getActiveProjects()
-    let projectPath: string | null = null
+    // Use cached project path if available, otherwise search
+    let projectPath = agentProjectCache.get(agentId)
     let agent: any = null
 
-    for (const project of activeProjects) {
-      const agents = await services!.agent.listAgents(project.path)
-      const found = agents.find(a => a.id === agentId)
-      if (found) {
-        projectPath = project.path
-        agent = found
-        break
+    if (projectPath) {
+      // Verify agent still exists in cached project
+      const agents = await services!.agent.listAgents(projectPath)
+      agent = agents.find(a => a.id === agentId)
+      if (!agent) {
+        // Cache was stale, clear and search
+        agentProjectCache.delete(agentId)
+        projectPath = undefined
+      }
+    }
+
+    if (!projectPath) {
+      // Fallback to searching all projects
+      const activeProjects = services!.project.getActiveProjects()
+      for (const project of activeProjects) {
+        const agents = await services!.agent.listAgents(project.path)
+        const found = agents.find(a => a.id === agentId)
+        if (found) {
+          projectPath = project.path
+          agent = found
+          break
+        }
       }
     }
 
@@ -896,34 +1178,27 @@ function setupIPC(): void {
     } catch (error) {
       log.error('Failed to stop test environments', error)
     }
-    
+
     await services!.agent.teardownAgent(projectPath, agentId, force)
-    
+
+    // Clear cache for this agent
+    clearAgentCache(agentId)
+
     // Trigger updates
     mainWindow?.webContents.send('agents:updated')
     mainWindow?.webContents.send('assignments:updated')
   })
 
   ipcMain.handle('agents:unassign', async (_event, agentId: string) => {
-    // Find the project this agent belongs to by searching all active projects
-    const activeProjects = services!.project.getActiveProjects()
-    let projectPath: string | null = null
-    let agent: any = null
+    // Use cached project path, fallback to findProjectForAgent
+    const projectPath = await findProjectForAgent(agentId)
+    const agents = await services!.agent.listAgents(projectPath)
+    const agent = agents.find(a => a.id === agentId)
 
-    for (const project of activeProjects) {
-      const agents = await services!.agent.listAgents(project.path)
-      const found = agents.find(a => a.id === agentId)
-      if (found) {
-        projectPath = project.path
-        agent = found
-        break
-      }
-    }
-
-    if (!projectPath) throw new Error(`Agent ${agentId} not found in any active project`)
+    if (!agent) throw new Error(`Agent ${agentId} not found`)
 
     // Prevent unassign of base branch agents
-    if (agent && agent.isBaseBranchAgent) {
+    if (agent.isBaseBranchAgent) {
       throw new Error('Cannot unassign base branch agent')
     }
 
@@ -1111,7 +1386,7 @@ function setupIPC(): void {
       const agents = await services!.agent.listAgents(project.path)
       const agent = agents.find(a => a.id === agentId)
       if (agent && agent.claudeSessionId) {
-        const info = services!.claudeSessionInfo.parseSessionInfo(
+        const info = await services!.claudeSessionInfo.parseSessionInfo(
           agent.claudeSessionId,
           agent.worktreePath
         )
@@ -1196,6 +1471,113 @@ function setupIPC(): void {
   ipcMain.handle('project:migrate', async (_event, projectPath: string) => {
     return services!.minionsConfig.migrateFromLegacy(projectPath)
   })
+
+  // Claude Config handlers
+  ipcMain.handle('claudeConfig:check', async () => {
+    return services!.claudeConfig.isClaudeCodeInstalled()
+  })
+
+  ipcMain.handle('claudeConfig:scan', async () => {
+    return services!.claudeConfig.scanConfigs()
+  })
+
+  ipcMain.handle('claudeConfig:refresh', async () => {
+    return services!.claudeConfig.refresh()
+  })
+
+  ipcMain.handle('claudeConfig:getEnabled', async () => {
+    return services!.claudeConfig.getEnabledImports()
+  })
+
+  ipcMain.handle('claudeConfig:getSettings', async () => {
+    return services!.claudeConfig.getSettings()
+  })
+
+  ipcMain.handle('claudeConfig:setEnabled', async (_event, updates: Partial<ClaudeConfigSettings>) => {
+    const updatedSettings = services!.claudeConfig.updateSettings(updates)
+
+    // Persist to settings service
+    await services!.settings.updateSettings({ claudeConfig: updatedSettings })
+
+    // Update watching state based on autoRefresh setting
+    if (updates.autoRefresh !== undefined) {
+      if (updates.autoRefresh) {
+        services!.claudeConfig.startWatching()
+      } else {
+        services!.claudeConfig.stopWatching()
+      }
+    }
+
+    return updatedSettings
+  })
+
+  ipcMain.handle('claudeConfig:getScanResult', async () => {
+    return services!.claudeConfig.getScanResult()
+  })
+
+  // Skills Library handlers
+  ipcMain.handle('skillsLibrary:scan', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.scan(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getScanResult', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:refresh', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.refresh(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getSettings', async () => {
+    return services!.skillsLibrary.getSettings()
+  })
+
+  ipcMain.handle('skillsLibrary:updateSettings', async (_event, updates: Partial<SkillsLibrarySettings>) => {
+    const updatedSettings = services!.skillsLibrary.updateSettings(updates)
+    // Persist to settings service
+    await services!.settings.updateSettings({ skillsLibrary: updatedSettings })
+    return updatedSettings
+  })
+
+  ipcMain.handle('skillsLibrary:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getEnabledSkills(projectPath)
+  })
+
+  // Unified Skills handlers (combines all sources)
+  ipcMain.handle('unifiedSkills:scan', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.scan(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getScanResult', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:refresh', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.refresh(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkills(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getSkillById', async (_event, skillId: string, projectPath?: string) => {
+    return services!.unifiedSkills.getSkillById(skillId, projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:setSkillEnabled', async (_event, skillId: string, enabled: boolean) => {
+    services!.unifiedSkills.setSkillEnabled(skillId, enabled)
+    // Persist settings changes
+    const claudeSettings = services!.claudeConfig.getSettings()
+    const librarySettings = services!.skillsLibrary.getSettings()
+    await services!.settings.updateSettings({
+      claudeConfig: claudeSettings,
+      skillsLibrary: librarySettings
+    })
+  })
+
+  ipcMain.handle('unifiedSkills:getSubagentTypes', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkillsAsSubagentTypes(projectPath)
+  })
 }
 
 app.whenReady().then(() => {
@@ -1207,7 +1589,9 @@ app.whenReady().then(() => {
     })
   }
 
-  app.setName('Minion Laboratory')
+  const branch = getCurrentBranch()
+  const appName = branch && branch !== 'unknown' ? `Minion Laboratory -- ${branch}` : 'Minion Laboratory'
+  app.setName(appName)
   electronApp.setAppUserModelId('com.minion-laboratory.app')
 
   // Set app icon for menu bar/dock on macOS
@@ -1237,6 +1621,15 @@ app.on('window-all-closed', () => {
   if (services) {
     services.terminal.cleanup()
     services.testEnv.cleanup()
+    services.claudeConfig.cleanup()
+services.skillsLibrary.cleanup()
+    services.unifiedSkills.cleanup()
+    // Stop the Handoff API server
+    services.handoffApi.stop()
+    // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
+    services.claudeSessionInfo.dispose()
+    // MEMORY FIX: Dispose PRPollingService to clean up polling jobs
+    services.prPolling.dispose()
   }
   if (process.platform !== 'darwin') {
     app.quit()

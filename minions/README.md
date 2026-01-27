@@ -39,17 +39,25 @@ cursor --folder ../yourproject-agent-1
 
 ## Directory Structure
 
+**Note:** The framework now supports two configuration formats. This directory is used by the legacy format (v1). New projects use `minions.json` at the project root instead.
+
+### Legacy Format (this directory)
 ```
 minions/
 ├── README.md                    # This file
-├── assignments.json             # Missions database (machine-readable)
+├── config.json                  # Project configuration
 ├── templates/
 │   └── FEATURE_SPEC.md          # Template for new missions
-├── assignments/
-│   ├── agent-1-feature.md       # Active mission for agent-1
-│   ├── agent-2-bugfix.md        # Active mission for agent-2
-│   └── ...
+├── rules/                       # Agent behavior rules
 └── bin/                         # Management scripts
+```
+
+### New Format (v2.0)
+```
+your-project/
+├── minions.json                 # Single config file (at project root)
+└── .minions/                    # Runtime state folder
+    └── agents/                  # Per-agent state files
 ```
 
 ## Creating Missions

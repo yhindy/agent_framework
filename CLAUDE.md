@@ -13,7 +13,14 @@ This document provides essential context for AI assistants working with the Agen
 ### Testing Requirements
 - **Always write tests for new functionality.** No feature is complete without tests.
 - **Run smart tests before proposing commits** - use selective testing to save time and memory: `npm run test:changed`
-- Follow existing test patterns in `gui/src/main/services/__tests__/` - use the established fixtures.
+- **Choose the right test type:**
+  - **Unit tests** (`gui/src/main/services/__tests__/`): For service logic, utility functions, data transformations
+  - **E2E tests** (`gui/e2e/`): For UI components, IPC handlers, user workflows, and integration points
+- **When to write E2E tests:**
+  - Adding or modifying IPC handlers in `gui/src/main/index.ts`
+  - Adding UI components or changing user workflows
+  - Adding `data-testid` attributes to components (see `gui/e2e/README.md` for patterns)
+  - Modifying settings, navigation, or agent lifecycle flows
 - For new services:
   - Add unit tests for new functions/methods
   - Mock external dependencies (child_process, fs, Electron APIs)
@@ -51,6 +58,21 @@ This document provides essential context for AI assistants working with the Agen
 - When tests fail, investigate and fix the root cause - don't just skip or delete tests.
 - If you break something, acknowledge it and fix it before moving on.
 - When encountering unexpected behavior, investigate before making changes.
+
+#### PTY and Process Cleanup Safety Pattern
+When cleaning up resources (especially in terminal services and app shutdown):
+- **Wrap cleanup operations in try-catch blocks** to handle processes that are already dead
+  - PTY kill operations may fail if the process has already exited
+  - Interval/timer clearing can fail if already cleared
+  - Tmux session killing may fail if the session doesn't exist
+- **Check window state before IPC sends** during shutdown to prevent crashes
+  - Use `mainWindow.isDestroyed()` before calling `webContents.send()`
+  - Handle cases where the main window is being closed while cleanup is still happening
+- **Continue cleanup even if individual operations fail** - aggregate errors after all operations complete
+  - Log failures at appropriate levels (debug for expected failures, error for unexpected ones)
+  - Delete resources from tracking maps even if cleanup partially fails
+- **Apply this pattern in**: `stopAgent()`, `cleanup()`, `terminal.onExit()`, and app shutdown handlers
+  - See `TerminalService` for examples: `stopAgent()` (line 1129), `cleanup()` (line 1203), `stopPlainTerminal()` (line 1372)
 
 ---
 
@@ -90,10 +112,10 @@ This document provides essential context for AI assistants working with the Agen
 
 The framework supports three agent tools. At least one must be installed:
 
-#### Claude Desktop
-- Install from: https://claude.ai/download
+#### Claude Code (CLI)
+- Install: `npm install -g @anthropic-ai/claude-code`
+- Command: `claude` (spawns in terminal with prompt)
 - No additional configuration required
-- Spawned via AppleScript on macOS
 
 #### Cursor CLI
 - Install: `npm install -g cursor-cli`
@@ -102,7 +124,7 @@ The framework supports three agent tools. At least one must be installed:
 - Model selection: Available in GUI
 
 #### Codex CLI
-- Install: `npm install -g openai-codex-cli` (or your Codex CLI package)
+- Install: `npm install -g @openai/codex`
 - Command: `codex --model gpt-5.2-codex "<prompt>"`
 - Model: **gpt-5.2-codex (hardcoded, no selection available)**
 - API Key: Set `OPENAI_API_KEY` environment variable
@@ -249,12 +271,20 @@ cd gui && npm test -- --coverage
 
 E2E tests use Playwright to launch and test the actual Electron application. These tests are designed to be run by AI agents to verify full application functionality.
 
+For detailed documentation, see `gui/e2e/README.md`.
+
 ```bash
 # Run all E2E tests
 npm run test:e2e
 
 # Run with visible browser (debugging)
 npm run test:e2e:headed
+
+# Run specific test suites
+npm run test:e2e:smoke    # Quick smoke tests
+npm run test:e2e:flow     # User flow tests
+npm run test:e2e:settings # Settings page tests
+npm run test:e2e:errors   # Error handling tests
 
 # Run specific tests by name
 cd gui && npm run test:e2e -- --grep "project selection"
@@ -274,6 +304,32 @@ cd gui && npm run test:e2e:report
 | `gui/e2e/user-flows.e2e.ts` | Project selection, agent creation flows |
 | `gui/e2e/ipc-communication.e2e.ts` | IPC round-trips, API verification |
 | `gui/e2e/terminal.e2e.ts` | Terminal rendering and I/O |
+| `gui/e2e/settings.e2e.ts` | Settings page navigation and persistence |
+| `gui/e2e/error-scenarios.e2e.ts` | Error handling and recovery |
+
+#### E2E Test Helpers
+
+Test helpers are located in `gui/e2e/helpers/`:
+
+| Helper | Purpose |
+|--------|---------|
+| `createIPCHelpers(appPage)` | Typed IPC wrappers for all main process calls |
+| `waitForDashboard(page)` | Wait for dashboard to be visible |
+| `waitForSettingsPage(page)` | Wait for settings page to be visible |
+| `clickSettingsLink(page)` | Navigate to settings page |
+| `getVisibleAgentCount(page)` | Count visible agent cards |
+
+Example usage:
+```typescript
+import { createIPCHelpers, waitForDashboard } from './helpers'
+
+const ipc = createIPCHelpers(appPage)
+await ipc.selectProject(testProject)
+await waitForDashboard(appPage.page)
+
+const settings = await ipc.getSettings()
+await ipc.updateSettings({ notifications: { enabled: false } })
+```
 
 #### E2E Test Results
 
@@ -286,15 +342,18 @@ After running E2E tests, results are available in:
 
 ```typescript
 import { test, expect, createAppPage } from './fixtures'
+import { createIPCHelpers, waitForDashboard } from './helpers'
 
 test('should complete user flow', async ({ electronApp, testProject }) => {
   const appPage = createAppPage(electronApp)
+  const ipc = createIPCHelpers(appPage)
 
   // Select project via IPC (bypasses file dialog)
-  await appPage.callIPC('selectProjectWithPath', testProject)
+  await ipc.selectProject(testProject)
+  await waitForDashboard(appPage.page)
 
   // Create assignment
-  const assignment = await appPage.callIPC('createAssignment', {
+  const assignment = await ipc.createAssignment({
     prompt: 'Test prompt',
     tool: 'claude',
   })
@@ -397,10 +456,12 @@ Main Process (Node.js)
     ├── TerminalService     # PTY management, Claude sessions
     ├── ProjectService      # Multi-project workspace management
     ├── ClaudeSessionInfoService  # Parse Claude JSONL files
+    ├── ClaudeConfigService # Import plugins from ~/.claude/
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
     ├── MinionsConfigService  # Read/write minions.json config
-    └── SetupWizardService    # One-click setup wizard agent
+    ├── SetupWizardService    # One-click setup wizard agent
+    └── HandoffApiService     # HTTP API for /handoff command (port 19234)
          │
          │ IPC (ipcMain.handle)
          ▼
@@ -411,7 +472,8 @@ Preload Script (contextBridge)
 Renderer Process (React)
     ├── Dashboard           # Main view
     ├── AgentView           # Agent details + terminal
-    └── PlanApproval        # Super minion plan review
+    ├── PlanApproval        # Super minion plan review
+    └── ImportedAgentsSettings  # Claude Code plugin imports UI
 ```
 
 ### Configuration Management
@@ -524,7 +586,7 @@ The GUI allows selecting from three agent tools when creating an assignment:
 
 | Tool | Model Selection | Status Detection | Command |
 |------|-----------------|------------------|---------|
-| **claude** | Yes (multiple models) | JSONL file parsing | AppleScript launch |
+| **claude** | Yes (multiple models) | JSONL file parsing | `claude` CLI command |
 | **cursor-cli** | Yes (multiple models) | Pattern matching | `cursor-cli "<prompt>"` |
 | **codex** | No (hardcoded to gpt-5.2-codex) | Pattern matching | `codex --model gpt-5.2-codex "<prompt>"` |
 
@@ -540,6 +602,187 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:WORKING===        # Actively working
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
+
+### Agent Handoff
+
+The Agent Handoff feature allows you to spawn new agents to continue related work, creating a "passing the baton" workflow with lineage tracking. Use this when scope creep occurs and you want to delegate new work to a separate agent.
+
+**How to Trigger Handoff:**
+
+Use the `/handoff` command within an agent session. The command instructs the agent to:
+1. Commit all current changes
+2. Create a detailed plan for the new agent
+3. Call the Handoff API to spawn the new agent
+
+**Branch Modes:**
+
+| Mode | Description |
+|------|-------------|
+| **inherit** | New agent branches from the source agent's current work (continues from same code state) |
+| **fresh** | New agent branches from main/master (starts with clean baseline) |
+
+**Handoff API Service:**
+
+The `HandoffApiService` provides a local HTTP server for programmatic handoff creation:
+
+- **Port**: `19234` (localhost only, bound to `127.0.0.1`)
+- **Endpoints**:
+  - `POST /api/handoff` - Create a handoff agent
+  - `GET /api/health` - Health check
+
+**API Request Format:**
+```typescript
+interface HandoffApiRequest {
+  sourceAgentId: string      // ID of the agent initiating handoff
+  plan: string               // Work description/plan for new agent
+  branchMode: 'inherit' | 'fresh'
+  shortName?: string         // Optional custom branch suffix
+}
+```
+
+**API Response:**
+```typescript
+interface HandoffApiResponse {
+  success: boolean
+  newAgentId?: string        // ID of the created agent (on success)
+  error?: string             // Error message (on failure)
+}
+```
+
+**Data Model:**
+
+The `handoffSource` field on `AgentInfo` tracks handoff lineage:
+```typescript
+interface HandoffSource {
+  agentId: string           // Source agent that initiated the handoff
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string    // Branch name of the source agent
+  handoffTimestamp: string  // ISO timestamp when handoff occurred
+}
+```
+
+**UI Indication:**
+- Handoff agents appear indented under their parent in the sidebar
+- A tree connector indicator shows the parent-child relationship
+- Hovering shows the full lineage chain
+
+**IPC Handler:**
+- `agents:handoff` - Create a new agent via handoff from an existing agent
+
+**Key Files:**
+- `HandoffApiService.ts` - HTTP server for `/handoff` command API
+- `AgentService.handoffAgent()` - Core handoff logic
+
+### Claude Code Config Import
+
+The framework can import agents and skills from Claude Code plugins to use as workflow subagent types. This allows reusing Claude Code's plugin ecosystem within the Agent Framework.
+
+**What it does:**
+- Discovers installed Claude Code plugins from `~/.claude/plugins/cache/`
+- Extracts agent definitions (`.md` files in `agents/` directories)
+- Extracts skill definitions (`SKILL.md` files in `skills/` directories)
+- Makes them available as subagent types in workflows
+- Detects naming conflicts with built-in agents and auto-renames
+
+**How it works:**
+
+1. **ClaudeConfigService** scans the Claude Code plugins cache directory
+2. For each plugin, it reads the plugin manifest (`plugin.json`) and discovers agent/skill files
+3. Agent/skill `.md` files are parsed for YAML frontmatter (name, description) and prompt content
+4. File watching via `chokidar` detects plugin changes and auto-refreshes
+5. Results are cached and sent to the renderer via IPC events
+
+**Plugin Discovery Path:**
+```
+~/.claude/
+└── plugins/
+    └── cache/
+        └── {marketplace}/          # e.g., 'anthropic', 'community'
+            └── {plugin-name}/
+                └── {version}/      # Uses latest version
+                    └── .claude-plugin/
+                        ├── plugin.json
+                        ├── agents/
+                        │   └── *.md
+                        └── skills/
+                            └── {skill-name}/
+                                └── SKILL.md
+```
+
+**Configuration (ClaudeConfigSettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `enabled` | boolean | `true` | Master toggle for imports |
+| `enabledPlugins` | string[] | `[]` | Plugin IDs to enable (empty = all) |
+| `disabledAgentIds` | string[] | `[]` | Specific agent IDs to skip |
+| `autoRefresh` | boolean | `true` | Watch for config changes |
+| `refreshIntervalMs` | number | `30000` | Polling interval (ms) |
+
+**IPC Handlers:**
+- `claudeConfig:getScanResult` - Get cached scan result
+- `claudeConfig:refresh` - Force a rescan
+- `claudeConfig:getSettings` - Get current settings
+- `claudeConfig:setEnabled` - Update settings
+- `claudeConfig:updated` (event) - Notifies renderer of changes
+
+**Conflict Resolution:**
+When an imported agent name conflicts with a built-in agent (e.g., `test`, `review`, `implement`), the imported agent is automatically renamed with an `-imported` suffix to avoid collisions.
+
+**UI Access:**
+Skills and imported agents are accessible via the dedicated **Skills** page in the sidebar. Users can:
+- View all skills grouped by source (Claude Plugins, Global Commands/Agents, Project Commands/Agents)
+- Enable/disable individual skills
+- See override relationships between project and global skills
+- Manually trigger a refresh
+
+### Skills Library
+
+The Skills Library scans and discovers commands/agents from standard Claude Code locations.
+
+**Supported Sources:**
+
+| Source | Path | Format |
+|--------|------|--------|
+| Global Commands | `~/.claude/commands/` | `{name}.md` with optional YAML frontmatter |
+| Global Agents | `~/.claude/agents/` | `{name}.md` with optional YAML frontmatter |
+| Project Commands | `{project}/.claude/commands/` | Same format |
+| Project Agents | `{project}/.claude/agents/` | Same format |
+| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents folders |
+
+**Skill File Format:**
+```markdown
+---
+name: My Custom Skill
+description: What this skill does
+model: opus
+---
+
+Instructions for Claude when using this skill...
+```
+
+**Override Behavior:**
+Project-local skills override global skills with the same name. This allows projects to customize skills for their specific needs while maintaining access to global skills.
+
+**Configuration (SkillsLibrarySettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `commandsEnabled` | boolean | `true` | Enable ~/.claude/commands/ scanning |
+| `agentsEnabled` | boolean | `true` | Enable ~/.claude/agents/ scanning |
+| `projectSkillsEnabled` | boolean | `true` | Enable project-local commands/agents |
+| `disabledSkillIds` | string[] | `[]` | Specific skill IDs to disable |
+
+**Key Services:**
+- **SkillsLibraryService**: Scans global and project commands/agents directories
+- **UnifiedSkillsService**: Combines all skill sources with override resolution
+- **WorkflowService**: Consumes skills as subagent types for workflows
+
+**IPC Handlers:**
+- `skillsLibrary:scan` - Scan commands/agents directories
+- `skillsLibrary:refresh` - Force a rescan
+- `unifiedSkills:getScanResult` - Get all skills from all sources
+- `unifiedSkills:setSkillEnabled` - Enable/disable a specific skill
 
 ## CI/CD Pipeline
 
@@ -621,18 +864,33 @@ For projects with the old `minions/` folder structure:
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
-| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration |
+| `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
+| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff command API (localhost:19234) |
+| `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
+| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
+| `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
+| `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
+| `gui/src/main/services/SkillsLibraryService.ts` | Scan global and project-local commands/agents |
+| `gui/src/main/services/UnifiedSkillsService.ts` | Combine all skill sources with override resolution |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
+| `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
+| `gui/src/main/services/types/SkillsLibraryTypes.ts` | TypeScript types for Skills Library |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `gui/src/renderer/src/components/skills/SkillsPage.tsx` | Skills Library UI page |
+| `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
 | `gui/playwright.config.ts` | E2E test configuration |
-| `gui/e2e/fixtures.ts` | E2E test fixtures and helpers |
+| `gui/e2e/README.md` | E2E testing guide and documentation |
+| `gui/e2e/fixtures.ts` | E2E test fixtures and AppPage class |
 | `gui/e2e/electron-app.ts` | Electron app launch utilities |
+| `gui/e2e/helpers/` | E2E test helpers (IPC wrappers, UI utilities) |
+| `gui/e2e/settings.e2e.ts` | Settings page E2E tests |
+| `gui/e2e/error-scenarios.e2e.ts` | Error handling E2E tests |
 | `minions/bin/setup.sh` | Worktree creation script |
 | `minions/rules/orchestrator_signals.md` | Signal protocol docs |
 | `.github/scripts/analyze-changes.js` | CI test selection logic (reference for selective testing) |
@@ -665,7 +923,7 @@ If build-gui fails with "Cannot find module 'electron/package.json'":
 
 **Codex Command Not Found:**
 - Verify Codex CLI is installed: `which codex`
-- Install if missing: `npm install -g openai-codex-cli` (or appropriate package)
+- Install if missing: `npm install -g @openai/codex`
 - Check PATH includes npm global bin directory: `npm bin -g`
 - The `install.sh` script warns if `codex` is not found but does not block installation
 

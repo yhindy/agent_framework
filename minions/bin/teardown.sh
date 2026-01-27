@@ -83,8 +83,9 @@ else
 fi
 
 # Helper to read config values
+# Uses environment variable to avoid shell injection via config file path
 get_json_value() {
-  python3 -c "import sys, json; print(json.load(open('$CONFIG_FILE'))$1)" 2>/dev/null || echo ""
+  MINIONS_CONFIG_FILE="$CONFIG_FILE" python3 -c "import sys, json, os; print(json.load(open(os.environ['MINIONS_CONFIG_FILE']))$1)" 2>/dev/null || echo ""
 }
 
 PROJECT_NAME=$(get_json_value "['project']['name']")
@@ -108,7 +109,9 @@ echo ""
 
 # Kill tmux session if it exists (cleanup before worktree removal)
 # Session name follows the pattern minion-{agentId} with special chars replaced by underscores
-TMUX_SESSION_NAME="minion-$(echo "$AGENT_ID" | sed 's/[.:/\\]/_/g')"
+# IMPORTANT: Must match TypeScript getTmuxSessionName() in TerminalService.ts
+# Replaces everything except alphanumeric, underscore, hyphen with underscore
+TMUX_SESSION_NAME="minion-$(echo "$AGENT_ID" | sed 's/[^a-zA-Z0-9_-]/_/g')"
 if command -v tmux &> /dev/null; then
     if tmux has-session -t "$TMUX_SESSION_NAME" 2>/dev/null; then
         echo -e "${BLUE}🔌 Killing tmux session: $TMUX_SESSION_NAME${NC}"

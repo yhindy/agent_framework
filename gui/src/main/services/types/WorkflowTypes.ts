@@ -12,6 +12,27 @@ export interface SubagentType {
   id: string        // e.g., 'explore', 'implement', 'plan', 'debug'
   name: string      // Human-readable name
   description: string
+  promptContent?: string  // Full prompt for custom (non-Claude-native) agent types
+}
+
+/**
+ * Claude Code's built-in subagent types that can be used directly with Task tool.
+ * Custom types (not in this list) must use general-purpose with promptContent.
+ */
+export const CLAUDE_NATIVE_SUBAGENT_TYPES = [
+  'Explore',
+  'Plan',
+  'general-purpose',
+  'debugger',
+  'code-simplifier',
+  'bold-frontend-designer'
+] as const
+
+/**
+ * Check if a subagent type is natively supported by Claude Code.
+ */
+export function isClaudeNativeType(typeId: string): boolean {
+  return CLAUDE_NATIVE_SUBAGENT_TYPES.includes(typeId as any)
 }
 
 /**
@@ -47,49 +68,90 @@ export interface WorkflowConfig {
 
 /**
  * Available agent types for the workflow system.
+ * These map directly to Claude Code's Task tool subagent_type parameter.
  */
 export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
   {
-    id: 'explore',
+    id: 'acceptance-criteria',
+    name: 'Acceptance Criteria',
+    description: 'Propose and get human approval for acceptance criteria before implementation',
+    promptContent: `You are an Acceptance Criteria agent. Your job is to ensure alignment with the user before any implementation work begins.
+
+## Your Process
+
+1. **Explore** the codebase to understand context, existing patterns, and constraints
+2. **Ask clarifying questions** using AskUserQuestion if requirements are ambiguous - do this BEFORE proposing criteria
+3. **Propose** clear, numbered, testable acceptance criteria:
+   - Functional: "1. Users can log in with email/password"
+   - Engineering: "2. All new code has unit tests with >80% coverage"
+   - Performance: "3. API response time < 200ms"
+4. **Request approval** using AskUserQuestion:
+   \`\`\`
+   AskUserQuestion(questions=[{
+     "question": "Do you agree with these acceptance criteria?",
+     "header": "Criteria",
+     "options": [
+       {"label": "Yes, proceed", "description": "Move to next phase"},
+       {"label": "Modify criteria", "description": "I have feedback"}
+     ]
+   }])
+   \`\`\`
+5. **Wait** for explicit "Yes, proceed" before completing
+
+## Critical Rules
+
+- Do NOT complete until you receive explicit "Yes, proceed" approval
+- If user says "Modify criteria", incorporate their feedback and re-propose
+- Do NOT skip to implementation or design work
+- Do NOT propose criteria that include open questions - ask questions first, then propose
+- Your ONLY job is getting criteria approved - nothing else`
+  },
+  {
+    id: 'Explore',
     name: 'Explorer',
-    description: 'Quick codebase reconnaissance - searches files, reads code'
+    description: 'Fast codebase reconnaissance - searches files, reads code, finds patterns'
   },
   {
-    id: 'plan',
+    id: 'Plan',
     name: 'Planner',
-    description: 'Architecture and design planning - creates technical specifications'
+    description: 'Architecture and design planning - creates technical specifications and implementation plans'
   },
   {
-    id: 'review',
-    name: 'Reviewer',
-    description: 'Code review and validation - checks quality, patterns, and requirements'
+    id: 'general-purpose',
+    name: 'General Purpose',
+    description: 'Versatile agent for implementation, review, testing, and documentation tasks'
   },
   {
-    id: 'implement',
-    name: 'Implementer',
-    description: 'Full implementation following TDD - writes tests first, then code'
-  },
-  {
-    id: 'test',
-    name: 'Tester',
-    description: 'Test execution and validation - runs tests, checks coverage'
-  },
-  {
-    id: 'debug',
+    id: 'debugger',
     name: 'Debugger',
-    description: 'Debug unexpected behavior - traces bugs, adds logging, fixes issues'
+    description: 'Debug unexpected behavior - systematic hypothesis generation, adds logging, finds root causes'
   },
   {
-    id: 'document',
-    name: 'Documenter',
-    description: 'Documentation updates - writes READMEs, API docs, code comments'
-  },
-  {
-    id: 'simplify',
+    id: 'code-simplifier',
     name: 'Simplifier',
-    description: 'Code simplification - refactors, removes duplication, improves clarity'
+    description: 'Code simplification - refactors for clarity, removes duplication, improves maintainability'
+  },
+  {
+    id: 'bold-frontend-designer',
+    name: 'Frontend Designer',
+    description: 'UI/UX specialist - creates bold visual designs, improves layouts, and component styling'
   }
 ]
+
+/**
+ * Maps legacy agent IDs to current valid Claude subagent types.
+ * Used for backwards compatibility with existing saved workflows.
+ */
+export const LEGACY_AGENT_ID_MAP: Record<string, string> = {
+  'explore': 'Explore',
+  'plan': 'Plan',
+  'review': 'general-purpose',
+  'implement': 'general-purpose',
+  'test': 'general-purpose',
+  'debug': 'debugger',
+  'document': 'general-purpose',
+  'simplify': 'code-simplifier'
+}
 
 /**
  * Helper to create a simple agent (no custom prompt).
@@ -104,27 +166,27 @@ export function createAgent(typeId: string): StepAgent {
 export const DEFAULT_WORKFLOW: WorkflowConfig = {
   id: 'default',
   name: 'Standard Workflow',
-  description: 'Standard workflow with 5 phases: explore, design, review, implement, validate',
+  description: 'Standard workflow with 5 phases: acceptance criteria, design, review, implement, validate',
   steps: [
-    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'explore' }] },
-    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'plan' }] },
+    { id: 'step-0', name: 'Acceptance Criteria', agents: [{ id: 'a0', typeId: 'acceptance-criteria' }] },
+    { id: 'step-1', name: 'Engineering Design', agents: [{ id: 'a1', typeId: 'Plan' }] },
     {
-      id: 'step-3',
+      id: 'step-2',
       name: 'Design Review',
       agents: [
-        { id: 'a3', typeId: 'review', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
-        { id: 'a4', typeId: 'review', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
+        { id: 'a2', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
+        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
       ]
     },
-    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'implement' }] },
+    { id: 'step-3', name: 'Implementation', agents: [{ id: 'a4', typeId: 'general-purpose' }] },
     {
-      id: 'step-5',
+      id: 'step-4',
       name: 'Validation',
       agents: [
-        { id: 'a6', typeId: 'simplify' },
-        { id: 'a7', typeId: 'test', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
-        { id: 'a8', typeId: 'review', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
-        { id: 'a9', typeId: 'document' }
+        { id: 'a5', typeId: 'code-simplifier' },
+        { id: 'a6', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
+        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
+        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
       ]
     }
   ],
@@ -143,26 +205,26 @@ export const DEBUG_WORKFLOW: WorkflowConfig = {
       id: 'dbg-1',
       name: 'Reproduce & Understand',
       agents: [
-        { id: 'd1', typeId: 'explore', customPrompt: 'Find the code related to the bug and understand the current behavior' },
-        { id: 'd2', typeId: 'debug', customPrompt: 'Reproduce the bug and document the steps to trigger it' }
+        { id: 'd1', typeId: 'Explore', customPrompt: 'Find the code related to the bug and understand the current behavior' },
+        { id: 'd2', typeId: 'debugger', customPrompt: 'Reproduce the bug and document the steps to trigger it' }
       ]
     },
     {
       id: 'dbg-2',
       name: 'Root Cause Analysis',
-      agents: [{ id: 'd3', typeId: 'debug', customPrompt: 'Identify the root cause of the bug using logging, breakpoints, and code analysis' }]
+      agents: [{ id: 'd3', typeId: 'debugger', customPrompt: 'Identify the root cause of the bug using logging, breakpoints, and code analysis' }]
     },
     {
       id: 'dbg-3',
       name: 'Fix Implementation',
-      agents: [{ id: 'd4', typeId: 'implement', customPrompt: 'Implement the fix with minimal changes. Write a regression test first.' }]
+      agents: [{ id: 'd4', typeId: 'general-purpose', customPrompt: 'Implement the fix with minimal changes. Write a regression test first.' }]
     },
     {
       id: 'dbg-4',
       name: 'Verification',
       agents: [
-        { id: 'd5', typeId: 'test', customPrompt: 'Run all tests and verify the fix works' },
-        { id: 'd6', typeId: 'review', customPrompt: 'Review the fix for correctness and potential side effects' }
+        { id: 'd5', typeId: 'general-purpose', customPrompt: 'Run all tests and verify the fix works' },
+        { id: 'd6', typeId: 'general-purpose', customPrompt: 'Review the fix for correctness and potential side effects' }
       ]
     }
   ],

@@ -49,6 +49,7 @@ function MissionDropdown({
       {variant === 'button' ? (
         <button
           className="mission-dropdown-btn"
+          data-testid="create-agent-btn"
           onClick={() => setShowDropdown(!showDropdown)}
         >
           + New Mission
@@ -56,6 +57,7 @@ function MissionDropdown({
       ) : (
         <div
           className="mission-dropdown-icon-trigger"
+          data-testid="create-agent-btn-icon"
           onClick={() => setShowDropdown(!showDropdown)}
         >
           <span className="mission-dropdown-icon">+</span>
@@ -63,11 +65,12 @@ function MissionDropdown({
       )}
 
       {showDropdown && (
-        <div className="mission-dropdown-menu">
+        <div className="mission-dropdown-menu" data-testid="mission-dropdown-menu">
           {showAddProject && onAddProject && (
             <>
               <div
                 className="mission-dropdown-item"
+                data-testid="add-project-btn"
                 onClick={() => handleItemClick(onAddProject)}
               >
                 <span className="mission-dropdown-item-icon"><FolderIcon size="sm" /></span>
@@ -78,6 +81,7 @@ function MissionDropdown({
           )}
           <div
             className="mission-dropdown-item"
+            data-testid="new-minion-btn"
             onClick={() => handleItemClick(() => onNewMission())}
           >
             <span className="mission-dropdown-item-icon"><BotIcon size="sm" /></span>
@@ -87,6 +91,7 @@ function MissionDropdown({
           <div className="mission-dropdown-divider" />
           <div
             className="mission-dropdown-item teleport-option"
+            data-testid="teleport-btn"
             onClick={() => handleItemClick(onTeleport)}
           >
             <span className="mission-dropdown-item-icon"><SatelliteIcon size="sm" /></span>

@@ -70,6 +70,9 @@ const TELEPORT_MESSAGES = [
   'Reassembling molecular structure...'
 ]
 
+// Reserved branch names that would collide with special agents or git references
+const RESERVED_BRANCH_NAMES = ['base', 'main', 'master', 'origin', 'head']
+
 // Column configuration for the 3-column Kanban board
 const COLUMN_CONFIG = {
   in_progress: {
@@ -153,6 +156,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     workflow: null
   })
 
+  // Branch name validation error
+  const [branchError, setBranchError] = useState<string>('')
+
   // Workflow editor state
   const [subagentTypes, setSubagentTypes] = useState<SubagentType[]>([])
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowConfig[]>([])
@@ -196,6 +202,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
         setShowTeleportForm(false)
         setShowAddProjectModal(false)
         setShowPRConfirm(false)
+        setBranchError('')
       },
       isModalOpen: showCreateForm || showTeleportForm || showAddProjectModal || showPRConfirm
     })
@@ -644,6 +651,18 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   }
 
   /**
+   * Validate branch name against reserved names.
+   * Returns error message if invalid, empty string if valid.
+   */
+  const validateBranchName = (name: string): string => {
+    const lowercaseName = name.toLowerCase()
+    if (RESERVED_BRANCH_NAMES.includes(lowercaseName)) {
+      return `"${name}" is a reserved name. Reserved: ${RESERVED_BRANCH_NAMES.join(', ')}`
+    }
+    return ''
+  }
+
+  /**
    * Parse session ID from various input formats:
    * - URL format: https://claude.ai/code/session_xxx -> session_xxx
    * - Command format: claude --teleport session_xxx -> session_xxx
@@ -719,8 +738,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
+    <div className="dashboard" data-testid="dashboard">
+      <div className="dashboard-header" data-testid="dashboard-header">
         <h1>Minion Missions <BotIcon /></h1>
         <div className="header-actions">
           <MissionDropdown
@@ -750,6 +769,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                     <div
                       key={assignment.id}
                       className="assignment-card clickable"
+                      data-testid="agent-card"
                       data-status={assignment.status}
                       onClick={() => {
                         navigate(`/workspace/agent/${assignment.agentId}`)
@@ -859,7 +879,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       </div>
 
       {showCreateForm && (
-        <div className="modal-overlay" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); }}>
+        <div className="modal-overlay" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); setBranchError(''); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             {showTypeSelection ? (
               <>
@@ -878,7 +898,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                   </div>
                 </div>
                 <div className="form-actions">
-                  <button type="button" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); }}>
+                  <button type="button" onClick={() => { setShowCreateForm(false); setShowTypeSelection(true); setBranchError(''); }}>
                     Cancel
                   </button>
                 </div>
@@ -925,12 +945,22 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                       <input
                         type="text"
                         value={formData.shortName}
-                        onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                        onChange={(e) => {
+                          const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+                          setFormData({ ...formData, shortName: value })
+                          // Clear error when user starts typing again
+                          if (branchError) setBranchError('')
+                        }}
+                        onBlur={(e) => {
+                          const error = validateBranchName(e.target.value)
+                          setBranchError(error)
+                        }}
                         placeholder="user-auth"
                         required
                         style={{ flex: 1 }}
                       />
                     </div>
+                    {branchError && <div className="form-error">{branchError}</div>}
                   </div>
 
                   {formData.tool !== 'cursor' && (
@@ -1125,10 +1155,10 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                   )}
 
                   <div className="form-actions">
-                    <button type="button" onClick={() => setShowTypeSelection(true)} disabled={isCreating}>
+                    <button type="button" onClick={() => { setShowTypeSelection(true); setBranchError(''); }} disabled={isCreating}>
                       Back
                     </button>
-                    <button type="submit" disabled={isCreating}>
+                    <button type="submit" disabled={isCreating || !!branchError}>
                       {isCreating ? 'Creating...' : (formData.isSuper ? 'Create Plan' : 'Start Agent')}
                     </button>
                   </div>

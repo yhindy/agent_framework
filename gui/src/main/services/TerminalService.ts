@@ -1,8 +1,9 @@
 import { BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
 import { join, resolve } from 'path'
-import { existsSync, statSync, writeFileSync, mkdirSync } from 'fs'
-import { execSync } from 'child_process'
+import { tmpdir } from 'os'
+import { existsSync, statSync, writeFileSync, mkdirSync, mkdtempSync } from 'fs'
+import { execSync, execFileSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo, isSuperMinion } from './types/ProjectConfig'
 import { AgentService } from './AgentService'
@@ -42,6 +43,7 @@ interface TerminalSession {
   idleDetector?: IdleDetector // Shared idle detection module (legacy, for non-Claude tools)
   statePollingInterval?: NodeJS.Timeout // JSONL-based unified polling for Claude (state + tasks)
   tmuxSession?: string        // Tmux session name (if tmux mode is enabled)
+  claudeSessionId?: string    // Claude session ID for cleanup
 }
 
 interface PlainTerminalSession {
@@ -65,6 +67,12 @@ export class TerminalService {
 
   // Cached tmux availability check result
   private tmuxAvailable: boolean | null = null
+
+  // Throttle map for broadcast updates (prevents flooding agents:updated)
+  private lastAgentBroadcastTime: Map<string, number> = new Map()
+
+  // Guard against concurrent starts for the same agent (race condition prevention)
+  private startingAgents: Set<string> = new Set()
 
   constructor(mainWindow: BrowserWindow, notificationService?: NotificationService) {
     this.terminals = new Map()
@@ -122,8 +130,8 @@ export class TerminalService {
   /**
    * Generate a sanitized tmux session name from an agentId.
    *
-   * Tmux session names cannot contain periods, colons, slashes, or backslashes.
-   * These characters are replaced with underscores to create a valid session name.
+   * SECURITY: Only allows alphanumeric characters, hyphens, and underscores.
+   * This prevents shell injection attacks when the session name is used in commands.
    *
    * Naming convention: minion-{sanitizedAgentId}
    *
@@ -131,33 +139,245 @@ export class TerminalService {
    * getTmuxSessionName('agent-1') // returns 'minion-agent-1'
    * getTmuxSessionName('myproject-5') // returns 'minion-myproject-5'
    * getTmuxSessionName('agent/with:special.chars') // returns 'minion-agent_with_special_chars'
+   * getTmuxSessionName('evil;rm -rf /') // returns 'minion-evil_rm__rf__'
    */
   getTmuxSessionName(agentId: string): string {
-    // Replace characters not allowed in tmux session names with underscores
-    const sanitized = agentId.replace(/[.:/\\]/g, '_')
+    // SECURITY: Only allow alphanumeric, hyphens, and underscores to prevent shell injection
+    const sanitized = agentId.replace(/[^a-zA-Z0-9_-]/g, '_')
     return `minion-${sanitized}`
   }
 
   /**
    * Kill a tmux session if it exists.
    *
-   * Called during:
-   * - Agent stop (stopAgent method)
-   * - Agent teardown (teardown.sh also handles this as a fallback)
-   * - App cleanup (cleanup method)
-   *
-   * Silently ignores if the session doesn't exist or tmux is not available.
+   * Called during agent stop, teardown, and app cleanup.
+   * Silently ignores if the session doesn't exist or tmux is unavailable.
    */
   killTmuxSession(agentId: string): void {
     const sessionName = this.getTmuxSessionName(agentId)
 
     try {
-      // kill-session exits with error if session doesn't exist, which we catch
-      execSync(`tmux kill-session -t ${sessionName} 2>/dev/null`, { encoding: 'utf8' })
+      // SECURITY: Use execFileSync with argument array to prevent command injection
+      execFileSync('tmux', ['kill-session', '-t', sessionName], { encoding: 'utf8', stdio: 'pipe' })
       log.debug(`Killed tmux session: ${sessionName}`)
     } catch {
-      // Session doesn't exist or tmux not available - ignore
       log.debug(`Tmux session ${sessionName} does not exist or already killed`)
+    }
+  }
+
+  /**
+   * Check if a tmux session exists and is already attached.
+   * Prevents detaching sessions in other windows when using tmux mode.
+   *
+   * @param sessionName - The tmux session name to check
+   * @returns true if the session exists and is attached, false otherwise
+   */
+  isTmuxSessionAttached(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      const output = execSync(
+        `tmux list-sessions -F "#{session_name}:#{session_attached}" 2>/dev/null`,
+        { encoding: 'utf8' }
+      )
+
+      const lines = output.trim().split('\n').filter(Boolean)
+      for (const line of lines) {
+        const [name, attached] = line.split(':')
+        if (name === sessionName && attached === '1') {
+          return true
+        }
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Check if a tmux session exists (regardless of attachment status).
+   */
+  tmuxSessionExists(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      // SECURITY: Use execFileSync with argument array to prevent command injection
+      execFileSync('tmux', ['has-session', '-t', sessionName], { stdio: 'pipe' })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Check if Claude is running inside a tmux session.
+   *
+   * This is used to detect orphaned tmux sessions that exist but don't have
+   * Claude running in them (e.g., from a crash, force-quit, or previous session).
+   *
+   * @param sessionName - The tmux session name to check
+   * @returns true if a process containing "claude" is running in the session
+   */
+  isClaudeRunningInTmux(sessionName: string): boolean {
+    if (!this.isTmuxAvailable()) {
+      return false
+    }
+
+    try {
+      // Get the pane PID from the tmux session
+      const panePidOutput = execFileSync(
+        'tmux',
+        ['list-panes', '-t', sessionName, '-F', '#{pane_pid}'],
+        { encoding: 'utf8', stdio: 'pipe' }
+      )
+
+      const panePids = panePidOutput.trim().split('\n').filter(Boolean)
+      if (panePids.length === 0) {
+        return false
+      }
+
+      // Get all processes with their PIDs, PPIDs, and commands
+      // This approach works reliably on both macOS and Linux
+      const psOutput = execFileSync('ps', ['-ax', '-o', 'pid=,ppid=,comm='], {
+        encoding: 'utf8',
+        stdio: 'pipe'
+      })
+
+      // Build a map of parent -> children for tree traversal
+      const processes: Array<{ pid: number; ppid: number; comm: string }> = []
+      for (const line of psOutput.trim().split('\n')) {
+        const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/)
+        if (match) {
+          processes.push({
+            pid: parseInt(match[1], 10),
+            ppid: parseInt(match[2], 10),
+            comm: match[3].trim()
+          })
+        }
+      }
+
+      // Build parent -> children map
+      const childrenMap = new Map<number, number[]>()
+      for (const proc of processes) {
+        const siblings = childrenMap.get(proc.ppid) || []
+        siblings.push(proc.pid)
+        childrenMap.set(proc.ppid, siblings)
+      }
+
+      // Create a map of pid -> command for quick lookup
+      const commMap = new Map<number, string>()
+      for (const proc of processes) {
+        commMap.set(proc.pid, proc.comm)
+      }
+
+      // Check if any process in the subtree of each pane PID is claude
+      const hasClaudeInSubtree = (pid: number, visited: Set<number>): boolean => {
+        if (visited.has(pid)) return false
+        visited.add(pid)
+
+        const comm = commMap.get(pid) || ''
+        if (comm.toLowerCase().includes('claude')) {
+          return true
+        }
+
+        const children = childrenMap.get(pid) || []
+        for (const childPid of children) {
+          if (hasClaudeInSubtree(childPid, visited)) {
+            return true
+          }
+        }
+        return false
+      }
+
+      for (const panePid of panePids) {
+        const pid = parseInt(panePid, 10)
+        if (hasClaudeInSubtree(pid, new Set())) {
+          return true
+        }
+      }
+
+      return false
+    } catch (error) {
+      log.debug(`Failed to check if Claude is running in tmux session ${sessionName}`, error)
+      return false
+    }
+  }
+
+  /**
+   * Kill orphaned minion-* tmux sessions.
+   *
+   * Called on app startup to clean up sessions left behind from crashes,
+   * force-quits, or abnormal terminations.
+   *
+   * Only kills sessions that:
+   * 1. Match our pattern (minion-*)
+   * 2. Are NOT currently attached (another window may be using them)
+   * 3. Do NOT have a corresponding active agent
+   *
+   * @param activeAgentIds - List of agent IDs that are currently active. Sessions
+   *                         for these agents will be preserved.
+   * @returns number of sessions killed
+   */
+  killOrphanedTmuxSessions(activeAgentIds: string[]): number {
+    if (!this.isTmuxAvailable()) {
+      return 0
+    }
+
+    try {
+      const output = execSync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { encoding: 'utf8' })
+      const sessions = output.trim().split('\n').filter(Boolean).filter(s => s.startsWith('minion-'))
+
+      if (sessions.length === 0) {
+        log.debug('No minion tmux sessions found')
+        return 0
+      }
+
+      log.info(`Found ${sessions.length} minion tmux sessions, checking for orphans`)
+
+      // Build a set of expected session names from active agents
+      const activeSessionNames = new Set(activeAgentIds.map(id => this.getTmuxSessionName(id)))
+
+      let killed = 0
+      let skipped = 0
+      for (const sessionName of sessions) {
+        // Skip sessions that belong to active agents
+        if (activeSessionNames.has(sessionName)) {
+          log.debug(`Skipping session for active agent: ${sessionName}`)
+          skipped++
+          continue
+        }
+
+        // Skip sessions that are currently attached (another window is using them)
+        if (this.isTmuxSessionAttached(sessionName)) {
+          log.debug(`Skipping attached session: ${sessionName}`)
+          skipped++
+          continue
+        }
+
+        try {
+          log.debug(`Killing orphaned tmux session: ${sessionName}`)
+          // SECURITY: Use execFileSync with argument array to prevent command injection
+          execFileSync('tmux', ['kill-session', '-t', sessionName], { encoding: 'utf8', stdio: 'pipe' })
+          killed++
+        } catch {
+          log.debug(`Failed to kill tmux session: ${sessionName}`)
+        }
+      }
+
+      if (killed > 0) {
+        log.info(`Cleaned up ${killed} orphaned minion tmux sessions (${skipped} sessions preserved)`)
+      } else if (skipped > 0) {
+        log.info(`No orphaned sessions to clean up (${skipped} sessions preserved)`)
+      }
+      return killed
+    } catch {
+      // tmux list-sessions fails if no server is running
+      log.debug('No tmux server running or no sessions to clean up')
+      return 0
     }
   }
 
@@ -173,8 +393,18 @@ export class TerminalService {
    * @returns true if tmux mode should be used for agent terminals
    */
   private shouldUseTmux(): boolean {
-    const terminalMode = this.settingsService?.getSettings()?.terminal?.terminalMode ?? 'tabs'
-    return terminalMode === 'tmux' && this.isTmuxAvailable()
+    const settings = this.settingsService?.getSettings()
+    const terminalMode = settings?.terminal?.terminalMode ?? 'tabs'
+    const tmuxAvailable = this.isTmuxAvailable()
+
+    log.debug('shouldUseTmux check', {
+      hasSettingsService: !!this.settingsService,
+      terminalMode,
+      tmuxAvailable,
+      result: terminalMode === 'tmux' && tmuxAvailable
+    })
+
+    return terminalMode === 'tmux' && tmuxAvailable
   }
 
   private generateSessionId(agentId: string, worktreePath: string): string {
@@ -347,7 +577,130 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       this.agentService.updateAgentInfo(worktreePath, updates)
     } catch (error) {
       log.error('Failed to update agent info', error)
+      throw error
     }
+  }
+
+  /**
+   * Safely dispose of a resource with error suppression.
+   * Used for cleanup operations where failures should not propagate.
+   */
+  private safeDispose(disposeFn: () => void, resourceName: string, context: string): void {
+    try {
+      disposeFn()
+    } catch (error) {
+      log.debug(`Failed to dispose ${resourceName} for ${context}`, error)
+    }
+  }
+
+  /**
+   * Safely send IPC message with error suppression.
+   * Used in cleanup paths where IPC failures should not propagate.
+   */
+  private safeSendIPC(channel: string, ...args: unknown[]): void {
+    try {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, ...args)
+      }
+    } catch (error) {
+      log.debug(`Failed to send IPC on ${channel}`, error)
+    }
+  }
+
+  /**
+   * Check if an agents:updated broadcast should be allowed for this agent.
+   * Throttles broadcasts to max once per 500ms per agent to prevent flooding.
+   *
+   * @param agentId - The agent ID to check throttle for
+   * @returns true if broadcast is allowed, false if throttled
+   */
+  private shouldBroadcastUpdate(agentId: string): boolean {
+    const now = Date.now()
+    const lastTime = this.lastAgentBroadcastTime.get(agentId) || 0
+    if (now - lastTime < 500) {
+      return false
+    }
+    this.lastAgentBroadcastTime.set(agentId, now)
+    return true
+  }
+
+  /**
+   * Broadcast agents:updated with throttling.
+   * Only broadcasts if 500ms has passed since last broadcast for this agent.
+   */
+  private throttledBroadcastUpdate(agentId: string): void {
+    if (this.shouldBroadcastUpdate(agentId)) {
+      this.safeSendIPC('agents:updated')
+    }
+  }
+
+  /**
+   * Update agent info and notify UI on success.
+   * Uses throttled broadcast to prevent flooding agents:updated.
+   * Logs error on failure without throwing.
+   *
+   * @param worktreePath - Path to the agent's worktree
+   * @param updates - Partial agent info updates
+   * @param agentId - Optional agent ID for throttling (if not provided, broadcasts immediately)
+   */
+  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string): Promise<void> {
+    try {
+      await this.updateAgentInfo(worktreePath, updates)
+      if (agentId) {
+        this.throttledBroadcastUpdate(agentId)
+      } else {
+        this.safeSendIPC('agents:updated')
+      }
+    } catch (error) {
+      log.error('Failed to update agent info', error)
+    }
+  }
+
+  /**
+   * Clean up all resources for a terminal session.
+   * Safely disposes idle detector, polling intervals, tmux sessions, and PTY.
+   *
+   * @param agentId - The agent ID
+   * @param session - The terminal session to clean up
+   * @param tool - The tool type (claude, cursor-cli, etc.)
+   * @param effectiveSessionId - Optional session ID for Claude session cleanup
+   * @param killTmuxSession - Whether to kill the tmux session (default: true).
+   *                          Set to false on window close to preserve sessions for other windows.
+   */
+  private cleanupTerminalSession(
+    agentId: string,
+    session: TerminalSession,
+    tool: string,
+    effectiveSessionId?: string,
+    killTmuxSession: boolean = true
+  ): void {
+    const { idleDetector, statePollingInterval, tmuxSession, pty } = session
+
+    this.safeDispose(() => idleDetector?.dispose(), 'idle detector', agentId)
+    this.safeDispose(() => statePollingInterval && clearInterval(statePollingInterval), 'polling interval', agentId)
+
+    if (tool === 'claude' && effectiveSessionId) {
+      this.safeDispose(
+        () => this.claudeSessionInfoService?.unwatchSession(effectiveSessionId),
+        'session watcher',
+        agentId
+      )
+    }
+
+    if (tmuxSession && killTmuxSession) {
+      this.killTmuxSession(agentId)
+    }
+
+    this.safeDispose(() => pty.kill(), 'PTY', agentId)
+  }
+
+  /**
+   * Clean up a plain terminal session.
+   * Safely disposes idle detector and PTY.
+   */
+  private cleanupPlainTerminalSession(terminalId: string, session: PlainTerminalSession): void {
+    this.safeDispose(() => session.idleDetector?.dispose(), 'idle detector', terminalId)
+    this.safeDispose(() => session.pty.kill(), 'PTY', terminalId)
   }
 
   // Fast process state check - reads /proc directly on Linux, falls back to ps on macOS
@@ -381,6 +734,31 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     chrome?: boolean,
     teleportSessionId?: string
   ): Promise<void> {
+    // Prevent concurrent starts for the same agent (race condition guard)
+    if (this.startingAgents.has(agentId)) {
+      log.warn(`Agent ${agentId} is already being started, skipping duplicate start`)
+      return
+    }
+    this.startingAgents.add(agentId)
+
+    try {
+      await this._startAgentInternal(projectPath, agentId, tool, mode, prompt, model, yolo, chrome, teleportSessionId)
+    } finally {
+      this.startingAgents.delete(agentId)
+    }
+  }
+
+  private async _startAgentInternal(
+    projectPath: string,
+    agentId: string,
+    tool: string,
+    mode: string,
+    prompt?: string,
+    model?: string,
+    yolo?: boolean,
+    chrome?: boolean,
+    teleportSessionId?: string
+  ): Promise<void> {
     // Stop existing terminal if any (clean up orphaned sessions)
     const existingSession = this.terminals.get(agentId)
     if (existingSession) {
@@ -400,6 +778,29 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     // Read agent info to check for existing session
     const agentInfo = await this.readAgentInfo(worktreePath)
+
+    // Check if tmux session already exists - we'll attach to it instead of spawning new Claude
+    // BUT only if Claude is actually running in the session (not orphaned)
+    let attachToExistingTmux = false
+    const useTmux = this.shouldUseTmux()
+    if (useTmux) {
+      const tmuxSessionName = this.getTmuxSessionName(agentId)
+      const sessionExists = this.tmuxSessionExists(tmuxSessionName)
+      log.info(`[startAgent] agent=${agentId} tmuxSession=${tmuxSessionName} exists=${sessionExists}`)
+      if (sessionExists) {
+        const isClaudeRunning = this.isClaudeRunningInTmux(tmuxSessionName)
+        if (isClaudeRunning) {
+          log.info(`Attaching to existing tmux session ${tmuxSessionName} with running Claude`)
+          attachToExistingTmux = true
+        } else {
+          log.info(`Tmux session ${tmuxSessionName} exists but Claude not running, killing orphaned session`)
+          this.killTmuxSession(agentId)
+          // attachToExistingTmux stays false, will create new session with Claude
+        }
+      }
+    } else {
+      log.info(`[startAgent] agent=${agentId} NOT using tmux mode`)
+    }
 
     let isResume = false
     if (agentInfo?.claudeSessionId && tool === 'claude') {
@@ -595,23 +996,23 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
         // Run detection in next tick to avoid blocking the polling loop
         setImmediate(() => {
-          try {
-            const detectedBranch = this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
-            if (!detectedBranch) return
+          void (async () => {
+            try {
+              const detectedBranch = await this.claudeSessionInfoService!.extractGitBranch(effectiveSessionId, worktreePath)
+              if (!detectedBranch) return
 
-            log.debug(`Late branch detection for ${agentId}: ${detectedBranch}`)
-            branchDetectionComplete = true
+              log.debug(`Late branch detection for ${agentId}: ${detectedBranch}`)
+              branchDetectionComplete = true
 
-            const projectName = projectPath.split('/').pop() || 'project'
-            const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
-            displayName = `${projectName}: ${branchSuffix}`
+              const projectName = projectPath.split('/').pop() || 'project'
+              const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
+              displayName = `${projectName}: ${branchSuffix}`
 
-            this.updateAgentInfo(worktreePath, { displayBranchName: detectedBranch })
-              .then(() => this.mainWindow.webContents.send('agents:updated'))
-              .catch(err => log.error('Failed to update branch name', err))
-          } catch (err) {
-            // Silently ignore errors - branch detection is optional
-          }
+              this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
+            } catch (err) {
+              // Silently ignore errors - branch detection is optional
+            }
+          })()
         })
       }
 
@@ -621,44 +1022,47 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
       // Handle state transition and persist updates
       const handleStateTransition = (newState: 'working' | 'waiting', previousState: 'working' | 'waiting' | 'unknown'): void => {
-        this.mainWindow.webContents.send('agent:stateChanged', agentId, newState)
+        this.safeSendIPC('agent:stateChanged', agentId, newState)
 
         if (newState === 'waiting') {
-          this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Claude is waiting for input')
+          this.safeSendIPC('agent:waitingForInput', agentId, 'Claude is waiting for input')
           this.notificationService?.notify({
             title: 'Input Required',
             body: `${displayName} is waiting for your input`,
             agentId
           })
-          this.updateAgentInfo(worktreePath, {
+          this.updateAgentInfoAndNotify(worktreePath, {
             isWaitingForInput: true,
             claudeState: 'waiting',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: new Date().toISOString()
-          }).then(() => this.mainWindow.webContents.send('agents:updated'))
-            .catch(err => log.error('Failed to update agent info', err))
+          }, agentId)
         } else {
           log.debug(`${agentId} is working`)
           if (previousState === 'waiting') {
             this.notificationService?.clearCooldown(agentId)
           }
-          this.mainWindow.webContents.send('agent:resumedWork', agentId)
-          this.updateAgentInfo(worktreePath, {
+          this.safeSendIPC('agent:resumedWork', agentId)
+          this.updateAgentInfoAndNotify(worktreePath, {
             isWaitingForInput: false,
             claudeState: 'working',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: undefined
-          }).then(() => this.mainWindow.webContents.send('agents:updated'))
-            .catch(err => log.error('Failed to update agent info', err))
+          }, agentId)
         }
       }
 
-      // Unified polling: state and task detection in a single JSONL parse
-      const checkAndBroadcastState = (): void => {
+      // State polling using lightweight tail-based method (reads only last 50KB, not entire file)
+      // For super minions, we also check task invocations but only when file changes
+      let lastTaskCheckMtime = 0
+
+      const checkAndBroadcastState = async (): Promise<void> => {
         if (!effectiveSessionId) return
 
-        const sessionInfo = this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
-        const currentState = sessionInfo?.state || 'unknown'
+        // PERFORMANCE: Use lightweight getSessionState which only reads last 50KB of file
+        // instead of parseSessionInfo which streams the entire file (can be 700MB+)
+        // 50KB is enough to capture AskUserQuestion/ExitPlanMode entries followed by other entries
+        const currentState = this.claudeSessionInfoService!.getSessionState(effectiveSessionId, worktreePath)
 
         tryDetectBranch()
 
@@ -668,27 +1072,40 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           lastKnownState = currentState
         }
 
-        // For super minions: detect task invocation changes for sidebar updates
-        if (isSuperMinionAgent && sessionInfo) {
-          const currentHash = sessionInfo.taskInvocations
-            .map(t => `${t.toolUseId}:${t.status}`)
-            .join('|')
-          if (currentHash !== lastTaskHash) {
-            lastTaskHash = currentHash
-            this.mainWindow.webContents.send('agents:updated')
+        // For super minions: check task invocations only when file has changed
+        // to avoid expensive full-file parsing on every poll
+        if (isSuperMinionAgent) {
+          const sessionFile = this.claudeSessionInfoService!.findSessionFile(effectiveSessionId, worktreePath)
+          if (sessionFile) {
+            try {
+              const stat = statSync(sessionFile)
+              if (stat.mtimeMs !== lastTaskCheckMtime) {
+                lastTaskCheckMtime = stat.mtimeMs
+                // File changed - parse full session for task invocations
+                const sessionInfo = await this.claudeSessionInfoService!.parseSessionInfo(effectiveSessionId, worktreePath)
+                if (sessionInfo) {
+                  const currentHash = sessionInfo.taskInvocations
+                    .map(t => `${t.toolUseId}:${t.status}`)
+                    .join('|')
+                  if (currentHash !== lastTaskHash) {
+                    lastTaskHash = currentHash
+                    // Use throttled broadcast to prevent flooding
+                    this.throttledBroadcastUpdate(agentId)
+                  }
+                }
+              }
+            } catch {
+              // Ignore stat errors
+            }
           }
         }
       }
 
-      // Check state IMMEDIATELY (no delay for fast Claude responses)
-      log.debug(`Performing immediate state check for ${agentId}`)
-      checkAndBroadcastState()
+      // Immediate check for fast Claude responses, then poll every 2s
+      log.debug(`Starting state polling for ${agentId} (session: ${effectiveSessionId})`)
+      void checkAndBroadcastState()
 
-      // Then poll every 1 second (faster than 2s, still efficient with caching)
-      log.debug(`Starting 1s polling for ${agentId} (session: ${effectiveSessionId})`)
-      statePollingInterval = setInterval(() => {
-        checkAndBroadcastState()
-      }, 1000) // 1 second interval - mtime caching makes this efficient
+      statePollingInterval = setInterval(() => void checkAndBroadcastState(), 2000)
 
     } else {
       // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
@@ -731,31 +1148,26 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         },
         {
           onWaitingForInput: (_context: string) => {
-            this.mainWindow.webContents.send('agent:waitingForInput', agentId, 'Waiting for input')
-            // Send desktop notification
+            this.safeSendIPC('agent:waitingForInput', agentId, 'Waiting for input')
             this.notificationService?.notify({
               title: 'Input Required',
               body: `${displayName} is waiting for your input`,
               agentId
             })
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: true
-            }).catch(err => log.error('Failed to update agent info', err))
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: true })
+              .catch(err => log.error('Failed to update agent info', err))
           },
           onResumedWork: () => {
-            this.mainWindow.webContents.send('agent:resumedWork', agentId)
-            this.updateAgentInfo(worktreePath, {
-              isWaitingForInput: false
-            }).catch(err => log.error('Failed to update agent info', err))
+            this.safeSendIPC('agent:resumedWork', agentId)
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: false })
+              .catch(err => log.error('Failed to update agent info', err))
           }
         }
       )
     }
 
-    // Determine if tmux mode should be used
-    const useTmux = this.shouldUseTmux()
+    // Get tmux session name (useTmux is already determined above)
     let tmuxSessionName: string | undefined
-
     if (useTmux) {
       tmuxSessionName = this.getTmuxSessionName(agentId)
       log.debug(`Using tmux mode with session: ${tmuxSessionName}`)
@@ -775,7 +1187,8 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       chrome,
       idleDetector,
       statePollingInterval,
-      tmuxSession: tmuxSessionName
+      tmuxSession: tmuxSessionName,
+      claudeSessionId: effectiveSessionId
     }
 
     // Mark if we're attempting to resume (for error detection)
@@ -788,33 +1201,43 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     // Send the command to the terminal
     // If tmux mode is enabled, wrap in tmux session
     if (useTmux && tmuxSessionName) {
-      // For tmux mode, write command to a temp script file to avoid escaping issues
-      // This is especially important for super minion prompts which are very long
-      // and contain special characters, quotes, and newlines
-      const rawCommand = `${command} ${args.join(' ')}`
-      const scriptPath = join(worktreePath, '.minion-cmd.sh')
+      if (attachToExistingTmux) {
+        // Session already exists (Claude already running) - just attach to it
+        // Wait for shell to initialize before sending tmux attach command
+        log.info(`Attaching to existing tmux session: ${tmuxSessionName}`)
+        setTimeout(() => {
+          terminal.write(`tmux attach-session -t ${tmuxSessionName}\r`)
+        }, 100)
+      } else {
+        // Create new tmux session and run the command
+        const rawCommand = `${command} ${args.join(' ')}`
+        const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
+        // SECURITY: Use unique temp directory to prevent symlink attacks and race conditions
+        const tempDir = mkdtempSync(join(tmpdir(), 'minion-'))
+        const scriptPath = join(tempDir, `cmd-${sanitizedAgentId}.sh`)
 
-      try {
-        // Write the command to a script file
-        writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o755 })
-        log.debug(`Wrote tmux command script to ${scriptPath}`)
+        try {
+          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
+          log.debug(`Wrote tmux command script to ${scriptPath}`)
 
-        // Create tmux session and run the script
-        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} 'bash ${scriptPath}' Enter\r`)
-      } catch (err) {
-        log.error('Failed to write command script, falling back to direct command', err)
-        // Fallback: try direct command with escaping
-        const escapedCommand = rawCommand
-          .replace(/'/g, "'\\''")
-          .replace(/\n/g, ' ')
-        terminal.write(`tmux new-session -A -s ${tmuxSessionName} \\; send-keys -t ${tmuxSessionName} '${escapedCommand}' Enter\r`)
+          // Create tmux session with two windows:
+          // Window 0 (default) - runs the agent command
+          // Window 1 "shell" - bare terminal for manual work
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        } catch (err) {
+          log.error('Failed to write command script, falling back to direct command', err)
+          const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        }
       }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)
     }
 
-    // Persist session ID and flags immediately
-    if (tool === 'claude') {
+    // Persist session ID and flags (skip if just attaching to existing session)
+    if (tool === 'claude' && !attachToExistingTmux) {
       const agentInfoUpdate: Partial<AgentInfo> = {
         claudeSessionId: effectiveSessionId,
         claudeSessionActive: true,
@@ -826,47 +1249,39 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         prompt
       }
 
-      // Store cloud session ID when teleporting (for future teleport-out)
       if (teleportSessionId) {
         agentInfoUpdate.cloudSessionId = teleportSessionId
       }
 
       await this.updateAgentInfo(worktreePath, agentInfoUpdate)
 
-      // JSONL watcher for super minions provides immediate updates; polling serves as backup
+      // JSONL watcher for super minions
       if (agentInfo && isSuperMinion(agentInfo) && this.claudeSessionInfoService) {
         this.claudeSessionInfoService.watchSession(effectiveSessionId, worktreePath, () => {
-          this.mainWindow.webContents.send('agents:updated')
+          this.throttledBroadcastUpdate(agentId)
         })
       }
     }
 
-    // Handle output
     terminal.onData((data) => {
       this.handleOutput(agentId, data)
     })
 
     terminal.onExit((data) => {
-      const exitInfo = data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'
-      log.info(`Terminal exited for ${agentId} - ${exitInfo}`)
+      log.info(`Terminal exited for ${agentId} - ${data ? `exitCode: ${data.exitCode}, signal: ${data.signal}` : 'no exit data'}`)
 
-      // Clean up resources
-      session.idleDetector?.dispose()
-      if (session.statePollingInterval) {
-        clearInterval(session.statePollingInterval)
-      }
-      if (tool === 'claude' && effectiveSessionId) {
-        this.claudeSessionInfoService?.unwatchSession(effectiveSessionId)
-      }
+      // Don't kill tmux session on PTY exit - user may have detached or session may be used by other windows
+      this.cleanupTerminalSession(agentId, session, tool, effectiveSessionId, false)
 
-      // Mark Claude session as inactive
-      if (tool === 'claude' && worktreePath) {
+      if (tool === 'claude') {
         this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
           .catch(err => log.error('Failed to mark session inactive', err))
       }
 
       this.terminals.delete(agentId)
-      this.mainWindow.webContents.send('agents:updated')
+      // MEMORY FIX: Clean up broadcast throttling map entry
+      this.lastAgentBroadcastTime.delete(agentId)
+      this.safeSendIPC('agents:updated')
     })
   }
 
@@ -989,119 +1404,88 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const session = this.terminals.get(agentId)
     if (!session) return
 
-    // Send raw data to renderer for terminal display
-    this.mainWindow.webContents.send('terminal:output', agentId, data)
+    this.safeSendIPC('terminal:output', agentId, data)
 
-    // Check for cloud session ID in output (for teleport support)
-    // Pattern: https://claude.ai/code/session_xxx or --teleport session_xxx
     const stripped = stripAnsi(data)
     this.detectAndStoreCloudSessionId(session, stripped)
-    if ((session as any)._attemptingResume && (
-      stripped.includes('Session not found') ||
-      stripped.includes('Could not resume') ||
-      stripped.includes('Error resuming session')
-    )) {
-      log.warn(`Resume failed for ${agentId}, attempting fresh start...`)
 
-      // Mark that we're not resuming anymore
-      ;(session as any)._attemptingResume = false
+    if (this.handleResumeFailure(session, agentId, stripped)) return
 
-      // Clear session state
-      if (session.worktreePath) {
-        this.updateAgentInfo(session.worktreePath, {
-          claudeSessionActive: false,
-          claudeSessionId: undefined
-        }).catch(err => log.error('Failed to clear session', err))
-      }
-
-      // Kill current PTY and restart fresh
-      session.idleDetector?.dispose()
-      session.pty.kill()
-      this.terminals.delete(agentId)
-
-      // Restart without resume (use stored values)
-      if (session.projectPath) {
-        this.startAgent(
-          session.projectPath,
-          agentId,
-          session.tool,
-          session.mode,
-          session.prompt,
-          session.model,
-          session.yolo
-        ).catch(err => log.error(`Failed to restart agent ${agentId}`, err))
-      }
-
-      return
-    }
-
-    // Delegate idle detection to IdleDetector (if present)
     session.idleDetector?.processOutput(data)
   }
 
   /**
+   * Handle resume failure detection and recovery.
+   * Returns true if resume failure was detected and handled.
+   */
+  private handleResumeFailure(session: TerminalSession, agentId: string, strippedOutput: string): boolean {
+    if (!(session as any)._attemptingResume) return false
+
+    const resumeFailurePatterns = ['Session not found', 'Could not resume', 'Error resuming session']
+    const hasFailure = resumeFailurePatterns.some(pattern => strippedOutput.includes(pattern))
+
+    if (!hasFailure) return false
+
+    log.warn(`Resume failed for ${agentId}, attempting fresh start...`)
+    ;(session as any)._attemptingResume = false
+
+    if (session.worktreePath) {
+      this.updateAgentInfo(session.worktreePath, {
+        claudeSessionActive: false,
+        claudeSessionId: undefined
+      }).catch(err => log.error('Failed to clear session', err))
+    }
+
+    // Clean up all resources but preserve tmux session (killTmux=false).
+    // User may restart the agent, and tmux sessions persist across restarts.
+    this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId, false)
+    this.terminals.delete(agentId)
+
+    if (session.projectPath) {
+      this.startAgent(
+        session.projectPath,
+        agentId,
+        session.tool,
+        session.mode,
+        session.prompt,
+        session.model,
+        session.yolo
+      ).catch(err => log.error(`Failed to restart agent ${agentId}`, err))
+    }
+
+    return true
+  }
+
+  /**
    * Detect cloud session ID from Claude CLI output and store it in agent info.
-   * This enables the "Teleport to Cloud" feature by capturing the session ID
-   * when Claude outputs messages like:
-   *   - https://claude.ai/code/session_01CVbxtiJWp387FoCSvAiS2B
-   *   - --teleport session_01CVbxtiJWp387FoCSvAiS2B
+   * Enables "Teleport to Cloud" by capturing session_xxx from CLI output.
    */
   private detectAndStoreCloudSessionId(session: TerminalSession, strippedOutput: string): void {
-    // Only check for cloud session IDs for Claude tool
     if (session.tool !== 'claude') return
 
-    // Pattern to match cloud session ID from various contexts:
-    // - URL: https://claude.ai/code/session_xxx
-    // - CLI flag: --teleport session_xxx
-    // - Plain mention: session_xxx
-    const cloudSessionPattern = /session_[a-zA-Z0-9]+/g
-    const matches = strippedOutput.match(cloudSessionPattern)
+    const matches = strippedOutput.match(/session_[a-zA-Z0-9]+/g)
+    if (!matches?.length) return
 
-    if (!matches || matches.length === 0) return
-
-    // Use the first match found
     const cloudSessionId = matches[0]
 
-    // Read current agent info to check if we need to update
-    this.readAgentInfo(session.worktreePath).then((agentInfo) => {
-      // Don't overwrite if cloudSessionId is already set (e.g., from teleport)
-      // This prevents conversation history mentioning other session IDs from overwriting the correct one
-      if (agentInfo?.cloudSessionId) {
-        return // Already has a cloud session ID, don't overwrite
-      }
+    this.readAgentInfo(session.worktreePath)
+      .then(async (agentInfo) => {
+        if (agentInfo?.cloudSessionId) return
 
-      log.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
-
-      this.updateAgentInfo(session.worktreePath, {
-        cloudSessionId
-      }).then(() => {
-        // Broadcast update so UI can refresh (enables Teleport to Cloud button)
-        this.mainWindow.webContents.send('agents:updated')
-      }).catch((err) => {
-        log.error('Failed to store cloud session ID', err)
+        log.debug(`Detected cloud session ID: ${cloudSessionId} for agent ${session.agentId}`)
+        await this.updateAgentInfoAndNotify(session.worktreePath, { cloudSessionId }, session.agentId)
       })
-    }).catch((err) => {
-      log.error('Failed to read agent info for cloud session detection', err)
-    })
+      .catch(err => log.error('Failed to detect/store cloud session ID', err))
   }
 
   stopAgent(agentId: string): void {
     const session = this.terminals.get(agentId)
     if (!session) return
 
-    session.idleDetector?.dispose()
-    if (session.statePollingInterval) {
-      clearInterval(session.statePollingInterval)
-    }
-
-    // Kill tmux session if it exists
-    if (session.tmuxSession) {
-      this.killTmuxSession(agentId)
-    }
-
-    session.pty.kill()
+    this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId)
     this.terminals.delete(agentId)
-    this.mainWindow.webContents.send('agents:updated')
+    this.lastAgentBroadcastTime.delete(agentId)
+    this.safeSendIPC('agents:updated')
   }
 
   sendInput(agentId: string, data: string): void {
@@ -1110,23 +1494,66 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // Record input to idle detector (handles grace period and state clearing)
       session.idleDetector?.recordInput()
       session.pty.write(data)
+
+      // For Claude agents: immediately signal "working" state when user sends input
+      // This provides instant feedback before the JSONL poll detects the change
+      // The data check filters out control sequences (resize, etc.) that aren't real user input
+      if (session.tool === 'claude' && data.length > 0 && !data.startsWith('\x1b')) {
+        this.safeSendIPC('agent:stateChanged', agentId, 'working')
+      }
     }
   }
 
   resize(agentId: string, cols: number, rows: number): void {
     const session = this.terminals.get(agentId)
-    if (session) {
-      session.pty.resize(cols, rows)
+    if (!session) return
+
+    session.pty.resize(cols, rows)
+
+    if (session.tmuxSession) {
+      this.resizeTmuxWindows(session.tmuxSession, cols, rows)
+    }
+  }
+
+  private resizeTmuxWindows(sessionName: string, cols: number, rows: number): void {
+    const adjustedRows = Math.max(1, rows - 1)
+    // SECURITY: Use execFileSync with argument arrays to prevent command injection
+    // Ignore errors (window may not exist yet)
+    try {
+      execFileSync('tmux', ['resize-window', '-t', `${sessionName}:0`, '-x', String(cols), '-y', String(adjustedRows)], { stdio: 'pipe' })
+    } catch {
+      // Window 0 may not exist yet
+    }
+    try {
+      execFileSync('tmux', ['resize-window', '-t', `${sessionName}:1`, '-x', String(cols), '-y', String(adjustedRows)], { stdio: 'pipe' })
+    } catch {
+      // Window 1 may not exist yet
+      log.debug(`Failed to resize tmux windows for ${sessionName}`)
     }
   }
 
   cleanup(): void {
-    for (const [agentId, _session] of this.terminals) {
-      this.stopAgent(agentId)
+    for (const [agentId, session] of this.terminals) {
+      try {
+        // Don't kill tmux sessions on app close - they may be attached to another window
+        // or the user may want them to keep running in the background
+        this.cleanupTerminalSession(agentId, session, session.tool, session.claudeSessionId, false)
+        this.terminals.delete(agentId)
+      } catch (error) {
+        log.error(`Cleanup failed for agent ${agentId}`, error)
+      }
     }
-    for (const [terminalId, _session] of this.plainTerminals) {
-      this.stopPlainTerminal(terminalId)
+
+    for (const [terminalId, session] of this.plainTerminals) {
+      try {
+        this.cleanupPlainTerminalSession(terminalId, session)
+        this.plainTerminals.delete(terminalId)
+      } catch (error) {
+        log.error(`Cleanup failed for plain terminal ${terminalId}`, error)
+      }
     }
+
+    this.lastAgentBroadcastTime.clear()
   }
 
   // Check if an agent has an active terminal
@@ -1200,10 +1627,10 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       },
       {
         onWaitingForInput: (_context: string) => {
-          this.mainWindow.webContents.send('plainTerminal:waitingForInput', fullTerminalId, 'Terminal is waiting for input')
+          this.safeSendIPC('plainTerminal:waitingForInput', fullTerminalId, 'Terminal is waiting for input')
         },
         onResumedWork: () => {
-          this.mainWindow.webContents.send('plainTerminal:resumedWork', fullTerminalId)
+          this.safeSendIPC('plainTerminal:resumedWork', fullTerminalId)
         }
       }
     )
@@ -1216,27 +1643,23 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     }
     this.plainTerminals.set(fullTerminalId, session)
 
-    // Handle output
     terminal.onData((data) => {
-      this.mainWindow.webContents.send('plainTerminal:output', fullTerminalId, data)
-      // Delegate idle detection to IdleDetector
+      this.safeSendIPC('plainTerminal:output', fullTerminalId, data)
       idleDetector.processOutput(data)
     })
 
-    // Handle exit
     terminal.onExit(() => {
-      idleDetector.dispose()
+      this.cleanupPlainTerminalSession(fullTerminalId, session)
       this.plainTerminals.delete(fullTerminalId)
     })
   }
 
   stopPlainTerminal(terminalId: string): void {
     const session = this.plainTerminals.get(terminalId)
-    if (session) {
-      session.idleDetector?.dispose()
-      session.pty.kill()
-      this.plainTerminals.delete(terminalId)
-    }
+    if (!session) return
+
+    this.cleanupPlainTerminalSession(terminalId, session)
+    this.plainTerminals.delete(terminalId)
   }
 
   sendPlainInput(terminalId: string, data: string): void {
@@ -1301,71 +1724,76 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
   async retryResumeSession(projectPath: string, agentId: string): Promise<void> {
     const worktreePath = this.getWorktreePath(projectPath, agentId)
     const agentInfo = await this.getAgentInfoOrThrow(worktreePath)
-
     const resumeAttempts = agentInfo.resumeAttempts || 0
-    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
-    // Check if max attempts reached
     if (resumeAttempts >= this.MAX_RESUME_ATTEMPTS) {
-      const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
-      log.error(failureMessage)
-
-      if (this.agentService) {
-        await this.agentService.markAgentAsFailed(worktreePath, failureMessage)
-      }
-
-      this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)
-      this.mainWindow.webContents.send('agent:retryFailed', agentId, {
-        reason: failureMessage,
-        attempts: resumeAttempts
-      })
-
-      throw new Error(failureMessage)
+      await this.handleMaxRetriesReached(worktreePath, agentId, projectPath, agentInfo)
+      throw new Error(`Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached`)
     }
 
-    // Calculate exponential backoff delay: 2^attempt * 1000ms
+    await this.attemptResumeWithBackoff(projectPath, agentId, worktreePath, agentInfo, resumeAttempts)
+  }
+
+  private async handleMaxRetriesReached(worktreePath: string, agentId: string, projectPath: string, agentInfo: AgentInfo): Promise<void> {
+    const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
+    log.error(failureMessage)
+
+    await this.agentService?.markAgentAsFailed(worktreePath, failureMessage, agentId, projectPath)
+
+    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
+    this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)
+    this.safeSendIPC('agent:retryFailed', agentId, {
+      reason: failureMessage,
+      attempts: this.MAX_RESUME_ATTEMPTS
+    })
+  }
+
+  private async attemptResumeWithBackoff(projectPath: string, agentId: string, worktreePath: string, agentInfo: AgentInfo, resumeAttempts: number): Promise<void> {
     const currentAttempt = resumeAttempts + 1
     const delayMs = Math.pow(2, resumeAttempts) * 1000
+    const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
 
     log.info(`Retrying resume for ${agentId}, attempt ${currentAttempt}/${this.MAX_RESUME_ATTEMPTS}, delay: ${delayMs}ms`)
 
-    // Update agent info with new attempt count
     await this.updateAgentInfo(worktreePath, {
       resumeAttempts: currentAttempt,
       lastResumeAttempt: new Date().toISOString()
     })
 
-    // Notify UI and desktop
-    this.mainWindow.webContents.send('agent:retryingResume', agentId, {
+    this.safeSendIPC('agent:retryingResume', agentId, {
       attempt: currentAttempt,
       maxAttempts: this.MAX_RESUME_ATTEMPTS,
       delayMs
     })
     this.notificationService?.notifySessionResumeRetrying(displayName, currentAttempt, this.MAX_RESUME_ATTEMPTS)
 
-    // Wait for backoff delay
     await new Promise(resolve => setTimeout(resolve, delayMs))
 
     try {
       await this.startAgentFromInfo(projectPath, agentId, agentInfo)
-
-      // Success - clear failure state
-      await this.updateAgentInfo(worktreePath, {
-        failureReason: undefined,
-        resumeAttempts: 0,
-        claudeSessionActive: true
-      })
-
-      this.notificationService?.notifySessionResumeSuccess(agentId, displayName)
-      this.mainWindow.webContents.send('agent:retrySuccess', agentId)
-      this.mainWindow.webContents.send('agents:updated')
+      await this.handleResumeSuccess(worktreePath, agentId, displayName)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      log.error(`Retry ${currentAttempt} failed for ${agentId}`, errorMessage)
-
-      await this.updateAgentInfo(worktreePath, { failureReason: errorMessage })
+      await this.handleResumeError(worktreePath, agentId, currentAttempt, error)
       throw error
     }
+  }
+
+  private async handleResumeSuccess(worktreePath: string, agentId: string, displayName: string): Promise<void> {
+    await this.updateAgentInfo(worktreePath, {
+      failureReason: undefined,
+      resumeAttempts: 0,
+      claudeSessionActive: true
+    })
+
+    this.notificationService?.notifySessionResumeSuccess(agentId, displayName)
+    this.safeSendIPC('agent:retrySuccess', agentId)
+    this.safeSendIPC('agents:updated')
+  }
+
+  private async handleResumeError(worktreePath: string, agentId: string, currentAttempt: number, error: unknown): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error(`Retry ${currentAttempt} failed for ${agentId}`, errorMessage)
+    await this.updateAgentInfo(worktreePath, { failureReason: errorMessage })
   }
 
   /**
@@ -1378,7 +1806,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     log.info(`Starting fresh session for ${agentId}`)
 
-    // Clear all session-related state
     await this.updateAgentInfo(worktreePath, {
       claudeSessionId: undefined,
       cloudSessionId: undefined,
@@ -1391,7 +1818,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     await this.startAgentFromInfo(projectPath, agentId, agentInfo)
 
-    this.mainWindow.webContents.send('agent:freshSessionStarted', agentId)
-    this.mainWindow.webContents.send('agents:updated')
+    this.safeSendIPC('agent:freshSessionStarted', agentId)
+    this.safeSendIPC('agents:updated')
   }
 }

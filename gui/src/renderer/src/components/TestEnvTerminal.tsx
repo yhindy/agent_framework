@@ -3,6 +3,7 @@ import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
+import { filterTerminalQueryResponses } from '../utils/terminalOutputFilter'
 
 interface TestEnvTerminalProps {
   agentId: string
@@ -53,11 +54,18 @@ function initGlobalOutputListener() {
   window.electronAPI.onTestEnvOutput((agentId, commandId, data) => {
     const key = `${agentId}:${commandId}`
 
-    // Always cache output
+    // Filter terminal query responses before caching to prevent garbage on replay.
+    // These are PTY responses (DA1, DA2, OSC color) that xterm.js processes live
+    // but appear as visible text when replayed from cache.
+    const filteredData = filterTerminalQueryResponses(data)
+
+    // Always cache filtered output
     if (!outputCache.has(key)) {
       outputCache.set(key, [])
     }
-    outputCache.get(key)!.push(data)
+    if (filteredData) {
+      outputCache.get(key)!.push(filteredData)
+    }
 
     // Trim cache if it exceeds limits
     trimCache(key)
@@ -69,6 +77,7 @@ function initGlobalOutputListener() {
     }
 
     // If this terminal is currently active, write to it immediately
+    // Use original data for live display so xterm.js can process query responses
     const terminal = activeTerminals.get(key)
     if (terminal) {
       terminal.write(data)

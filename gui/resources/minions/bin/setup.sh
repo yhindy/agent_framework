@@ -61,8 +61,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Helper to read config values using python (available on macOS/Linux usually)
+# Uses environment variable to avoid shell injection via config file path
 get_json_value() {
-  python3 -c "import sys, json; print(json.load(open('$CONFIG_FILE'))$1)" 2>/dev/null || echo ""
+  MINIONS_CONFIG_FILE="$CONFIG_FILE" python3 -c "import sys, json, os; print(json.load(open(os.environ['MINIONS_CONFIG_FILE']))$1)" 2>/dev/null || echo ""
 }
 
 PROJECT_NAME=$(get_json_value "['project']['name']")
@@ -109,14 +110,44 @@ else
     git worktree add -f "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"
 fi
 
+# Set up remote tracking for the new branch
+# If BASE_BRANCH exists on origin, set up tracking so pushes go to the right place
+cd "$WORKTREE_PATH"
+if git ls-remote --exit-code --heads origin "$BASE_BRANCH" > /dev/null 2>&1; then
+    echo -e "${BLUE}🔗 Setting up tracking for origin/$BASE_BRANCH${NC}"
+    git branch --set-upstream-to="origin/$BASE_BRANCH" "$BRANCH" 2>/dev/null || true
+else
+    # Fall back to tracking origin/main or origin/master
+    if git ls-remote --exit-code --heads origin main > /dev/null 2>&1; then
+        echo "   Base branch not on remote, tracking origin/main"
+        git branch --set-upstream-to="origin/main" "$BRANCH" 2>/dev/null || true
+    elif git ls-remote --exit-code --heads origin master > /dev/null 2>&1; then
+        echo "   Base branch not on remote, tracking origin/master"
+        git branch --set-upstream-to="origin/master" "$BRANCH" 2>/dev/null || true
+    fi
+fi
+cd "$REPO_ROOT"
+
+# Add .minion-cmd.sh to git exclude to prevent dirty worktree issues with --teleport
+GIT_EXCLUDE="$REPO_ROOT/.git/info/exclude"
+if [ -f "$GIT_EXCLUDE" ]; then
+    if ! grep -q "^\.minion-cmd\.sh$" "$GIT_EXCLUDE" 2>/dev/null; then
+        echo ".minion-cmd.sh" >> "$GIT_EXCLUDE"
+        echo "   Added .minion-cmd.sh to git exclude"
+    fi
+fi
+
 # Copy environment files
 echo -e "${BLUE}📋 Copying environment files...${NC}"
-python3 << PYTHON_SCRIPT |
+MINIONS_CONFIG_FILE="$CONFIG_FILE" python3 << 'PYTHON_SCRIPT' |
 import json
 import sys
+import os
+
+config_file = os.environ["MINIONS_CONFIG_FILE"]
 
 try:
-    with open("$CONFIG_FILE", "r") as f:
+    with open(config_file, "r") as f:
         data = json.load(f)
 
     files_to_copy = data.get('setup', {}).get('filesToCopy', [])
@@ -203,15 +234,17 @@ fi
 # Run post-setup commands
 echo -e "${BLUE}🔧 Running post-setup commands...${NC}"
 cd "$WORKTREE_PATH"
-python3 -c "import sys, json; 
-data = json.load(open('$CONFIG_FILE'))
+MINIONS_CONFIG_FILE="$CONFIG_FILE" python3 -c "import sys, json, os
+config_file = os.environ['MINIONS_CONFIG_FILE']
+data = json.load(open(config_file))
 try:
   for cmd in data['setup']['postSetupCommands']:
     print(cmd)
 except: pass" | while read -r cmd; do
     if [ -n "$cmd" ]; then
         echo "   Running: $cmd"
-        eval "$cmd" || echo -e "${YELLOW}   Warning: Command failed${NC}"
+        # Run command in subshell for isolation (safer than eval)
+        bash -c "$cmd" || echo -e "${YELLOW}   Warning: Command failed${NC}"
     fi
 done
 

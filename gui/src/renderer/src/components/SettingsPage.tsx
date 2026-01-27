@@ -163,7 +163,7 @@ function SettingsPage(): JSX.Element {
   }
 
   return (
-    <div className="settings-page">
+    <div className="settings-page" data-testid="settings-page">
       <div className="settings-header">
         <h1>Settings</h1>
         {saveStatus !== 'idle' && (
@@ -224,29 +224,35 @@ function SettingsPage(): JSX.Element {
         <section className="settings-section">
           <h2 className="section-title">Default Tool & Model</h2>
           <div className="settings-card">
-            <SettingSelect
-              label="Default tool"
-              value={settings.defaultTool.tool}
-              options={TOOL_DISPLAY_NAMES}
-              onChange={(tool) => updateDefaultTool('tool', tool)}
-            />
+            <div data-testid="tool-select">
+              <SettingSelect
+                label="Default tool"
+                value={settings.defaultTool.tool}
+                options={TOOL_DISPLAY_NAMES}
+                onChange={(tool) => updateDefaultTool('tool', tool)}
+              />
+            </div>
 
             {settings.defaultTool.tool === 'claude' && (
-              <SettingSelect
-                label="Default Claude model"
-                value={settings.defaultTool.claudeModel}
-                options={CLAUDE_MODEL_DISPLAY_NAMES}
-                onChange={(model) => updateDefaultTool('claudeModel', model)}
-              />
+              <div data-testid="model-select">
+                <SettingSelect
+                  label="Default Claude model"
+                  value={settings.defaultTool.claudeModel}
+                  options={CLAUDE_MODEL_DISPLAY_NAMES}
+                  onChange={(model) => updateDefaultTool('claudeModel', model)}
+                />
+              </div>
             )}
 
             {settings.defaultTool.tool === 'cursor-cli' && (
-              <SettingSelect
-                label="Default Cursor CLI model"
-                value={settings.defaultTool.cursorCLIModel}
-                options={CURSOR_CLI_MODEL_DISPLAY_NAMES}
-                onChange={(model) => updateDefaultTool('cursorCLIModel', model)}
-              />
+              <div data-testid="model-select">
+                <SettingSelect
+                  label="Default Cursor CLI model"
+                  value={settings.defaultTool.cursorCLIModel}
+                  options={CURSOR_CLI_MODEL_DISPLAY_NAMES}
+                  onChange={(model) => updateDefaultTool('cursorCLIModel', model)}
+                />
+              </div>
             )}
 
             {/* Show Codex model info when Codex is selected */}

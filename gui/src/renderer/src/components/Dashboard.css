@@ -460,6 +460,12 @@
   font-style: italic;
 }
 
+.form-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-error, #f48771);
+  margin-top: 6px;
+}
+
 .form-row {
   display: flex;
   gap: var(--space-4);

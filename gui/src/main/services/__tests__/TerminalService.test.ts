@@ -43,7 +43,8 @@ describe('TerminalService Input Detection', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -226,7 +227,8 @@ describe('PlainTerminal Detection', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -384,7 +386,8 @@ describe('TerminalService Model Handling', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -509,7 +512,7 @@ describe('TerminalService Cloud Session ID Detection', () => {
 
   it('stores cloudSessionId when teleporting', async () => {
     const mockWebContents = { send: vi.fn() }
-    const mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    const mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     const mockPty = {
       write: vi.fn(),
@@ -555,7 +558,7 @@ describe('TerminalService Cloud Session ID Detection', () => {
 
   it('includes --dangerously-skip-permissions flag for teleport to bypass interactive prompts', async () => {
     const mockWebContents = { send: vi.fn() }
-    const mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    const mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     const mockPty = {
       write: vi.fn(),
@@ -655,7 +658,7 @@ describe('Super Minion System Prompt', () => {
 
   beforeEach(() => {
     const mockWebContents = { send: vi.fn() }
-    mockMainWindow = { webContents: mockWebContents } as unknown as BrowserWindow
+    mockMainWindow = { webContents: mockWebContents, isDestroyed: vi.fn().mockReturnValue(false) } as unknown as BrowserWindow
 
     mockPty = {
       write: vi.fn(),
@@ -781,7 +784,8 @@ describe('TerminalService Codex CLI', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     // Setup Mock PTY
@@ -919,7 +923,8 @@ describe('Teleport Session Retry Mechanism', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     mockPty = {
@@ -950,7 +955,8 @@ describe('Teleport Session Retry Mechanism', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
-      mode: 0o755
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
     } as any)
 
     terminalService = new TerminalService(mockMainWindow)
@@ -1031,7 +1037,9 @@ describe('Teleport Session Retry Mechanism', () => {
     // Should mark as failed instead of retrying
     expect(mockAgentService.markAgentAsFailed).toHaveBeenCalledWith(
       expect.any(String),
-      expect.stringContaining('Max retry attempts')
+      expect.stringContaining('Max retry attempts'),
+      'agent-1',           // agentId
+      '/path/to/project'   // projectPath
     )
   })
 
@@ -1186,7 +1194,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       send: vi.fn()
     }
     mockMainWindow = {
-      webContents: mockWebContents
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
     } as unknown as BrowserWindow
 
     mockPty = {
@@ -1215,7 +1224,9 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       }),
       watchSession: vi.fn(),
       unwatchSession: vi.fn(),
-      extractGitBranch: vi.fn().mockReturnValue(null)
+      extractGitBranch: vi.fn().mockReturnValue(null),
+      getSessionState: vi.fn().mockReturnValue('working'),
+      findSessionFile: vi.fn().mockReturnValue('/mock/session/file.jsonl')
     }
 
     mockWorkflowService = {
@@ -1227,7 +1238,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
-      mode: 0o755
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
     } as any)
 
     terminalService = new TerminalService(mockMainWindow)
@@ -1241,7 +1253,7 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     vi.useRealTimers()
   })
 
-  it('should use unified 1-second polling for super minions (state + tasks)', async () => {
+  it('should use unified 2-second polling for super minions (state + tasks)', async () => {
     await terminalService.startAgent(
       '/path/to/project',
       'super-minion-1',
@@ -1253,14 +1265,22 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Should have set up the watcher
     expect(mockClaudeSessionInfoService.watchSession).toHaveBeenCalled()
 
-    // Advance time by 1 second (unified polling interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance time by 2 seconds (unified polling interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have called parseSessionInfo for unified state + task checking
     expect(mockClaudeSessionInfoService.parseSessionInfo).toHaveBeenCalled()
   })
 
   it('should emit agents:updated when task invocations change', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     // Start with no tasks
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
@@ -1279,8 +1299,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Clear any initial calls
     mockWebContents.send.mockClear()
 
-    // Advance time by 1 second (unified polling interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance time by 2 seconds (unified polling interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Now simulate a task being spawned
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
@@ -1298,8 +1318,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       ]
     })
 
-    // Advance another 1 second
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have emitted agents:updated when tasks changed
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1333,14 +1353,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Advance past initial poll (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance past initial poll (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Clear calls after initial detection
     mockWebContents.send.mockClear()
 
-    // Advance another 1 second - same tasks, no change
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds - same tasks, no change
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should NOT have emitted agents:updated (no change in hash)
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1350,6 +1370,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should emit agents:updated when task status changes', async () => {
+    // Use incrementing mtime to simulate file changes (needed for optimization that skips unchanged files)
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     // Start with running task
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
@@ -1374,8 +1402,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Advance past initial poll (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance past initial poll (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Clear calls
     mockWebContents.send.mockClear()
@@ -1397,8 +1425,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       ]
     })
 
-    // Advance another 1 second
-    await vi.advanceTimersByTimeAsync(1000)
+    // Advance another 2 seconds
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Should have emitted agents:updated due to status change
     const updateCalls = mockWebContents.send.mock.calls.filter(
@@ -1408,6 +1436,14 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
   })
 
   it('should clean up unified polling interval on stopAgent', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
     await terminalService.startAgent(
       '/path/to/project',
       'super-minion-1',
@@ -1416,8 +1452,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
       'Create a feature'
     )
 
-    // Verify polling is working (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Verify polling is working (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
     expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
 
     // Stop the agent
@@ -1443,8 +1479,8 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // Get the exit handler
     const exitHandler = mockPty.onExit.mock.calls[0][0]
 
-    // Verify polling is working (1 second unified interval)
-    await vi.advanceTimersByTimeAsync(1000)
+    // Verify polling is working (2 second unified interval)
+    await vi.advanceTimersByTimeAsync(2000)
 
     // Simulate terminal exit
     exitHandler({ exitCode: 0, signal: null })
@@ -1481,8 +1517,16 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     // The key verification is that watchSession was not called
   })
 
-  it('should detect task changes within 1 second (faster than previous 2-second interval)', async () => {
-    // This test verifies the improvement: tasks are now detected at 1-second intervals
+  it('should detect task changes within 2 seconds (polling interval)', async () => {
+    // Use incrementing mtime to simulate file changes
+    let mtimeCounter = 1000
+    vi.mocked(fs.statSync).mockImplementation(() => ({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: mtimeCounter++
+    } as any))
+
+    // This test verifies: tasks are detected at 2-second polling intervals
     mockClaudeSessionInfoService.parseSessionInfo.mockReturnValue({
       sessionId: 'test-session',
       state: 'working',
@@ -1501,8 +1545,200 @@ describe('Super Minion Unified Polling (State + Tasks)', () => {
     mockWebContents.send.mockClear()
     mockClaudeSessionInfoService.parseSessionInfo.mockClear()
 
-    // After 1 second, parsing should have been called
-    await vi.advanceTimersByTimeAsync(1000)
+    // After 2 seconds, parsing should have been called
+    await vi.advanceTimersByTimeAsync(2000)
     expect(mockClaudeSessionInfoService.parseSessionInfo.mock.calls.length).toBeGreaterThan(0)
+  })
+})
+
+describe('PTY Cleanup Error Handling', () => {
+  let terminalService: TerminalService
+  let mockMainWindow: any
+  let mockWebContents: any
+  let mockPty: any
+
+  beforeEach(() => {
+    mockWebContents = {
+      send: vi.fn()
+    }
+    mockMainWindow = {
+      webContents: mockWebContents,
+      isDestroyed: vi.fn().mockReturnValue(false)
+    } as unknown as BrowserWindow
+
+    mockPty = {
+      write: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 12345
+    }
+    vi.mocked(pty.spawn).mockReturnValue(mockPty)
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+      mode: 0o755,
+      mtimeMs: Date.now()  // Add mtimeMs for file change detection
+    } as any)
+
+    terminalService = new TerminalService(mockMainWindow)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should handle PTY kill errors in stopAgent gracefully', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Mock pty.kill to throw an error (simulating process already dead)
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Should not throw - errors are caught and logged
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+
+    // Verify terminal was cleaned up despite error
+    expect(terminalService.hasActiveTerminal('agent-1')).toBe(false)
+  })
+
+  it('should handle PTY kill errors in stopPlainTerminal gracefully', async () => {
+    await terminalService.startPlainTerminal('/path/to/project', 'agent-1', 'shell-1')
+
+    // Mock pty.kill to throw an error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Should not throw - errors are caught and logged
+    expect(() => terminalService.stopPlainTerminal('agent-1-shell-1')).not.toThrow()
+  })
+
+  it('should continue cleanup when one PTY fails in cleanup method', async () => {
+    // Start multiple agents
+    await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+    await terminalService.startAgent('/path/to/project', 'agent-2', 'claude', 'dev')
+
+    // Get the PTY instances for each agent
+    const pty1 = vi.mocked(pty.spawn).mock.results[0].value
+    const pty2 = vi.mocked(pty.spawn).mock.results[1].value
+
+    // First PTY throws error, second should still be cleaned
+    pty1.kill.mockImplementation(() => {
+      throw new Error('First PTY error')
+    })
+    pty2.kill.mockImplementation(() => {
+      // This should still be called even if first fails
+    })
+
+    // Should not throw - cleanup continues
+    expect(() => terminalService.cleanup()).not.toThrow()
+
+    // Both should have been attempted
+    expect(pty1.kill).toHaveBeenCalled()
+    expect(pty2.kill).toHaveBeenCalled()
+  })
+
+  it('should handle dispose errors on idle detector', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'cursor-cli', // Uses IdleDetector
+      'dev',
+      'Test prompt'
+    )
+
+    // Get the terminal session and mock dispose to throw
+    const mockIdleDetector = {
+      dispose: vi.fn().mockImplementation(() => {
+        throw new Error('Dispose error')
+      }),
+      processOutput: vi.fn(),
+      recordInput: vi.fn()
+    }
+
+    // Replace the idle detector in the session
+    const session = (terminalService as any).terminals.get('agent-1')
+    session.idleDetector = mockIdleDetector
+
+    // Should not throw - errors are caught
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+    expect(mockIdleDetector.dispose).toHaveBeenCalled()
+  })
+
+  it('should handle clearInterval errors gracefully', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Get session and set invalid interval
+    const session = (terminalService as any).terminals.get('agent-1')
+    session.statePollingInterval = {} as any // Invalid interval object
+
+    // Should not throw - errors are caught
+    expect(() => terminalService.stopAgent('agent-1')).not.toThrow()
+  })
+
+  it('should handle PTY kill error during resume recovery', async () => {
+    // Start agent
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Get the data handler
+    const dataHandler = mockPty.onData.mock.calls[0][0]
+
+    // Mock pty.kill to throw error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('Process already exited')
+    })
+
+    // Trigger resume failure recovery by simulating "Session not found" output
+    const session = (terminalService as any).terminals.get('agent-1')
+    session._attemptingResume = true
+    session.projectPath = '/path/to/project'
+
+    // Should handle the error gracefully
+    expect(() => dataHandler('Session not found\n')).not.toThrow()
+  })
+
+  it('should send IPC updates even when PTY cleanup fails', async () => {
+    await terminalService.startAgent(
+      '/path/to/project',
+      'agent-1',
+      'claude',
+      'dev',
+      'Test prompt'
+    )
+
+    // Mock pty.kill to throw error
+    mockPty.kill.mockImplementation(() => {
+      throw new Error('ESRCH: No such process')
+    })
+
+    // Clear previous IPC calls
+    mockWebContents.send.mockClear()
+
+    // Stop agent
+    terminalService.stopAgent('agent-1')
+
+    // Should still send IPC update
+    expect(mockWebContents.send).toHaveBeenCalledWith('agents:updated')
   })
 })

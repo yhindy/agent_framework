@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 // WorkflowService not directly used in AgentService with simplified model
 import { createLogger } from './logger'
@@ -12,6 +12,9 @@ import { createLogger } from './logger'
 const log = createLogger('AgentService')
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
+
+// Reserved branch name suffixes that would collide with special agents or git references
+const RESERVED_BRANCH_SUFFIXES = ['base', 'main', 'master', 'origin', 'head']
 
 interface AgentSession {
   id: string
@@ -24,6 +27,7 @@ interface AgentSession {
   tool?: string
   isSuperMinion?: boolean
   parentAgentId?: string
+  handoffSource?: HandoffSource
   isBaseBranchAgent?: boolean
   branch?: string
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
@@ -55,6 +59,11 @@ export class AgentService {
 
   private readonly PR_DETECTION_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
+  // Cache for agent/assignment ID to project path mapping.
+  // Avoids repeated git worktree list calls which can cause EAGAIN spawn errors.
+  private projectLookupCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
+  private readonly PROJECT_LOOKUP_CACHE_TTL_MS = 30 * 1000 // 30 seconds
+
   constructor() {
     this.sessions = new Map()
   }
@@ -66,97 +75,80 @@ export class AgentService {
   /**
    * Validate a teleported session to ensure it can be resumed.
    * Checks if JSONL file exists, is not corrupted, and is resumable.
+   *
+   * @param agentInfo - The agent info containing session details
+   * @param worktreePath - The worktree path (required to find JSONL file correctly)
    */
-  async validateTeleportSession(agentInfo: AgentInfo): Promise<{
+  async validateTeleportSession(agentInfo: AgentInfo, worktreePath?: string): Promise<{
     isValid: boolean
     reason?: string
     canResume: boolean
   }> {
-    // Check if this is a teleported session
+    const invalid = (reason: string) => ({ isValid: false, reason, canResume: false })
+
+    // Validate teleport session requirements
     if (!agentInfo.cloudSessionId && !agentInfo.isTeleportedSession) {
-      return {
-        isValid: false,
-        reason: 'Not a teleported session (missing cloudSessionId)',
-        canResume: false
-      }
+      return invalid('Not a teleported session (missing cloudSessionId)')
     }
-
-    // If cloudSessionId is missing but marked as teleported, it's invalid
     if (!agentInfo.cloudSessionId) {
-      return {
-        isValid: false,
-        reason: 'Teleported session missing cloudSessionId',
-        canResume: false
-      }
+      return invalid('Teleported session missing cloudSessionId')
     }
 
-    // Check if JSONL file exists
-    const jsonlPath = join(homedir(), '.claude', 'projects', agentInfo.cloudSessionId, 'session.jsonl')
-
-    if (!existsSync(jsonlPath)) {
-      return {
-        isValid: false,
-        reason: 'JSONL file not found at expected path',
-        canResume: false
-      }
+    // Find JSONL file: try ClaudeSessionInfoService first, then legacy path
+    const jsonlPath = this.findJsonlPath(agentInfo, worktreePath)
+    if (!jsonlPath) {
+      return invalid('JSONL file not found (checked worktree hash directory and legacy paths)')
     }
 
-    // Check if file is stale (older than 7 days)
+    // Validate file freshness (must be modified within 7 days)
     try {
       const stats = statSync(jsonlPath)
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
       if (stats.mtimeMs < sevenDaysAgo) {
-        return {
-          isValid: false,
-          reason: 'JSONL file is stale (older than 7 days)',
-          canResume: false
-        }
+        return invalid('JSONL file is stale (older than 7 days)')
       }
-    } catch (error) {
-      return {
-        isValid: false,
-        reason: 'Failed to read JSONL file stats',
-        canResume: false
-      }
+    } catch {
+      return invalid('Failed to read JSONL file stats')
     }
 
-    // Check if JSONL file is valid (can parse first line)
+    // Validate file content (must be non-empty valid JSONL)
     try {
       const content = readFileSync(jsonlPath, 'utf-8')
-
       if (!content.trim()) {
-        return {
-          isValid: false,
-          reason: 'JSONL file is empty',
-          canResume: false
-        }
+        return invalid('JSONL file is empty')
       }
-
-      // Try to parse first line
-      const firstLine = content.split('\n')[0]
-      JSON.parse(firstLine)
-    } catch (error) {
-      return {
-        isValid: false,
-        reason: 'JSONL file is corrupted (invalid JSON)',
-        canResume: false
-      }
+      JSON.parse(content.split('\n')[0])
+    } catch {
+      return invalid('JSONL file is corrupted (invalid JSON)')
     }
 
     // Check if session state is resumable
     if (agentInfo.status === 'completed' || agentInfo.status === 'closed') {
-      return {
-        isValid: true,
-        reason: 'Session is completed or closed',
-        canResume: false
-      }
+      return { isValid: true, reason: 'Session is completed or closed', canResume: false }
     }
 
-    // All checks passed
-    return {
-      isValid: true,
-      canResume: true
+    return { isValid: true, canResume: true }
+  }
+
+  /**
+   * Find the JSONL file path for a teleported session.
+   * Tries ClaudeSessionInfoService first (worktree hash directory), then legacy path.
+   *
+   * Precondition: agentInfo.cloudSessionId must be defined (caller validates this).
+   */
+  private findJsonlPath(agentInfo: AgentInfo, worktreePath?: string): string | null {
+    const cloudSessionId = agentInfo.cloudSessionId!
+
+    // Try ClaudeSessionInfoService for correct path lookup
+    if (this.claudeSessionInfoService && worktreePath) {
+      const sessionId = agentInfo.claudeSessionId || cloudSessionId
+      const path = this.claudeSessionInfoService.findSessionFile(sessionId, worktreePath)
+      if (path) return path
     }
+
+    // Fallback to legacy path for backwards compatibility
+    const legacyPath = join(homedir(), '.claude', 'projects', cloudSessionId, 'session.jsonl')
+    return existsSync(legacyPath) ? legacyPath : null
   }
 
   async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {
@@ -176,10 +168,20 @@ export class AgentService {
         }
       }
     } catch (error) {
-      return { 
-        ghInstalled: false, 
+      // Provide platform-appropriate installation instructions
+      const platform = process.platform
+      let installHint: string
+      if (platform === 'darwin') {
+        installHint = 'brew install gh'
+      } else if (platform === 'win32') {
+        installHint = 'winget install GitHub.cli (or scoop install gh)'
+      } else {
+        installHint = 'See https://cli.github.com/manual/installation'
+      }
+      return {
+        ghInstalled: false,
         ghAuthenticated: false,
-        error: 'GitHub CLI not installed. Install with: brew install gh'
+        error: `GitHub CLI not installed. Install with: ${installHint}`
       }
     }
   }
@@ -199,6 +201,7 @@ export class AgentService {
       tool: agentInfo.tool,
       isSuperMinion: (agentInfo as any).isSuperMinion || false,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       isBaseBranchAgent: isBase,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
@@ -227,6 +230,7 @@ export class AgentService {
       lastActivity: agentInfo.lastActivity,
       isSuperMinion: (agentInfo as any).isSuperMinion,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
       isTeleportedSession: agentInfo.isTeleportedSession,
@@ -514,25 +518,39 @@ export class AgentService {
     }
   }
 
-  updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): void {
-    const current = this.readAgentInfo(worktreePath)
+  /**
+   * Update agent info with partial updates.
+   * For new format projects, agentId and projectPath should be provided.
+   *
+   * @param worktreePath - Path to the worktree
+   * @param updates - Partial AgentInfo updates to apply
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
+   */
+  updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string, projectPath?: string): void {
+    const current = this.readAgentInfo(worktreePath, agentId, projectPath)
     if (!current) {
       throw new Error(`Agent info not found at worktree path: ${worktreePath}`)
     }
 
     const updated = { ...current, ...updates, lastActivity: new Date().toISOString() }
-    this.writeAgentInfo(worktreePath, updated)
+    this.writeAgentInfo(worktreePath, updated, projectPath)
   }
 
   /**
    * Mark an agent session as failed with a specific reason.
    * Sets failureReason and marks session as inactive.
+   *
+   * @param worktreePath - Path to the worktree
+   * @param reason - Failure reason message
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
    */
-  async markAgentAsFailed(worktreePath: string, reason: string): Promise<void> {
+  async markAgentAsFailed(worktreePath: string, reason: string, agentId?: string, projectPath?: string): Promise<void> {
     this.updateAgentInfo(worktreePath, {
       failureReason: reason,
       claudeSessionActive: false
-    })
+    }, agentId, projectPath)
   }
 
   /**
@@ -548,12 +566,40 @@ export class AgentService {
 
     this.updateAgentInfo(agent.worktreePath, {
       displayBranchName: branchName
-    })
+    }, agentId, projectPath)
+  }
+
+  /**
+   * Get cached project path for an agent/assignment ID if still valid.
+   * Returns null if cache miss, expired, or project is no longer active.
+   */
+  private getCachedProjectPath(id: string, activeProjectPaths: string[]): string | null {
+    const cached = this.projectLookupCache.get(id)
+    if (!cached) return null
+
+    const isValid = Date.now() - cached.timestamp < this.PROJECT_LOOKUP_CACHE_TTL_MS
+      && activeProjectPaths.includes(cached.projectPath)
+
+    return isValid ? cached.projectPath : null
+  }
+
+  /**
+   * Update the project lookup cache for multiple IDs belonging to the same project.
+   */
+  private updateProjectLookupCache(ids: string[], projectPath: string): void {
+    const now = Date.now()
+    for (const id of ids) {
+      this.projectLookupCache.set(id, { timestamp: now, projectPath })
+    }
   }
 
   async findProjectForAgent(activeProjectPaths: string[], agentId: string): Promise<string> {
+    const cached = this.getCachedProjectPath(agentId, activeProjectPaths)
+    if (cached) return cached
+
     for (const projectPath of activeProjectPaths) {
       const agents = await this.listAgents(projectPath)
+      this.updateProjectLookupCache(agents.map(a => a.id), projectPath)
       if (agents.some(a => a.id === agentId)) {
         return projectPath
       }
@@ -562,8 +608,12 @@ export class AgentService {
   }
 
   async findProjectForAssignment(activeProjectPaths: string[], assignmentId: string): Promise<string> {
+    const cached = this.getCachedProjectPath(assignmentId, activeProjectPaths)
+    if (cached) return cached
+
     for (const projectPath of activeProjectPaths) {
       const { assignments } = await this.getAssignments(projectPath)
+      this.updateProjectLookupCache(assignments.map(a => a.id), projectPath)
       if (assignments.some(a => a.id === assignmentId)) {
         return projectPath
       }
@@ -643,17 +693,34 @@ export class AgentService {
     const config = this.getProjectConfig(projectPath)
     const projectName = config.project.name || projectPath.split('/').pop() || 'project'
 
-    // Auto-generate agent ID if not provided
+    // Auto-generate agent ID from branch suffix if not provided
     let agentId = assignment.agentId
+    let branch = assignment.branch!
+
     if (!agentId) {
-      const hash = Math.random().toString(36).substring(2, 9)
-      agentId = `${projectName}-${hash}`
+      // Extract branch suffix and use it for agentId (sanitize for git/filesystem)
+      const branchSuffix = branch.startsWith('feature/')
+        ? branch.replace(/^feature\//, '').split('/').pop() || branch
+        : branch
+      const sanitizedSuffix = branchSuffix
+        .replace(/[^a-zA-Z0-9_-]/g, '-')  // Replace invalid chars with dashes
+        .replace(/-+/g, '-')               // Collapse multiple dashes
+        .replace(/^-|-$/g, '')             // Remove leading/trailing dashes
+
+      // Validate against reserved names (case-insensitive)
+      if (RESERVED_BRANCH_SUFFIXES.includes(sanitizedSuffix.toLowerCase())) {
+        throw new Error(
+          `Branch name "${sanitizedSuffix}" is reserved. Reserved names: ${RESERVED_BRANCH_SUFFIXES.join(', ')}. ` +
+          `These names conflict with special agents or git references.`
+        )
+      }
+
+      agentId = `${projectName}-${sanitizedSuffix}`
     }
 
     // Auto-generate branch name if not provided
-    let branch = assignment.branch!
     if (!branch.startsWith('feature/')) {
-      branch = `feature/${agentId}/${branch}`
+      branch = `feature/${branch}`
     }
 
     // Calculate worktree path
@@ -756,6 +823,186 @@ export class AgentService {
     }
   }
 
+  /**
+   * Sanitize a string to be used as a git branch name.
+   * - Converts to lowercase
+   * - Replaces spaces with hyphens
+   * - Removes special characters (except hyphens, underscores, and alphanumeric)
+   * - Collapses multiple consecutive hyphens
+   * - Trims leading/trailing hyphens
+   */
+  private sanitizeBranchName(name: string): string {
+    if (!name) return ''
+
+    return name
+      .toLowerCase()
+      .replace(/\s+/g, '-')           // Replace spaces with hyphens
+      .replace(/[^a-z0-9-_]/g, '')    // Remove special characters
+      .replace(/-+/g, '-')            // Collapse multiple hyphens
+      .replace(/^-+|-+$/g, '')        // Trim leading/trailing hyphens
+  }
+
+  /**
+   * Validate a handoff request payload.
+   * Checks that all required fields are present and valid.
+   */
+  private isValidHandoffPayload(payload: any): payload is HandoffRequest {
+    if (!payload || typeof payload !== 'object') return false
+    if (!payload.sourceAgentId || typeof payload.sourceAgentId !== 'string' || payload.sourceAgentId.trim() === '') return false
+    if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.trim() === '') return false
+    if (!payload.branchMode || (payload.branchMode !== 'inherit' && payload.branchMode !== 'fresh')) return false
+    return true
+  }
+
+  /**
+   * Handoff from one agent to another.
+   * Creates a new agent that can optionally inherit the source agent's branch.
+   *
+   * @param projectPath - The path to the project
+   * @param request - The handoff request containing source agent, prompt, and options
+   * @returns HandoffResult with the new agent or error information
+   */
+  async handoffAgent(projectPath: string, request: HandoffRequest): Promise<HandoffResult> {
+    // Validate the request
+    if (!this.isValidHandoffPayload(request)) {
+      return {
+        success: false,
+        error: 'Invalid handoff request: missing or invalid required fields (sourceAgentId, prompt, branchMode)'
+      }
+    }
+
+    try {
+      // Find the source agent
+      const agents = await this.listAgents(projectPath)
+      const sourceSession = agents.find(a => a.id === request.sourceAgentId)
+
+      if (!sourceSession) {
+        return {
+          success: false,
+          error: `Source agent ${request.sourceAgentId} not found`
+        }
+      }
+
+      // Read the source agent's full info
+      const sourceAgentInfo = this.readAgentInfo(sourceSession.worktreePath)
+      if (!sourceAgentInfo) {
+        return {
+          success: false,
+          error: `Failed to read source agent info for ${request.sourceAgentId}`
+        }
+      }
+
+      // Determine tool and model (use overrides or inherit from source)
+      const tool = request.tool || sourceAgentInfo.tool
+      const model = request.model || sourceAgentInfo.model
+
+      // Determine yolo and chrome flags (use explicit override or inherit from source)
+      const yolo = request.yolo !== undefined ? request.yolo : sourceAgentInfo.yolo
+      const chrome = request.chrome !== undefined ? request.chrome : sourceAgentInfo.chrome
+
+      // Generate branch name
+      const config = this.getProjectConfig(projectPath)
+      const projectName = config.project.name || projectPath.split('/').pop() || 'project'
+      const hash = Math.random().toString(36).substring(2, 9)
+      const agentId = `${projectName}-${hash}`
+
+      // Generate branch suffix (custom or auto-generated from prompt)
+      let branchSuffix: string
+      if (request.shortName) {
+        branchSuffix = this.sanitizeBranchName(request.shortName)
+      } else {
+        // Generate from first few words of prompt
+        const promptWords = request.prompt.split(/\s+/).slice(0, 3).join('-')
+        branchSuffix = this.sanitizeBranchName(promptWords) || 'handoff'
+      }
+
+      const branch = `feature/${agentId}/${branchSuffix}`
+
+      // Determine base branch for worktree creation
+      // In 'inherit' mode, we branch from the source agent's branch
+      // In 'fresh' mode, we branch from main/master
+      const baseBranch = request.branchMode === 'inherit'
+        ? sourceAgentInfo.branch
+        : config.project.defaultBaseBranch || 'main'
+
+      // Create handoff source metadata
+      const handoffSource: HandoffSource = {
+        agentId: request.sourceAgentId,
+        branchMode: request.branchMode,
+        originalBranch: sourceAgentInfo.branch,
+        handoffTimestamp: new Date().toISOString()
+      }
+
+      // Calculate worktree path
+      const worktreePath = join(dirname(projectPath), agentId)
+
+      // Create AgentInfo for the new agent
+      const newAgentInfo: AgentInfo = {
+        id: `${agentId}-${Date.now()}`,
+        agentId: agentId,
+        branch: branch,
+        project: projectName,
+        feature: request.prompt.substring(0, 100), // First 100 chars as feature description
+        status: 'active',
+        tool: tool,
+        model: model,
+        mode: 'dev',
+        yolo: yolo,
+        chrome: chrome !== false,
+        prompt: request.prompt,
+        parentAgentId: request.sourceAgentId, // Track lineage for tree hierarchy
+        handoffSource: handoffSource,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // Run setup.sh to create the agent worktree
+      const setupScript = join(this.getMinionsPath(), 'bin', 'setup.sh')
+      const configPath = this.getProjectConfigPath(projectPath)
+
+      try {
+        // For inherit mode, pass the base branch as 3rd positional arg (before --config)
+        // setup.sh signature: <agent-id> <branch-name> [base-branch] [--config path]
+        const setupArgs = request.branchMode === 'inherit'
+          ? [newAgentInfo.agentId, newAgentInfo.branch, baseBranch, '--config', configPath]
+          : [newAgentInfo.agentId, newAgentInfo.branch, '--config', configPath]
+
+        const { stdout, stderr } = await execFileAsync(
+          setupScript,
+          setupArgs,
+          { cwd: projectPath }
+        )
+        log.debug('Setup script output:', stdout)
+        if (stderr) log.warn('Setup script errors:', stderr)
+
+        // Write agent info to .agent-info file in the worktree
+        this.writeAgentInfo(worktreePath, newAgentInfo)
+
+        // Commit any setup files to prevent git dirty state
+        await this.commitSetupFiles(worktreePath)
+
+        log.info(`Handoff completed: ${request.sourceAgentId} -> ${newAgentInfo.agentId}`)
+
+        return {
+          success: true,
+          newAgent: newAgentInfo
+        }
+      } catch (error: any) {
+        log.error('Failed to run setup.sh for handoff', error)
+        return {
+          success: false,
+          error: `Failed to create handoff agent: ${error.message}`
+        }
+      }
+    } catch (error: any) {
+      log.error('Handoff failed', error)
+      return {
+        success: false,
+        error: `Handoff failed: ${error.message}`
+      }
+    }
+  }
+
   async updateAssignment(projectPath: string, assignmentId: string, updates: Partial<AgentInfo>): Promise<void> {
     // Find the worktree for this assignment
     const { assignments } = await this.getAssignments(projectPath)
@@ -777,7 +1024,7 @@ export class AgentService {
     }
 
     // Update the .agent-info file
-    this.updateAgentInfo(worktreePath, updates)
+    this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
   }
 
   async getSuperAgentDetails(projectPath: string, agentId: string): Promise<SuperAgentInfo> {
@@ -831,13 +1078,13 @@ export class AgentService {
     // This is more robust than relying on signals - it's based on actual file state
     if (pendingPlans.length > 0 && agentInfo.mode === 'planning') {
       agentInfo.mode = 'dev'
-      this.updateAgentInfo(session.worktreePath, { mode: 'dev' })
+      this.updateAgentInfo(session.worktreePath, { mode: 'dev' }, agentId, projectPath)
     }
 
     // 6. Get task invocations from JSONL if we have a session and service
     let taskInvocations: TaskInvocation[] = []
     if (agentInfo.claudeSessionId && this.claudeSessionInfoService) {
-      const sessionInfo = this.claudeSessionInfoService.parseSessionInfo(
+      const sessionInfo = await this.claudeSessionInfoService.parseSessionInfo(
         agentInfo.claudeSessionId,
         session.worktreePath
       )
@@ -921,7 +1168,7 @@ export class AgentService {
 
     this.updateAgentInfo(childWorktreePath, {
       parentAgentId: superAgentId
-    })
+    }, childAgent.agentId, projectPath)
 
     // 6. Mark plan as approved in .pending-plans.json
     plan.status = 'approved'
@@ -977,7 +1224,7 @@ export class AgentService {
       children: [],
       pendingPlans: [],
       workflowId
-    } as any)
+    } as any, result.agentId, projectPath)
 
     // Log workflow selection
     if (assignment.workflow) {
@@ -1085,8 +1332,9 @@ export class AgentService {
       log.debug('Teardown script output:', stdout)
       if (stderr) log.warn('Teardown script errors:', stderr)
 
-      // Remove from sessions
+      // Remove from sessions and project lookup cache
       this.sessions.delete(agentId)
+      this.projectLookupCache.delete(agentId)
 
       // No need to update config.json - the .agent-info file is removed with the worktree atomically
     } catch (error: any) {
@@ -1114,7 +1362,7 @@ export class AgentService {
     }
 
     // Update status to idle/cancelled
-    this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' })
+    this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' }, agentId, projectPath)
 
     // Update session to clear assignment
     const session = this.sessions.get(agentId)
@@ -1150,7 +1398,7 @@ export class AgentService {
     }
 
     // Update the .agent-info file with UI state
-    this.updateAgentInfo(agent.worktreePath, { uiState })
+    this.updateAgentInfo(agent.worktreePath, { uiState }, agentId, projectPath)
 
     // Also update the in-memory session
     const session = this.sessions.get(agentId)
@@ -1323,7 +1571,7 @@ export class AgentService {
           prUrl: prUrl,
           prStatus: 'OPEN',
           status: 'pr_open'
-        })
+        }, assignment.agentId, projectPath)
 
         // Clear detection cache for this assignment
         this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
@@ -1346,7 +1594,7 @@ export class AgentService {
             prUrl: prUrl,
             prStatus: 'OPEN',
             status: 'pr_open'
-          })
+          }, assignment.agentId, projectPath)
 
           // Clear detection cache for this assignment
           this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
@@ -1478,7 +1726,7 @@ export class AgentService {
       let prData: { url: string; state: string; createdAt: string } | null = null
       try {
         const { stdout } = await execAsync(
-          `gh pr list --head "${currentBranch}" --json number,url,state,createdAt --jq ".[0]"`,
+          `gh pr list --head ${currentBranch} --json number,url,state,createdAt --jq '.[0]'`,
           { cwd: projectPath }
         )
 
@@ -1515,7 +1763,7 @@ export class AgentService {
           updates.status = 'closed'
         }
 
-        this.updateAgentInfo(worktreePath, updates)
+        this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
       }
 
       // 10. Cache positive result
@@ -1670,7 +1918,7 @@ export class AgentService {
         updates.status = 'closed'
       }
 
-      this.updateAgentInfo(worktreePath, updates)
+      this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
 
       return {
         status,

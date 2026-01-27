@@ -1,4 +1,5 @@
-import { readFileSync, existsSync, watch, FSWatcher, statSync, readdirSync } from 'fs'
+import { existsSync, watch, FSWatcher, statSync, readdirSync, openSync, readSync, closeSync, createReadStream } from 'fs'
+import { createInterface } from 'readline'
 import { join } from 'path'
 import { homedir } from 'os'
 import { createLogger } from './logger'
@@ -43,6 +44,24 @@ const HUMAN_INPUT_TOOLS = ['ExitPlanMode', 'AskUserQuestion'] as const
 
 /** Git refs prefix that needs to be stripped from branch names */
 const REFS_HEADS_PREFIX = 'refs/heads/'
+
+/**
+ * Minimal parsed entry data for backward state scanning.
+ * MEMORY OPTIMIZATION: Store only the fields needed for state detection,
+ * not the full JSON line which can be megabytes for tool outputs.
+ */
+interface RecentEntryData {
+  type: 'user' | 'assistant' | 'other'
+  // For user entries
+  isSlashCommand?: boolean
+  // For assistant entries
+  hasToolUse?: boolean
+  hasThinking?: boolean
+  hasText?: boolean
+  stopReason?: string | null
+  textEndsWithColon?: boolean
+  hasHumanInputTool?: boolean
+}
 
 export interface TokenUsage {
   inputTokens: number
@@ -110,11 +129,15 @@ interface SessionJSONLEntry {
   }
 }
 
+/** Debounce time for file watcher events (ms) - coalesces rapid fs.watch events */
+const WATCHER_DEBOUNCE_MS = 100
+
 export class ClaudeSessionInfoService {
   private claudeProjectsDir: string
   private watchers: Map<string, FSWatcher> = new Map()
   private cache: Map<string, { info: ClaudeSessionInfo; mtime: number }> = new Map()
   private callbacks: Map<string, (info: ClaudeSessionInfo) => void> = new Map()
+  private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
 
   constructor() {
     // Claude stores projects in ~/.claude/projects/
@@ -211,15 +234,36 @@ export class ClaudeSessionInfoService {
   }
 
   /**
-   * Read the last N bytes of a file (tail-based reading for efficiency).
+   * Read the last N bytes of a file using true tail reading.
+   * Uses file descriptor with positioned reads to avoid loading the entire file.
    */
   private readFileTail(filePath: string, bytes: number = 50000): string {
+    let fd: number | null = null
     try {
-      const content = readFileSync(filePath, 'utf-8')
-      // Return last N characters (approximating bytes for UTF-8)
-      return content.slice(-bytes)
+      fd = openSync(filePath, 'r')
+      const stat = statSync(filePath)
+
+      if (stat.size === 0) {
+        return ''
+      }
+
+      const readLength = Math.min(bytes, stat.size)
+      const startPosition = Math.max(0, stat.size - readLength)
+      const buffer = Buffer.alloc(readLength)
+
+      readSync(fd, buffer, 0, readLength, startPosition)
+
+      return buffer.toString('utf-8')
     } catch {
       return ''
+    } finally {
+      if (fd !== null) {
+        try {
+          closeSync(fd)
+        } catch {
+          // Ignore close errors
+        }
+      }
     }
   }
 
@@ -242,9 +286,25 @@ export class ClaudeSessionInfoService {
 
     // Check for command-related XML tags in string content
     if (typeof content === 'string') {
-      const hasCommandTag = content.includes('<command-name>') ||
-        content.includes('<local-command-stdout>') ||
-        content.includes('<local-command-result>')
+      // MEMORY OPTIMIZATION: Slash commands are small user inputs.
+      // Large strings (e.g., tool outputs > 10KB) are never slash commands.
+      // Also, command tags appear at the START of content, so only check the first 500 chars.
+      const MAX_SLASH_COMMAND_LENGTH = 10000
+      const CHECK_PREFIX_LENGTH = 500
+
+      if (content.length > MAX_SLASH_COMMAND_LENGTH) {
+        // Definitely not a slash command - too large
+        return false
+      }
+
+      // Only check the prefix where these tags would appear
+      const prefix = content.length > CHECK_PREFIX_LENGTH
+        ? content.slice(0, CHECK_PREFIX_LENGTH)
+        : content
+
+      const hasCommandTag = prefix.includes('<command-name>') ||
+        prefix.includes('<local-command-stdout>') ||
+        prefix.includes('<local-command-result>')
       if (hasCommandTag) {
         return true
       }
@@ -262,10 +322,67 @@ export class ClaudeSessionInfoService {
   }
 
   /**
+   * Extract minimal data from a session entry for state detection.
+   * MEMORY OPTIMIZATION: Only extracts the fields needed for backward state scanning,
+   * avoiding retention of large content strings.
+   */
+  private extractMinimalEntryData(entry: SessionJSONLEntry): RecentEntryData | null {
+    if (entry.type !== 'user' && entry.type !== 'assistant') {
+      return { type: 'other' }
+    }
+
+    if (entry.type === 'user') {
+      return {
+        type: 'user',
+        isSlashCommand: this.isSlashCommandEntry(entry)
+      }
+    }
+
+    // entry.type === 'assistant'
+    if (!entry.message) {
+      return { type: 'assistant' }
+    }
+
+    const content = entry.message.content
+    if (!Array.isArray(content)) {
+      return { type: 'assistant' }
+    }
+
+    const hasToolUse = content.some(c => c.type === 'tool_use')
+    const hasThinking = content.some(c => c.type === 'thinking')
+    const hasText = content.some(c => c.type === 'text')
+    const hasHumanInputTool = content.some(c =>
+      c.type === 'tool_use' && HUMAN_INPUT_TOOLS.includes(c.name as any)
+    )
+
+    // Only extract first 200 chars of text to check colon ending - avoid retaining large strings
+    let textEndsWithColon = false
+    if (hasText) {
+      const textBlock = content.find(c => c.type === 'text')
+      if (textBlock?.text) {
+        // Only look at the last 10 chars to check for colon
+        const lastChars = textBlock.text.slice(-10).trim()
+        textEndsWithColon = lastChars.endsWith(':')
+      }
+    }
+
+    return {
+      type: 'assistant',
+      hasToolUse,
+      hasThinking,
+      hasText,
+      stopReason: entry.message.stop_reason,
+      textEndsWithColon,
+      hasHumanInputTool
+    }
+  }
+
+  /**
    * Parse a session JSONL file and extract session info.
+   * Uses streaming to handle large files that exceed JavaScript's string length limit.
    * Uses smart caching to avoid re-parsing unchanged files.
    */
-  parseSessionInfo(sessionId: string, worktreePath: string): ClaudeSessionInfo | null {
+  async parseSessionInfo(sessionId: string, worktreePath: string): Promise<ClaudeSessionInfo | null> {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
     if (!sessionFile) {
       return null
@@ -282,9 +399,12 @@ export class ClaudeSessionInfoService {
         return cached.info
       }
 
-      // Read the whole file for now - can optimize to tail later if needed
-      const content = readFileSync(sessionFile, 'utf-8')
-      const lines = content.trim().split('\n')
+      // Use streaming to avoid loading entire file into memory
+      // This prevents ERR_STRING_TOO_LONG errors on large session files (>512MB)
+      const rl = createInterface({
+        input: createReadStream(sessionFile, { encoding: 'utf-8' }),
+        crlfDelay: Infinity
+      })
 
       let actualModel = ''
       let claudeCodeVersion = ''
@@ -303,11 +423,29 @@ export class ClaudeSessionInfoService {
       // Track Task tool invocations
       const taskInvocationsMap = new Map<string, TaskInvocation>()
 
-      for (const line of lines) {
+      // Keep a sliding window of recent PARSED entries for backward state scanning
+      // MEMORY OPTIMIZATION: Only store minimal parsed data, not full JSON lines
+      // which can be megabytes for tool outputs
+      const RECENT_ENTRIES_BUFFER_SIZE = 100
+      const recentEntries: RecentEntryData[] = []
+      let totalLineCount = 0
+
+      for await (const line of rl) {
         if (!line.trim()) continue
+
+        totalLineCount++
 
         try {
           const entry = JSON.parse(line) as SessionJSONLEntry
+
+          // Pre-parse and store only minimal data needed for state detection
+          const entryData = this.extractMinimalEntryData(entry)
+          if (entryData) {
+            recentEntries.push(entryData)
+            if (recentEntries.length > RECENT_ENTRIES_BUFFER_SIZE) {
+              recentEntries.shift()
+            }
+          }
 
           // Extract timestamp
           if (entry.timestamp) {
@@ -360,7 +498,8 @@ export class ClaudeSessionInfoService {
                     toolUseId: block.id,
                     description: input.description || '',
                     subagentType,
-                    prompt: input.prompt || '',
+                    // MEMORY OPTIMIZATION: Truncate prompt to prevent storing massive strings
+                    prompt: (input.prompt || '').slice(0, 1000),
                     status: 'running',
                     startedAt: entry.timestamp || new Date().toISOString()
                   })
@@ -391,13 +530,13 @@ export class ClaudeSessionInfoService {
             }
           }
 
-        } catch (parseError) {
-          // Skip malformed lines
-          continue
+        } catch {
+          // Skip malformed lines - entry data already handled above
         }
       }
 
       // Determine state from the LAST REAL entry (skip slash commands)
+      // Use the pre-parsed recent entries buffer for backward scanning
       //
       // ACCEPTANCE CRITERIA: Only show "waiting" when Claude is expecting human input
       //
@@ -406,92 +545,74 @@ export class ClaudeSessionInfoService {
       // - working: Claude is processing, using tools, or waiting for tool results
       // - unknown: any other case (safe default)
 
-      // Scan backwards to find last REAL conversation entry (skip slash commands)
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          const entry = JSON.parse(lines[i]) as SessionJSONLEntry
+      // Scan backwards through recent entries to find last REAL conversation entry
+      for (let i = recentEntries.length - 1; i >= 0; i--) {
+        const entryData = recentEntries[i]
 
-          // Skip non-conversation entries
-          if (entry.type !== 'user' && entry.type !== 'assistant') {
-            continue
-          }
-
-          // Skip slash command entries (not real user input)
-          if (entry.type === 'user' && entry.message) {
-            const isSlashCommand = this.isSlashCommandEntry(entry)
-
-            if (isSlashCommand) {
-              continue // Skip this, look for earlier entry
-            }
-
-            // Real user message/tool_result = Claude is processing
-            state = 'working'
-            break
-          }
-
-          if (entry.type === 'assistant' && entry.message) {
-            const message = entry.message
-            const content = message.content
-            const stopReason = message.stop_reason as ClaudeStopReason
-
-            if (Array.isArray(content)) {
-              const hasToolUse = content.some(c => c.type === 'tool_use')
-              const hasThinking = content.some(c => c.type === 'thinking')
-              const hasText = content.some(c => c.type === 'text')
-
-              // Check for tools that wait for HUMAN input (not automatic tool results)
-              const humanInputTool = content.find(c =>
-                c.type === 'tool_use' && HUMAN_INPUT_TOOLS.includes(c.name as any)
-              )
-
-              // CRITICAL: Some tools like ExitPlanMode and AskUserQuestion are waiting
-              // for HUMAN input, not tool execution. Detect these first.
-              if (humanInputTool) {
-                // Waiting for human to approve plan or answer question
-                state = 'waiting'
-
-              } else if (stopReason === CLAUDE_STOP_REASONS.END_TURN) {
-                // Claude explicitly finished its turn - ready for human input
-                // NOTE: This only appears in sidechain agents, not main sessions
-                state = 'waiting'
-
-              } else if (stopReason === CLAUDE_STOP_REASONS.TOOL_USE || hasToolUse) {
-                // Claude wants to use tools - waiting for TOOL results, not human
-                state = 'working'
-
-              } else if (hasThinking) {
-                // Claude in extended thinking mode
-                state = 'working'
-
-              } else if (hasText && !hasToolUse && !hasThinking) {
-                // Text-only message: Need to distinguish mid-work status updates from completion messages
-                // Extract text content to check for colon heuristic
-                const textContent = content.find(c => c.type === 'text')?.text || ''
-                const trimmedText = textContent.trim()
-
-                if (trimmedText.endsWith(':')) {
-                  // Messages ending with colon are ALWAYS status updates (100% accurate)
-                  // e.g., "Let me search for that:", "Now I'll read the file:"
-                  // These indicate more work is coming (tool_use follows)
-                  state = 'working'
-                } else {
-                  // Text not ending with colon - likely a completion message
-                  // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
-                  state = 'waiting'
-                }
-
-              } else {
-                // Any other case (streaming, unknown format, etc.)
-                state = 'working'
-              }
-            } else {
-              // No content array = unknown (unexpected format)
-              state = 'unknown'
-            }
-            break
-          }
-        } catch {
+        // Skip non-conversation entries
+        if (entryData.type !== 'user' && entryData.type !== 'assistant') {
           continue
+        }
+
+        // Skip slash command entries (not real user input)
+        if (entryData.type === 'user') {
+          if (entryData.isSlashCommand) {
+            continue // Skip this, look for earlier entry
+          }
+
+          // Real user message/tool_result = Claude is processing
+          state = 'working'
+          break
+        }
+
+        if (entryData.type === 'assistant') {
+          // CRITICAL: Some tools like ExitPlanMode and AskUserQuestion are waiting
+          // for HUMAN input, not tool execution. Detect these first.
+          if (entryData.hasHumanInputTool) {
+            // Waiting for human to approve plan or answer question
+            state = 'waiting'
+
+          } else if (entryData.stopReason === CLAUDE_STOP_REASONS.END_TURN) {
+            // Claude explicitly finished its turn - ready for human input
+            // NOTE: This only appears in sidechain agents, not main sessions
+            state = 'waiting'
+
+          } else if (entryData.stopReason === CLAUDE_STOP_REASONS.TOOL_USE || entryData.hasToolUse) {
+            // Claude wants to use tools - waiting for TOOL results, not human
+            state = 'working'
+
+          } else if (entryData.hasThinking) {
+            // Claude in extended thinking mode
+            state = 'working'
+
+          } else if (entryData.hasText && !entryData.hasToolUse && !entryData.hasThinking) {
+            // Text-only message: Need to distinguish mid-work status updates from completion messages
+
+            // CRITICAL: Check for running Task subagents BEFORE applying colon heuristic
+            // Super minions may send text-only messages between Task invocations
+            // that don't end with colon, but they're still working if tasks are running
+            const hasRunningTasks = Array.from(taskInvocationsMap.values())
+              .some(task => task.status === 'running')
+
+            if (hasRunningTasks) {
+              // Super minion still has running Task subagents - definitely working
+              state = 'working'
+            } else if (entryData.textEndsWithColon) {
+              // Messages ending with colon are ALWAYS status updates (100% accurate)
+              // e.g., "Let me search for that:", "Now I'll read the file:"
+              // These indicate more work is coming (tool_use follows)
+              state = 'working'
+            } else {
+              // Text not ending with colon AND no running tasks - likely a completion message
+              // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
+              state = 'waiting'
+            }
+
+          } else {
+            // Any other case (streaming, unknown format, etc.)
+            state = 'working'
+          }
+          break
         }
       }
 
@@ -505,8 +626,8 @@ export class ClaudeSessionInfoService {
       // Debug state detection
       if (process.env.NODE_ENV === 'development') {
         log.debug(' Parsed session state:', state, {
-          lastLine: lines[lines.length - 1]?.substring(0, 100),
-          linesCount: lines.length
+          recentEntriesCount: recentEntries.length,
+          linesCount: totalLineCount
         })
       }
 
@@ -536,7 +657,11 @@ export class ClaudeSessionInfoService {
 
   /**
    * Get session state from the JSONL file with smart caching.
-   * This is a lighter-weight operation that only reads the last few entries.
+   * This is a lighter-weight operation that only reads the last ~10KB of the file.
+   *
+   * Tracks Task tool invocations in the tail to correctly detect when super minions
+   * have running subagents. This prevents false "waiting" states when a super minion
+   * sends text-only messages between Task invocations.
    */
   getSessionState(sessionId: string, worktreePath: string): 'working' | 'waiting' | 'unknown' {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
@@ -555,11 +680,46 @@ export class ClaudeSessionInfoService {
         return cached.info.state
       }
 
-      // Read last ~10KB which should contain recent entries
-      const tail = this.readFileTail(sessionFile, 10000)
+      // Read last ~50KB which should contain recent entries
+      // Increased from 10KB to catch AskUserQuestion/ExitPlanMode entries
+      // that may be followed by many other entries before user responds.
+      //
+      // NOTE: 50KB is sufficient for tracking Task subagents because Task invocations
+      // and their tool_results are temporally close in the JSONL (typically seconds to
+      // minutes apart). Even with verbose Task outputs, we capture the invocation-result
+      // pairs needed to determine if Tasks are still running.
+      const tail = this.readFileTail(sessionFile, 50000)
       const lines = tail.split('\n').filter(l => l.trim())
 
-      // Process lines from end to find latest state
+      // FIRST PASS: Track running Task subagents
+      // This fixes the bug where getSessionState() would return 'waiting' when
+      // a super minion sent text without a colon but had Tasks still running
+      const runningTasks = new Set<string>()
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line)
+          // Find Task tool_use invocations
+          if (entry.type === 'assistant' && entry.message?.content && Array.isArray(entry.message.content)) {
+            for (const block of entry.message.content) {
+              if (block.type === 'tool_use' && block.name === 'Task' && block.id) {
+                runningTasks.add(block.id)
+              }
+            }
+          }
+          // Find tool_result completions (marks Task as done)
+          if (entry.type === 'user' && entry.message?.content && Array.isArray(entry.message.content)) {
+            for (const block of entry.message.content) {
+              if (block.type === 'tool_result' && block.tool_use_id) {
+                runningTasks.delete(block.tool_use_id)
+              }
+            }
+          }
+        } catch {
+          // Skip malformed lines
+        }
+      }
+
+      // SECOND PASS: Process lines from end to find latest state
       // Same 3-state logic as parseSessionInfo (check stop_reason):
       // - waiting: Claude FINISHED turn and is ready for human input
       // - working: Claude is processing, using tools, or waiting for tool results
@@ -624,19 +784,29 @@ export class ClaudeSessionInfoService {
 
               } else if (hasText && !hasToolUse && !hasThinking) {
                 // Text-only message: Need to distinguish mid-work status updates from completion messages
-                // Extract text content to check for colon heuristic
-                const textContent = content.find(c => c.type === 'text')?.text || ''
-                const trimmedText = textContent.trim()
 
-                if (trimmedText.endsWith(':')) {
-                  // Messages ending with colon are ALWAYS status updates (100% accurate)
-                  // e.g., "Let me search for that:", "Now I'll read the file:"
-                  // These indicate more work is coming (tool_use follows)
+                // CRITICAL: Check for running Task subagents BEFORE applying colon heuristic
+                // Super minions may send text-only messages between Task invocations
+                // that don't end with colon, but they're still working if tasks are running
+                if (runningTasks.size > 0) {
+                  // Super minion still has running Task subagents - definitely working
+                  log.debug(`Session ${sessionId} has ${runningTasks.size} running Task subagents, state=working`)
                   state = 'working'
                 } else {
-                  // Text not ending with colon - likely a completion message
-                  // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
-                  state = 'waiting'
+                  // No running tasks - check colon heuristic
+                  const textContent = content.find(c => c.type === 'text')?.text || ''
+                  const trimmedText = textContent.trim()
+
+                  if (trimmedText.endsWith(':')) {
+                    // Messages ending with colon are ALWAYS status updates (100% accurate)
+                    // e.g., "Let me search for that:", "Now I'll read the file:"
+                    // These indicate more work is coming (tool_use follows)
+                    state = 'working'
+                  } else {
+                    // Text not ending with colon AND no running tasks - likely a completion message
+                    // e.g., "Perfect! All bugs are fixed. Let me know if you need anything else."
+                    state = 'waiting'
+                  }
                 }
 
               } else {
@@ -671,6 +841,7 @@ export class ClaudeSessionInfoService {
   /**
    * Start watching a session file for changes.
    * Calls the callback whenever the session info updates.
+   * Uses debouncing to coalesce rapid fs.watch events (which are notoriously chatty).
    */
   watchSession(
     sessionId: string,
@@ -689,12 +860,24 @@ export class ClaudeSessionInfoService {
     try {
       const watcher = watch(sessionFile, { persistent: false }, (eventType) => {
         if (eventType === 'change') {
-          // Debounce: only process if file was modified recently
-          const info = this.parseSessionInfo(sessionId, worktreePath)
-          if (info) {
-            const cb = this.callbacks.get(sessionId)
-            if (cb) cb(info)
+          // Debounce rapid file change events (fs.watch can fire multiple times per write)
+          const existingTimer = this.debounceTimers.get(sessionId)
+          if (existingTimer) {
+            clearTimeout(existingTimer)
           }
+
+          const timer = setTimeout(() => {
+            this.debounceTimers.delete(sessionId)
+            // Use void to handle async function in sync callback
+            void this.parseSessionInfo(sessionId, worktreePath).then(info => {
+              if (info) {
+                const cb = this.callbacks.get(sessionId)
+                if (cb) cb(info)
+              }
+            })
+          }, WATCHER_DEBOUNCE_MS)
+
+          this.debounceTimers.set(sessionId, timer)
         }
       })
 
@@ -708,21 +891,41 @@ export class ClaudeSessionInfoService {
    * Stop watching a session file.
    */
   unwatchSession(sessionId: string): void {
+    // Clear any pending debounce timer
+    const timer = this.debounceTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.debounceTimers.delete(sessionId)
+    }
+
     const watcher = this.watchers.get(sessionId)
     if (watcher) {
       watcher.close()
       this.watchers.delete(sessionId)
     }
     this.callbacks.delete(sessionId)
+
+    // MEMORY FIX: Clean up cache entry for this session
+    this.cache.delete(sessionId)
   }
 
   /**
-   * Clean up all watchers.
+   * Clean up all watchers, debounce timers, and cached data.
    */
   dispose(): void {
+    // Clear all debounce timers first
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.debounceTimers.clear()
+
+    // Then clean up watchers
     for (const [sessionId] of this.watchers) {
       this.unwatchSession(sessionId)
     }
+
+    // MEMORY FIX: Clear all caches to prevent memory leaks on shutdown
+    this.cache.clear()
   }
 
   /**
@@ -737,10 +940,11 @@ export class ClaudeSessionInfoService {
 
   /**
    * Extract gitBranch from a session's JSONL file.
+   * Uses streaming with early exit since gitBranch typically appears early in the file.
    * Used for late detection of branch names (e.g., after teleport syncs).
    * Returns null if file doesn't exist, is empty, or has no gitBranch.
    */
-  extractGitBranch(sessionId: string, worktreePath: string): string | null {
+  async extractGitBranch(sessionId: string, worktreePath: string): Promise<string | null> {
     const sessionFile = this.findSessionFile(sessionId, worktreePath)
     if (!sessionFile) {
       return null
@@ -752,14 +956,19 @@ export class ClaudeSessionInfoService {
         return null
       }
 
-      const content = readFileSync(sessionFile, 'utf-8')
+      const rl = createInterface({
+        input: createReadStream(sessionFile, { encoding: 'utf-8' }),
+        crlfDelay: Infinity
+      })
 
-      for (const line of content.trim().split('\n')) {
+      for await (const line of rl) {
         if (!line.trim()) continue
 
         try {
           const entry = JSON.parse(line)
           if (entry.gitBranch && typeof entry.gitBranch === 'string') {
+            // Close the stream immediately - no need to read the rest of the file
+            rl.close()
             return this.stripRefsHeadsPrefix(entry.gitBranch)
           }
         } catch {

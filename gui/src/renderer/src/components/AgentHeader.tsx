@@ -1,6 +1,11 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState, useRef, useEffect } from 'react'
 import SessionInfoPanel from './SessionInfoPanel'
 import './AgentHeader.css'
+
+interface CopyTooltipState {
+  visible: boolean
+  position: { x: number; y: number }
+}
 
 export interface HeaderBadge {
   label: string
@@ -45,11 +50,60 @@ function AgentHeader({
   actions,
   taskCount
 }: AgentHeaderProps) {
+  const [copyTooltip, setCopyTooltip] = useState<CopyTooltipState>({
+    visible: false,
+    position: { x: 0, y: 0 }
+  })
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const handleCopyToClipboard = (text: string, e: React.MouseEvent) => {
     navigator.clipboard.writeText(text)
-    const element = e.currentTarget
-    element.classList.add('header-copy-flash')
-    setTimeout(() => element.classList.remove('header-copy-flash'), 300)
+
+    // Get position for the tooltip - use fixed positioning relative to viewport
+    const valueElement = e.currentTarget as HTMLElement
+    const rect = valueElement.getBoundingClientRect()
+
+    // Position tooltip below the clicked element, centered horizontally
+    // Using viewport coordinates for fixed positioning
+    const tooltipX = rect.left + rect.width / 2
+    const tooltipY = rect.bottom
+
+    // Clear any existing timeout
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current)
+    }
+
+    // Show tooltip
+    setCopyTooltip({
+      visible: true,
+      position: { x: tooltipX, y: tooltipY }
+    })
+
+    // Apply flash to both the value element and the parent badge for better visibility
+    const badgeElement = valueElement.closest('.header-badge') as HTMLElement
+
+    valueElement.classList.add('header-copy-flash')
+    if (badgeElement) {
+      badgeElement.classList.add('header-badge-flash')
+    }
+
+    // Hide tooltip after delay
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setCopyTooltip(prev => ({ ...prev, visible: false }))
+      valueElement.classList.remove('header-copy-flash')
+      if (badgeElement) {
+        badgeElement.classList.remove('header-badge-flash')
+      }
+    }, 1500)
   }
 
   // Filter out 'id' variant badges - they are shown in the SessionInfoPanel expanded view
@@ -62,6 +116,21 @@ function AgentHeader({
 
   return (
     <header className="agent-header-v2">
+      {/* Copy confirmation tooltip */}
+      {copyTooltip.visible && (
+        <div
+          className="copy-tooltip"
+          style={{
+            left: copyTooltip.position.x,
+            top: copyTooltip.position.y
+          }}
+        >
+          <span className="copy-tooltip-icon">&#10003;</span>
+          <span className="copy-tooltip-text">Copied!</span>
+          <div className="copy-tooltip-arrow" />
+        </div>
+      )}
+
       {/* Left section: Icon + Title + Type */}
       <div className="header-identity">
         <div className="header-icon-wrapper">
