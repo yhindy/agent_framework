@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
 import { filterTerminalQueryResponses } from '../utils/terminalOutputFilter'
+import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface TestEnvTerminalProps {
   agentId: string
@@ -88,6 +89,50 @@ function initGlobalOutputListener() {
 function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const key = `${agentId}:${commandId}`
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
+  const terminalInstanceRef = useRef<XTerm | null>(null)
+
+  // Drag and drop handlers for file path insertion
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer?.types.includes('Files')) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounterRef.current = 0
+      setIsDragOver(false)
+
+      const paths = getDroppedFilePaths(e.nativeEvent)
+      if (paths) {
+        window.electronAPI.sendTestEnvInput(agentId, commandId, paths)
+        // Focus the terminal after dropping
+        terminalInstanceRef.current?.focus()
+      }
+    },
+    [agentId, commandId]
+  )
 
   useEffect(() => {
     // Initialize global listener on first mount
@@ -129,13 +174,24 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    
+
     // Track if we've been disposed (must be declared before async operations)
     let isDisposed = false
-    
+    const isDisposedRef = { current: false }
+
+    // Store terminal instance for drop handler access
+    terminalInstanceRef.current = terminal
+
+    // Set up Shift+Enter handler for literal newline insertion
+    setupShiftEnterHandler(
+      terminal,
+      (data) => window.electronAPI.sendTestEnvInput(agentId, commandId, data),
+      isDisposedRef
+    )
+
     // Store the container element reference for use in RAF callback
     const containerElement = terminalRef.current
-    
+
     // Defer terminal.open() to next frame to prevent React StrictMode issues
     // StrictMode unmounts immediately after mount, and xterm's internal async operations
     // from open() would fire on a disposed terminal causing "dimensions" errors
@@ -248,6 +304,8 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
 
     return () => {
       isDisposed = true
+      isDisposedRef.current = true
+      terminalInstanceRef.current = null
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
       // Unregister active terminal
@@ -259,7 +317,16 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
     }
   }, [agentId, commandId, key])
 
-  return <div ref={terminalRef} className="terminal-container" />
+  return (
+    <div
+      ref={terminalRef}
+      className={`terminal-container${isDragOver ? ' drag-over' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    />
+  )
 }
 
 export default TestEnvTerminal

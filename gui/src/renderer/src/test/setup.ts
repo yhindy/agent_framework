@@ -74,6 +74,8 @@ Object.defineProperty(window, 'electronAPI', {
     getActiveProjects: vi.fn().mockResolvedValue([{ path: '/test/project' }]),
     // PR polling methods
     stopPRPolling: vi.fn().mockResolvedValue(undefined),
+    // Agent lifecycle methods
+    ensureAgentRunning: vi.fn().mockResolvedValue({ started: false }),
   }
 })
 
