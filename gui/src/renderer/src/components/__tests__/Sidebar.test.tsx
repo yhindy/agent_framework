@@ -926,6 +926,166 @@ describe('Sidebar branch name display', () => {
   })
 })
 
+describe('Sidebar task data persistence', () => {
+  // These tests verify that task data is preserved correctly when agent list updates occur.
+  // The implementation preserves task data for collapsed super minions and fetches fresh
+  // data for expanded ones during each loadAgentsAndStates call.
+
+  const mockProjects = [
+    { name: 'test-project', path: '/path/to/project' }
+  ]
+
+  const mockSuperMinionAgent = {
+    id: 'super-1',
+    agentId: 'super-1',
+    isSuperMinion: true,
+    terminalPid: 123,
+    hasUnread: false,
+    lastActivity: new Date().toISOString(),
+    branch: 'feature/test-project/super-task'
+  }
+
+  const mockTaskInvocations = [
+    {
+      toolUseId: 'task-1',
+      description: 'Test task 1',
+      subagentType: 'general-purpose',
+      status: 'running' as const
+    },
+    {
+      toolUseId: 'task-2',
+      description: 'Test task 2',
+      subagentType: 'Explore',
+      status: 'completed' as const
+    }
+  ]
+
+  let agentListUpdateCallback: (() => void) | null = null
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    // Clear the saved collapsed state so super minions start collapsed by default
+    localStorage.removeItem('collapsedSuperMinions')
+
+    vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue([mockSuperMinionAgent])
+
+    vi.mocked(window.electronAPI.getSuperAgentDetails).mockResolvedValue({
+      id: 'super-1',
+      agentId: 'super-1',
+      isSuperMinion: true,
+      branch: 'feature/test-project/super-task',
+      taskInvocations: mockTaskInvocations,
+      children: [],
+      pendingPlans: []
+    })
+
+    // Capture the onAgentListUpdate callback so we can trigger it manually
+    vi.mocked(window.electronAPI.onAgentListUpdate).mockImplementation((callback) => {
+      agentListUpdateCallback = callback
+      return vi.fn()
+    })
+  })
+
+  it('preserves task data when onAgentListUpdate fires after expanding a super minion', async () => {
+
+    render(
+      <TestWrapper>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </TestWrapper>
+    )
+
+    // Wait for agents to load
+    await waitFor(() => {
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+    })
+
+    // Super minion should be collapsed by default (tasks not visible)
+    expect(screen.queryByText('Test task 1')).not.toBeInTheDocument()
+
+    // Expand the super minion by clicking the chevron
+    const chevron = screen.getByTitle('Toggle child agents')
+    fireEvent.click(chevron)
+
+    // Wait for tasks to be fetched and displayed
+    await waitFor(() => {
+      expect(window.electronAPI.getSuperAgentDetails).toHaveBeenCalledWith('super-1')
+    })
+
+    // Tasks should now be visible
+    await waitFor(() => {
+      expect(screen.getByText('Test task 1')).toBeInTheDocument()
+      expect(screen.getByText('Test task 2')).toBeInTheDocument()
+    })
+
+    // Verify tasks are indeed visible before the update
+    expect(screen.queryByText('Test task 1')).toBeInTheDocument()
+
+    // Simulate onAgentListUpdate firing (e.g., from backend notification)
+    agentListUpdateCallback?.()
+
+    // Wait for the agent list update to complete
+    await waitFor(() => {
+      // The super minion should still be in the DOM
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+    })
+
+    // Tasks should still be visible after onAgentListUpdate
+    expect(screen.getByText('Test task 1')).toBeInTheDocument()
+    expect(screen.getByText('Test task 2')).toBeInTheDocument()
+  })
+
+  it('preserves task data across multiple agent list updates', async () => {
+
+    render(
+      <TestWrapper>
+        <Sidebar
+          activeProjects={mockProjects}
+          onNavigate={() => {}}
+          onProjectRemove={() => {}}
+          onProjectAdd={() => {}}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+        />
+      </TestWrapper>
+    )
+
+    // Wait for agents to load and expand super minion
+    await waitFor(() => {
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+    })
+
+    const chevron = screen.getByTitle('Toggle child agents')
+    fireEvent.click(chevron)
+
+    await waitFor(() => {
+      expect(screen.getByText('Test task 1')).toBeInTheDocument()
+    })
+
+    // Fire multiple agent list updates in succession
+    agentListUpdateCallback?.()
+    await waitFor(() => {
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+    })
+
+    agentListUpdateCallback?.()
+    await waitFor(() => {
+      expect(screen.getByText('super-task')).toBeInTheDocument()
+    })
+
+    // Tasks should still be preserved after multiple updates
+    expect(screen.getByText('Test task 1')).toBeInTheDocument()
+    expect(screen.getByText('Test task 2')).toBeInTheDocument()
+  })
+})
+
 describe('Sidebar icon alignment', () => {
   const mockProjects = [
     { name: 'test-project', path: '/path/to/project' }
