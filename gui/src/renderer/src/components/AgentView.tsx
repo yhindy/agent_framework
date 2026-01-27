@@ -477,6 +477,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
         tool={assignment?.tool}
         isRunning={isRunning}
         status={assignment?.status}
+        model={assignment?.model}
         actions={headerActions}
       />
 
@@ -680,4 +681,3 @@ function AgentView({ activeProjects }: AgentViewProps) {
 }
 
 export default AgentView
-

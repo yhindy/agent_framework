@@ -32,6 +32,8 @@ interface AgentHeaderProps {
   isRunning?: boolean
   /** Agent status for display in SessionInfoPanel */
   status?: string
+  /** Optional model for display */
+  model?: string
   /** Action buttons (right side) */
   actions?: ReactNode
   /** Optional task count for super minions */
@@ -47,6 +49,7 @@ function AgentHeader({
   tool,
   isRunning = false,
   status,
+  model,
   actions,
   taskCount
 }: AgentHeaderProps) {
@@ -175,6 +178,7 @@ function AgentHeader({
           agentId={agentId}
           isRunning={tool === 'claude' ? isRunning : false}
           status={status}
+          model={model}
         />
       </div>
 
