@@ -31,7 +31,7 @@ Object.defineProperty(window, 'electronAPI', {
     updateAssignment: vi.fn(),
     createAssignmentForProject: vi.fn(),
     stopAgent: vi.fn(),
-    openInCursor: vi.fn(),
+    openInEditor: vi.fn(),
     teardownAgent: vi.fn(),
     unassignAgent: vi.fn(),
     createPullRequest: vi.fn(),
@@ -74,6 +74,8 @@ Object.defineProperty(window, 'electronAPI', {
     getActiveProjects: vi.fn().mockResolvedValue([{ path: '/test/project' }]),
     // PR polling methods
     stopPRPolling: vi.fn().mockResolvedValue(undefined),
+    // Agent lifecycle methods
+    ensureAgentRunning: vi.fn().mockResolvedValue({ started: false }),
   }
 })
 

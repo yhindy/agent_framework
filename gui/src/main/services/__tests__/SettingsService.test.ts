@@ -251,9 +251,9 @@ describe('SettingsService', () => {
       expect(mockStore.set).not.toHaveBeenCalled()
     })
 
-    it('migrates from version 1 to version 2 adding terminal settings', () => {
-      // Simulate version 1 settings (without terminal settings)
-      const v1Settings = {
+    it('migrates from version 5 to version 6 adding editor settings', () => {
+      // Simulate version 5 settings (without editor settings)
+      const v5Settings = {
         notifications: {
           enabled: true,
           cooldownSeconds: 30
@@ -268,11 +268,26 @@ describe('SettingsService', () => {
           yoloMode: true,
           chromeIntegration: true
         },
-        version: 1
+        terminal: {
+          terminalMode: 'tmux'
+        },
+        claudeConfig: {
+          enabled: true,
+          enabledPlugins: [],
+          disabledAgentIds: [],
+          autoRefresh: true
+        },
+        skillsLibrary: {
+          commandsEnabled: true,
+          agentsEnabled: true,
+          projectSkillsEnabled: true,
+          disabledSkillIds: []
+        },
+        version: 5
       }
 
       const storeState: Record<string, unknown> = {
-        settings: v1Settings
+        settings: v5Settings
       }
       mockStore.get.mockImplementation((key: string) => storeState[key])
       mockStore.set.mockImplementation((key: string, value: unknown) => {
@@ -282,26 +297,14 @@ describe('SettingsService', () => {
       // Recreate service to trigger migration
       settingsService = new SettingsService()
 
-      // Should have migrated to latest version with all new settings
+      // Should have migrated to version 6 with editor settings
       expect(mockStore.set).toHaveBeenCalledWith(
         'settings',
         expect.objectContaining({
-          terminal: {
-            terminalMode: 'tmux'
+          editor: {
+            defaultEditor: 'cursor'
           },
-          claudeConfig: {
-            enabled: true,
-            enabledPlugins: [],
-            disabledAgentIds: [],
-            autoRefresh: true
-          },
-          skillsLibrary: {
-            commandsEnabled: true,
-            agentsEnabled: true,
-            projectSkillsEnabled: true,
-            disabledSkillIds: []
-          },
-          version: 5
+          version: 6
         })
       )
     })

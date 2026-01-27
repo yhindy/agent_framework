@@ -304,13 +304,13 @@ function AgentView({ activeProjects }: AgentViewProps) {
     return status?.isRunning || false
   }
 
-  const handleOpenCursor = async () => {
+  const handleOpenEditor = async () => {
     if (!agentId) return
 
     try {
-      await window.electronAPI.openInCursor(agentId)
+      await window.electronAPI.openInEditor(agentId)
     } catch (error: any) {
-      alert('Error opening Cursor: ' + error.message)
+      alert('Error opening editor: ' + error.message)
     }
   }
 
@@ -487,9 +487,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
         </button>
       ) : null}
 
-      {/* Cursor Button */}
-      <button onClick={handleOpenCursor} className="compact-button">
-        Cursor
+      {/* Open Editor Button */}
+      <button onClick={handleOpenEditor} className="compact-button">
+        Open Editor
       </button>
 
       {/* Cleanup Dropdown */}
@@ -514,6 +514,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
         isRunning={isRunning}
         status={assignment?.status}
         workingState={workingState}
+        model={assignment?.model}
         actions={headerActions}
       />
 
@@ -717,4 +718,3 @@ function AgentView({ activeProjects }: AgentViewProps) {
 }
 
 export default AgentView
-

@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
 import { filterTerminalQueryResponses } from '../utils/terminalOutputFilter'
+import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface PlainTerminalProps {
   agentId: string
@@ -85,6 +86,50 @@ function initGlobalOutputListener() {
 function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const fullTerminalId = `${agentId}-${terminalId}`
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
+  const terminalInstanceRef = useRef<XTerm | null>(null)
+
+  // Drag and drop handlers for file path insertion
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer?.types.includes('Files')) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounterRef.current = 0
+      setIsDragOver(false)
+
+      const paths = getDroppedFilePaths(e.nativeEvent)
+      if (paths) {
+        window.electronAPI.sendPlainTerminalInput(fullTerminalId, paths)
+        // Focus the terminal after dropping
+        terminalInstanceRef.current?.focus()
+      }
+    },
+    [fullTerminalId]
+  )
 
   useEffect(() => {
     // Initialize global listener on first mount
@@ -132,18 +177,29 @@ function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTermina
     
     // Track if we've been disposed (must be declared before async operations)
     let isDisposed = false
-    
+    const isDisposedRef = { current: false }
+
+    // Store terminal instance for drop handler access
+    terminalInstanceRef.current = terminal
+
+    // Set up Shift+Enter handler for literal newline insertion
+    setupShiftEnterHandler(
+      terminal,
+      (data) => window.electronAPI.sendPlainTerminalInput(fullTerminalId, data),
+      isDisposedRef
+    )
+
     // Store the container element reference for use in RAF callback
     const containerElement = terminalRef.current
-    
+
     // Defer terminal.open() to next frame to prevent React StrictMode issues
     // StrictMode unmounts immediately after mount, and xterm's internal async operations
     // from open() would fire on a disposed terminal causing "dimensions" errors
     const rafId = requestAnimationFrame(() => {
       if (isDisposed) return
-      
+
       terminal.open(containerElement)
-      
+
       try {
         fitAddon.fit()
         terminal.focus()
@@ -250,6 +306,8 @@ function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTermina
 
     return () => {
       isDisposed = true
+      isDisposedRef.current = true
+      terminalInstanceRef.current = null
 
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
@@ -269,11 +327,15 @@ function PlainTerminal({ agentId, terminalId, autoFocus, onMount }: PlainTermina
   return (
     <div
       ref={terminalRef}
-      className="terminal-container"
+      className={`terminal-container${isDragOver ? ' drag-over' : ''}`}
       onClick={() => {
         activeTerminal?.terminal.focus()
         activeTerminal?.terminal.scrollToBottom()
       }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     />
   )
 }

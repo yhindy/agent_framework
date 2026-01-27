@@ -1,16 +1,16 @@
 # Workflow: Standard Workflow
 
-> Standard workflow with 5 phases: explore, design, review, implement, validate
+> Standard workflow with 5 phases: acceptance criteria, design, review, implement, validate
 
 ## Steps
 
 Execute steps in order. Wait for each step to complete before starting the next.
 
-### Step 1: Explore Codebase
+### Step 1: Acceptance Criteria
 
-**Agent**: Explorer
+**Agent**: Acceptance Criteria
 
-Fast codebase reconnaissance - searches files, reads code, finds patterns
+Propose and get human approval for acceptance criteria before implementation
 
 ### Step 2: Engineering Design
 
@@ -31,7 +31,7 @@ Run these agents simultaneously:
 
 **Agent**: General Purpose
 
-Implement the requirements.
+Versatile agent for implementation, review, testing, and documentation tasks
 
 ### Step 5: Validation
 
@@ -42,19 +42,63 @@ Run these agents simultaneously:
 - **Simplifier**: Code simplification - refactors for clarity, removes duplication, improves maintainability
 - **General Purpose**: Run all tests and verify they pass. Report any failures.
 - **General Purpose**: Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.
-- **General Purpose**: Update all relevant documentation.
+- **General Purpose**: Update documentation as needed based on the implementation changes.
 
 ---
 
 ## Available Agents
 
-### Built-in Agents
+### Claude-Native Agents
+Use these directly with `Task(subagent_type="<id>", ...)`
+
 - **Explorer** (`Explore`): Fast codebase reconnaissance - searches files, reads code, finds patterns
 - **Planner** (`Plan`): Architecture and design planning - creates technical specifications and implementation plans
 - **General Purpose** (`general-purpose`): Versatile agent for implementation, review, testing, and documentation tasks
 - **Debugger** (`debugger`): Debug unexpected behavior - systematic hypothesis generation, adds logging, finds root causes
 - **Simplifier** (`code-simplifier`): Code simplification - refactors for clarity, removes duplication, improves maintainability
 - **Frontend Designer** (`bold-frontend-designer`): UI/UX specialist - creates bold visual designs, improves layouts, and component styling
+
+### Custom Agents
+Use these with `Task(subagent_type="general-purpose", prompt="<prompt below>", ...)`
+
+#### Acceptance Criteria (`acceptance-criteria`)
+
+Propose and get human approval for acceptance criteria before implementation
+
+**Prompt to use:**
+```
+You are an Acceptance Criteria agent. Your job is to ensure alignment with the user before any implementation work begins.
+
+## Your Process
+
+1. **Explore** the codebase to understand context, existing patterns, and constraints
+2. **Ask clarifying questions** using AskUserQuestion if requirements are ambiguous - do this BEFORE proposing criteria
+3. **Propose** clear, numbered, testable acceptance criteria:
+   - Functional: "1. Users can log in with email/password"
+   - Engineering: "2. All new code has unit tests with >80% coverage"
+   - Performance: "3. API response time < 200ms"
+4. **Request approval** using AskUserQuestion:
+   ```
+   AskUserQuestion(questions=[{
+     "question": "Do you agree with these acceptance criteria?",
+     "header": "Criteria",
+     "options": [
+       {"label": "Yes, proceed", "description": "Move to next phase"},
+       {"label": "Modify criteria", "description": "I have feedback"}
+     ]
+   }])
+   ```
+5. **Wait** for explicit "Yes, proceed" before completing
+
+## Critical Rules
+
+- Do NOT complete until you receive explicit "Yes, proceed" approval
+- If user says "Modify criteria", incorporate their feedback and re-propose
+- Do NOT skip to implementation or design work
+- Do NOT propose criteria that include open questions - ask questions first, then propose
+- Your ONLY job is getting criteria approved - nothing else
+```
+
 
 ### Imported Agents
 - **code-simplifier** (`imported:claude-plugins-official/code-simplifier:code-simplifier`): Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.

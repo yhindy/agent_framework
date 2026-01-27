@@ -880,6 +880,7 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
 | `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
 | `gui/src/main/services/types/SkillsLibraryTypes.ts` | TypeScript types for Skills Library |
+| `gui/src/shared/types/settings.ts` | Settings types: EditorType, EditorSettings, EDITOR_DISPLAY_NAMES, etc. |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `gui/src/renderer/src/components/skills/SkillsPage.tsx` | Skills Library UI page |

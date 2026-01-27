@@ -34,6 +34,8 @@ interface AgentHeaderProps {
   status?: string
   /** Working state from Claude session info (working/waiting/unknown) */
   workingState?: 'working' | 'waiting' | 'unknown'
+  /** Optional model for display */
+  model?: string
   /** Action buttons (right side) */
   actions?: ReactNode
   /** Optional task count for super minions */
@@ -50,6 +52,7 @@ function AgentHeader({
   isRunning = false,
   status,
   workingState,
+  model,
   actions,
   taskCount
 }: AgentHeaderProps) {
@@ -185,6 +188,7 @@ function AgentHeader({
           agentId={agentId}
           isRunning={tool === 'claude' ? isRunning : false}
           status={status}
+          model={model}
         />
       </div>
 

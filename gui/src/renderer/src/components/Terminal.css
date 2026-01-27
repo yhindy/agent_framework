@@ -29,3 +29,9 @@
   outline: 1px solid #ffffff !important;
 }
 
+/* Visual indicator when dragging files over terminal */
+.terminal-container.drag-over {
+  outline: 2px dashed #3b8eea;
+  outline-offset: -2px;
+}
+
