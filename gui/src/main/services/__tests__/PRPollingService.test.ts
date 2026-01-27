@@ -461,7 +461,7 @@ describe('PRPollingService', () => {
     })
   })
 
-  describe('exponential backoff on errors', () => {
+  describe('simple retry on errors', () => {
     it('should retry after 30 seconds on first error', async () => {
       const assignmentId = 'test-assignment-1'
 
@@ -484,32 +484,7 @@ describe('PRPollingService', () => {
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)
     })
 
-    it('should retry after 2 minutes on second error', async () => {
-      const assignmentId = 'test-assignment-1'
-
-      ;(mockAgentService.checkPullRequestStatus as any)
-        .mockRejectedValueOnce(new Error('Error 1'))
-        .mockRejectedValueOnce(new Error('Error 2'))
-        .mockResolvedValueOnce({
-          status: 'OPEN'
-        })
-
-      await service.startPolling(assignmentId, 'subscriber-1')
-
-      ;(mockAgentService.checkPullRequestStatus as any).mockClear()
-
-      // Advance past first retry (30s) - the interval runs at 60s (default without createdAt)
-      await vi.advanceTimersByTimeAsync(60000)
-      const callsAfter1Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
-
-      // Advance by 60 more seconds to trigger the second retry
-      await vi.advanceTimersByTimeAsync(60000)
-      const callsAfter2Min = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
-
-      expect(callsAfter2Min).toBeGreaterThan(callsAfter1Min)
-    })
-
-    it('should stop polling after 3 consecutive errors', async () => {
+    it('should stop polling after 2 consecutive errors (simplified from 3)', async () => {
       const assignmentId = 'test-assignment-1'
 
       ;(mockAgentService.checkPullRequestStatus as any).mockRejectedValue(
@@ -520,14 +495,13 @@ describe('PRPollingService', () => {
 
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
-      // Trigger multiple retry attempts
+      // Trigger retry attempts - with simple retry, stops after 2 errors
       vi.advanceTimersByTime(30000) // First error's backoff
-      vi.advanceTimersByTime(120000) // Second error's backoff
-      vi.advanceTimersByTime(600000) // Third error's backoff
+      vi.advanceTimersByTime(30000) // Second error's backoff
 
-      // After 3 errors, should stop polling completely
+      // After 2 errors, should stop polling completely
       const finalCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
-      expect(finalCalls).toBeLessThanOrEqual(3)
+      expect(finalCalls).toBeLessThanOrEqual(2)
     })
   })
 
@@ -597,7 +571,7 @@ describe('PRPollingService', () => {
   })
 
   describe('caching', () => {
-    it('should cache PR status for 5 minutes', async () => {
+    it('should cache PR status for 15 minutes (for found PRs)', async () => {
       const assignmentId = 'test-assignment-1'
 
       ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
@@ -609,14 +583,14 @@ describe('PRPollingService', () => {
 
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
-      // Advance by 30 seconds (within new PR polling interval) using async timer
+      // Advance by 30 seconds (within polling interval) using async timer
       await vi.advanceTimersByTimeAsync(30000)
 
       // Should use cache instead of calling API
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
 
-      // Advance past cache TTL (5 minutes from initial call + 30s = 5.5 minutes)
-      await vi.advanceTimersByTimeAsync(4 * 60 * 1000 + 40 * 1000)
+      // Advance past cache TTL (15 minutes from initial call)
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
 
       // Now should call API again because cache is stale
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBeGreaterThan(0)

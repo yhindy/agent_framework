@@ -279,8 +279,11 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     loadWorkflowData()
   }, [])
 
-  // Auto-poll PR status for all pr_open assignments
-  const prOpenAssignments = assignments.filter(a => a.status === 'pr_open')
+  // Auto-poll PR status for assignments with OPEN PRs only
+  // Don't poll merged/closed PRs - those are terminal states
+  const prOpenAssignments = assignments.filter(a =>
+    a.status === 'pr_open' && a.prStatus === 'OPEN'
+  )
   usePRPolling({
     assignmentIds: prOpenAssignments.map(a => a.id),
     enabled: prOpenAssignments.length > 0
