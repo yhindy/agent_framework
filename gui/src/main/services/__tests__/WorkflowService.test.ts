@@ -978,4 +978,54 @@ describe('WorkflowService', () => {
       })
     })
   })
+
+  describe('Acceptance Criteria Skill', () => {
+    it('should have acceptance-criteria as the first step in default workflow', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+
+      expect(workflow.steps[0].name).toBe('Acceptance Criteria')
+      expect(workflow.steps[0].agents[0].typeId).toBe('acceptance-criteria')
+    })
+
+    it('should have acceptance-criteria in DEFAULT_SUBAGENT_TYPES with promptContent', () => {
+      const acType = DEFAULT_SUBAGENT_TYPES.find(t => t.id === 'acceptance-criteria')
+
+      expect(acType).toBeDefined()
+      expect(acType!.name).toBe('Acceptance Criteria')
+      expect(acType!.promptContent).toBeDefined()
+      expect(acType!.promptContent).toContain('AskUserQuestion')
+      expect(acType!.promptContent).toContain('Yes, proceed')
+    })
+
+    it('should generate rules with custom agent prompt for acceptance-criteria', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+      const rules = service.generateRulesMarkdown(workflow)
+
+      // Should have Custom Agents section
+      expect(rules).toContain('### Custom Agents')
+      expect(rules).toContain('acceptance-criteria')
+
+      // Should include the full prompt content
+      expect(rules).toContain('AskUserQuestion')
+      expect(rules).toContain('Yes, proceed')
+
+      // Should instruct to use general-purpose
+      expect(rules).toContain('general-purpose')
+    })
+
+    it('should not include acceptance-criteria in Claude-native agents section', () => {
+      const workflow = service.getActiveWorkflow('/any/project')
+      const rules = service.generateRulesMarkdown(workflow)
+
+      // Split into sections
+      const nativeSection = rules.split('### Claude-Native Agents')[1]?.split('###')[0] || ''
+
+      // acceptance-criteria should NOT be in the native section
+      expect(nativeSection).not.toContain('acceptance-criteria')
+
+      // But Explore, Plan, etc should be
+      expect(nativeSection).toContain('Explore')
+      expect(nativeSection).toContain('Plan')
+    })
+  })
 })
