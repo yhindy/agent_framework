@@ -731,37 +731,34 @@ When an imported agent name conflicts with a built-in agent (e.g., `test`, `revi
 
 **UI Access:**
 Skills and imported agents are accessible via the dedicated **Skills** page in the sidebar. Users can:
-- View all skills grouped by source (Claude Plugins, Vercel Skills, Project Skills)
+- View all skills grouped by source (Claude Plugins, Global Commands/Agents, Project Commands/Agents)
 - Enable/disable individual skills
 - See override relationships between project and global skills
 - Manually trigger a refresh
 
 ### Skills Library
 
-The Skills Library feature extends the framework to support skills from multiple sources beyond Claude Code plugins.
+The Skills Library scans and discovers commands/agents from standard Claude Code locations.
 
 **Supported Sources:**
 
 | Source | Path | Format |
 |--------|------|--------|
-| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents/skills folders |
-| Vercel Skills | `~/.claude/skills/` | `{skill-name}/SKILL.md` + optional scripts/ |
-| Project Skills | `{project}/.claude/skills/` | Same as Vercel Skills |
+| Global Commands | `~/.claude/commands/` | `{name}.md` with optional YAML frontmatter |
+| Global Agents | `~/.claude/agents/` | `{name}.md` with optional YAML frontmatter |
+| Project Commands | `{project}/.claude/commands/` | Same format |
+| Project Agents | `{project}/.claude/agents/` | Same format |
+| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents folders |
 
-**Vercel Skills Structure:**
-```
-~/.claude/skills/
-└── {skill-name}/
-    ├── SKILL.md           # Skill definition with frontmatter
-    ├── scripts/           # Optional executable scripts
-    │   └── *.sh
-    └── references/        # Optional reference files
-        └── *.md
-```
+**Skill File Format:**
+```markdown
+---
+name: My Custom Skill
+description: What this skill does
+model: opus
+---
 
-**Installing Vercel Skills:**
-```bash
-npx add-skill vercel-labs/agent-skills
+Instructions for Claude when using this skill...
 ```
 
 **Override Behavior:**
@@ -771,17 +768,18 @@ Project-local skills override global skills with the same name. This allows proj
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `vercelSkillsEnabled` | boolean | `true` | Enable ~/.claude/skills/ scanning |
-| `projectSkillsEnabled` | boolean | `true` | Enable project-local skills |
+| `commandsEnabled` | boolean | `true` | Enable ~/.claude/commands/ scanning |
+| `agentsEnabled` | boolean | `true` | Enable ~/.claude/agents/ scanning |
+| `projectSkillsEnabled` | boolean | `true` | Enable project-local commands/agents |
 | `disabledSkillIds` | string[] | `[]` | Specific skill IDs to disable |
 
 **Key Services:**
-- **SkillsLibraryService**: Scans Vercel and project skills directories
+- **SkillsLibraryService**: Scans global and project commands/agents directories
 - **UnifiedSkillsService**: Combines all skill sources with override resolution
 - **WorkflowService**: Consumes skills as subagent types for workflows
 
 **IPC Handlers:**
-- `skillsLibrary:scan` - Scan Vercel/project skills
+- `skillsLibrary:scan` - Scan commands/agents directories
 - `skillsLibrary:refresh` - Force a rescan
 - `unifiedSkills:getScanResult` - Get all skills from all sources
 - `unifiedSkills:setSkillEnabled` - Enable/disable a specific skill
@@ -877,7 +875,7 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
-| `gui/src/main/services/SkillsLibraryService.ts` | Scan Vercel and project-local skills |
+| `gui/src/main/services/SkillsLibraryService.ts` | Scan global and project-local commands/agents |
 | `gui/src/main/services/UnifiedSkillsService.ts` | Combine all skill sources with override resolution |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
 | `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
