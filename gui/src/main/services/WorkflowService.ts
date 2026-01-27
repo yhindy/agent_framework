@@ -10,7 +10,8 @@ import {
   DEFAULT_SUBAGENT_TYPES,
   DEFAULT_WORKFLOW,
   DEBUG_WORKFLOW,
-  LEGACY_AGENT_ID_MAP
+  LEGACY_AGENT_ID_MAP,
+  isClaudeNativeType
 } from './types/WorkflowTypes'
 import type { ClaudeConfigService } from './ClaudeConfigService'
 import type { SkillsLibraryService } from './SkillsLibraryService'
@@ -433,10 +434,34 @@ export class WorkflowService {
     lines.push('## Available Agents')
     lines.push('')
 
-    // Include built-in agents
-    lines.push('### Built-in Agents')
+    // Include Claude-native agents
+    lines.push('### Claude-Native Agents')
+    lines.push('Use these directly with `Task(subagent_type="<id>", ...)`')
+    lines.push('')
     for (const agent of DEFAULT_SUBAGENT_TYPES) {
-      lines.push(`- **${agent.name}** (\`${agent.id}\`): ${agent.description}`)
+      if (isClaudeNativeType(agent.id)) {
+        lines.push(`- **${agent.name}** (\`${agent.id}\`): ${agent.description}`)
+      }
+    }
+
+    // Include custom agents with their full prompts
+    const customAgents = DEFAULT_SUBAGENT_TYPES.filter(a => !isClaudeNativeType(a.id) && a.promptContent)
+    if (customAgents.length > 0) {
+      lines.push('')
+      lines.push('### Custom Agents')
+      lines.push('Use these with `Task(subagent_type="general-purpose", prompt="<prompt below>", ...)`')
+      lines.push('')
+      for (const agent of customAgents) {
+        lines.push(`#### ${agent.name} (\`${agent.id}\`)`)
+        lines.push('')
+        lines.push(`${agent.description}`)
+        lines.push('')
+        lines.push('**Prompt to use:**')
+        lines.push('```')
+        lines.push(agent.promptContent!)
+        lines.push('```')
+        lines.push('')
+      }
     }
 
     // Include imported agents if any
