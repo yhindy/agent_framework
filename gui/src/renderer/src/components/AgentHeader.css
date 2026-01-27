@@ -67,12 +67,54 @@
   gap: 2px;
 }
 
+.header-type-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .header-type-label {
   font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-wider);
+}
+
+/* =============================================================================
+   WORKING STATE CHIP - Compact status indicator next to type label
+   ============================================================================= */
+
+.header-working-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+  line-height: 1.4;
+}
+
+.header-working-chip--working {
+  background: var(--color-info-dim);
+  color: var(--color-info);
+  animation: working-pulse 2s ease-in-out infinite;
+}
+
+.header-working-chip--waiting {
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+}
+
+@keyframes working-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .header-title {

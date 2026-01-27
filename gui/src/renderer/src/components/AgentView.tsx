@@ -9,6 +9,7 @@ import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon, Refre
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
+import { useSessionInfo } from '../hooks/useSessionInfo'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
@@ -407,6 +408,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }
 
+  // Use session info hook to get working state
+  const agentTerminalRunning = agent?.terminalPid !== null
+  const isClaudeTool = assignment?.tool === 'claude'
+  const { workingState } = useSessionInfo(
+    agentId || '',
+    agentTerminalRunning && isClaudeTool
+  )
+
   if (!agent) {
     return (
       <div className="agent-view">
@@ -504,6 +513,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
         tool={assignment?.tool}
         isRunning={isRunning}
         status={assignment?.status}
+        workingState={workingState}
         actions={headerActions}
       />
 

@@ -219,16 +219,9 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
     <div className="session-info-panel">
       <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="session-info-badges">
-          <span className="model-badge" title={`Model: ${sessionInfo.actualModel}`}>
-            <span className="badge-label">Model:</span>
+          <span className="model-badge model-badge--compact" title={sessionInfo.actualModel}>
             <span className="badge-value">{displayModel}</span>
           </span>
-
-          {sessionInfo.state !== 'unknown' && (
-            <span className={`state-badge state-${sessionInfo.state}`}>
-              {sessionInfo.state === 'working' ? 'Working' : 'Waiting'}
-            </span>
-          )}
         </div>
 
         <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>

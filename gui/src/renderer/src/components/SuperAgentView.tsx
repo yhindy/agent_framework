@@ -10,6 +10,7 @@ import { CrownIcon, TerminalIcon, StopIcon, PlayIcon, ChevronLeftIcon, ChevronRi
 import { WorkflowPanel } from './WorkflowEditor/WorkflowPanel'
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
+import { useSessionInfo } from '../hooks/useSessionInfo'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './SuperAgentView.css'
@@ -35,6 +36,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
 
   // Workflow editor panel state
   const [isWorkflowEditorOpen, setIsWorkflowEditorOpen] = useState(false)
+  const [workflowName, setWorkflowName] = useState<string | null>(null)
 
   // Load task sidebar collapsed state from localStorage
   useEffect(() => {
@@ -152,6 +154,24 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   useEffect(() => {
     hasCheckedPRRef.current = false
   }, [agentId])
+
+  // Fetch workflow name when agent's workflowId is available
+  useEffect(() => {
+    const fetchWorkflowName = async () => {
+      if (agent?.workflowId) {
+        try {
+          const workflow = await window.electronAPI.getWorkflow(agent.workflowId)
+          setWorkflowName(workflow?.name || null)
+        } catch (err) {
+          console.error('[SuperAgentView] Failed to fetch workflow:', err)
+          setWorkflowName(null)
+        }
+      } else {
+        setWorkflowName(null)
+      }
+    }
+    fetchWorkflowName()
+  }, [agent?.workflowId])
 
   useEffect(() => {
     loadAgent()
@@ -285,6 +305,14 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }
 
+  // Use session info hook to get working state (for Claude tool agents)
+  const agentTerminalRunning = agent?.terminalPid !== null
+  const isClaudeTool = agent?.tool === 'claude'
+  const { workingState } = useSessionInfo(
+    agentId || '',
+    agentTerminalRunning && isClaudeTool
+  )
+
   if (error) {
     return (
       <div className="super-agent-view">
@@ -333,14 +361,14 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   // This logic is IDENTICAL to AgentView for consistency
   const headerActions = (
     <>
-      {/* Workflow Button - only for Super Minions */}
+      {/* Workflow Chip - compact display for workflow name */}
       <button
         onClick={() => setIsWorkflowEditorOpen(true)}
-        className="workflow-config-btn"
-        title="Configure workflow"
+        className="workflow-chip"
+        title={workflowName ? `Workflow: ${workflowName}` : 'Configure workflow'}
       >
         <WorkflowIcon size="sm" />
-        Workflow
+        <span className="workflow-chip-name">{workflowName || 'Workflow'}</span>
       </button>
 
       {/* PR Status Badge or Make PR Button - logic matches AgentView exactly */}
@@ -403,6 +431,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         tool={agent.tool}
         isRunning={isRunning}
         status={agentStatus}
+        workingState={workingState}
         actions={headerActions}
         taskCount={taskCount}
       />
