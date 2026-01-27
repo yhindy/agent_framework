@@ -28,6 +28,20 @@ const api = {
   saveUIState: (agentId: string, uiState: any) => ipcRenderer.invoke('agents:saveUIState', agentId, uiState),
   retryResumeAgent: (agentId: string) => ipcRenderer.invoke('agents:retry-resume', agentId),
   startFreshSession: (agentId: string) => ipcRenderer.invoke('agents:start-fresh', agentId),
+  ensureAgentRunning: (agentId: string, projectPath?: string) =>
+    ipcRenderer.invoke('agents:ensureRunning', agentId, projectPath),
+
+  // Handoff APIs
+  handoffAgent: (request: {
+    sourceAgentId: string
+    prompt: string
+    branchMode: 'inherit' | 'fresh'
+    tool?: string
+    model?: string
+    shortName?: string
+    yolo?: boolean
+    chrome?: boolean
+  }) => ipcRenderer.invoke('agents:handoff', request),
 
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>
@@ -376,6 +390,36 @@ const api = {
     const subscription = (_event: any, agentId: string, info: any) => callback(agentId, info)
     ipcRenderer.on('claude:sessionStarted', subscription)
     return () => ipcRenderer.removeListener('claude:sessionStarted', subscription)
+  },
+
+  // Skills Library APIs
+  scanSkillsLibrary: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:scan', projectPath),
+  getSkillsLibraryScanResult: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:getScanResult', projectPath),
+  refreshSkillsLibrary: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:refresh', projectPath),
+  getSkillsLibrarySettings: () => ipcRenderer.invoke('skillsLibrary:getSettings'),
+  updateSkillsLibrarySettings: (updates: any) => ipcRenderer.invoke('skillsLibrary:updateSettings', updates),
+  getEnabledSkills: (projectPath?: string) => ipcRenderer.invoke('skillsLibrary:getEnabledSkills', projectPath),
+
+  // Unified Skills APIs (combines all sources)
+  scanUnifiedSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:scan', projectPath),
+  getUnifiedSkillsScanResult: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getScanResult', projectPath),
+  refreshUnifiedSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:refresh', projectPath),
+  getUnifiedEnabledSkills: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getEnabledSkills', projectPath),
+  getSkillById: (skillId: string, projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getSkillById', skillId, projectPath),
+  setSkillEnabled: (skillId: string, enabled: boolean) => ipcRenderer.invoke('unifiedSkills:setSkillEnabled', skillId, enabled),
+  getSkillsAsSubagentTypes: (projectPath?: string) => ipcRenderer.invoke('unifiedSkills:getSubagentTypes', projectPath),
+
+  // Skills Library Event Listeners
+  onSkillsLibraryUpdated: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('skillsLibrary:updated', subscription)
+    return () => ipcRenderer.removeListener('skillsLibrary:updated', subscription)
+  },
+
+  onUnifiedSkillsUpdated: (callback: (result: any) => void) => {
+    const subscription = (_event: any, result: any) => callback(result)
+    ipcRenderer.on('unifiedSkills:updated', subscription)
+    return () => ipcRenderer.removeListener('unifiedSkills:updated', subscription)
   }
 }
 

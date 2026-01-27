@@ -460,7 +460,8 @@ Main Process (Node.js)
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
     ├── MinionsConfigService  # Read/write minions.json config
-    └── SetupWizardService    # One-click setup wizard agent
+    ├── SetupWizardService    # One-click setup wizard agent
+    └── HandoffApiService     # HTTP API for /handoff command (port 19234)
          │
          │ IPC (ipcMain.handle)
          ▼
@@ -602,6 +603,76 @@ Agents communicate with the orchestrator via stdout signals:
 ===SIGNAL:PLANS_READY===    # Super minion has plans for approval
 ```
 
+### Agent Handoff
+
+The Agent Handoff feature allows you to spawn new agents to continue related work, creating a "passing the baton" workflow with lineage tracking. Use this when scope creep occurs and you want to delegate new work to a separate agent.
+
+**How to Trigger Handoff:**
+
+Use the `/handoff` command within an agent session. The command instructs the agent to:
+1. Commit all current changes
+2. Create a detailed plan for the new agent
+3. Call the Handoff API to spawn the new agent
+
+**Branch Modes:**
+
+| Mode | Description |
+|------|-------------|
+| **inherit** | New agent branches from the source agent's current work (continues from same code state) |
+| **fresh** | New agent branches from main/master (starts with clean baseline) |
+
+**Handoff API Service:**
+
+The `HandoffApiService` provides a local HTTP server for programmatic handoff creation:
+
+- **Port**: `19234` (localhost only, bound to `127.0.0.1`)
+- **Endpoints**:
+  - `POST /api/handoff` - Create a handoff agent
+  - `GET /api/health` - Health check
+
+**API Request Format:**
+```typescript
+interface HandoffApiRequest {
+  sourceAgentId: string      // ID of the agent initiating handoff
+  plan: string               // Work description/plan for new agent
+  branchMode: 'inherit' | 'fresh'
+  shortName?: string         // Optional custom branch suffix
+}
+```
+
+**API Response:**
+```typescript
+interface HandoffApiResponse {
+  success: boolean
+  newAgentId?: string        // ID of the created agent (on success)
+  error?: string             // Error message (on failure)
+}
+```
+
+**Data Model:**
+
+The `handoffSource` field on `AgentInfo` tracks handoff lineage:
+```typescript
+interface HandoffSource {
+  agentId: string           // Source agent that initiated the handoff
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string    // Branch name of the source agent
+  handoffTimestamp: string  // ISO timestamp when handoff occurred
+}
+```
+
+**UI Indication:**
+- Handoff agents appear indented under their parent in the sidebar
+- A tree connector indicator shows the parent-child relationship
+- Hovering shows the full lineage chain
+
+**IPC Handler:**
+- `agents:handoff` - Create a new agent via handoff from an existing agent
+
+**Key Files:**
+- `HandoffApiService.ts` - HTTP server for `/handoff` command API
+- `AgentService.handoffAgent()` - Core handoff logic
+
 ### Claude Code Config Import
 
 The framework can import agents and skills from Claude Code plugins to use as workflow subagent types. This allows reusing Claude Code's plugin ecosystem within the Agent Framework.
@@ -659,12 +730,61 @@ The framework can import agents and skills from Claude Code plugins to use as wo
 When an imported agent name conflicts with a built-in agent (e.g., `test`, `review`, `implement`), the imported agent is automatically renamed with an `-imported` suffix to avoid collisions.
 
 **UI Access:**
-Settings are accessible via the Settings screen under "Imported Agents" section. Users can:
-- Toggle imports on/off globally
-- Enable/disable individual plugins
-- Enable/disable specific agents within plugins
-- Toggle auto-refresh behavior
+Skills and imported agents are accessible via the dedicated **Skills** page in the sidebar. Users can:
+- View all skills grouped by source (Claude Plugins, Vercel Skills, Project Skills)
+- Enable/disable individual skills
+- See override relationships between project and global skills
 - Manually trigger a refresh
+
+### Skills Library
+
+The Skills Library feature extends the framework to support skills from multiple sources beyond Claude Code plugins.
+
+**Supported Sources:**
+
+| Source | Path | Format |
+|--------|------|--------|
+| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents/skills folders |
+| Vercel Skills | `~/.claude/skills/` | `{skill-name}/SKILL.md` + optional scripts/ |
+| Project Skills | `{project}/.claude/skills/` | Same as Vercel Skills |
+
+**Vercel Skills Structure:**
+```
+~/.claude/skills/
+└── {skill-name}/
+    ├── SKILL.md           # Skill definition with frontmatter
+    ├── scripts/           # Optional executable scripts
+    │   └── *.sh
+    └── references/        # Optional reference files
+        └── *.md
+```
+
+**Installing Vercel Skills:**
+```bash
+npx add-skill vercel-labs/agent-skills
+```
+
+**Override Behavior:**
+Project-local skills override global skills with the same name. This allows projects to customize skills for their specific needs while maintaining access to global skills.
+
+**Configuration (SkillsLibrarySettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `vercelSkillsEnabled` | boolean | `true` | Enable ~/.claude/skills/ scanning |
+| `projectSkillsEnabled` | boolean | `true` | Enable project-local skills |
+| `disabledSkillIds` | string[] | `[]` | Specific skill IDs to disable |
+
+**Key Services:**
+- **SkillsLibraryService**: Scans Vercel and project skills directories
+- **UnifiedSkillsService**: Combines all skill sources with override resolution
+- **WorkflowService**: Consumes skills as subagent types for workflows
+
+**IPC Handlers:**
+- `skillsLibrary:scan` - Scan Vercel/project skills
+- `skillsLibrary:refresh` - Force a rescan
+- `unifiedSkills:getScanResult` - Get all skills from all sources
+- `unifiedSkills:setSkillEnabled` - Enable/disable a specific skill
 
 ## CI/CD Pipeline
 
@@ -746,17 +866,25 @@ For projects with the old `minions/` folder structure:
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
+| `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
+| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff command API (localhost:19234) |
+| `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
+| `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
 | `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
+| `gui/src/main/services/SkillsLibraryService.ts` | Scan Vercel and project-local skills |
+| `gui/src/main/services/UnifiedSkillsService.ts` | Combine all skill sources with override resolution |
 | `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
 | `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
+| `gui/src/main/services/types/SkillsLibraryTypes.ts` | TypeScript types for Skills Library |
 | `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
+| `gui/src/renderer/src/components/skills/SkillsPage.tsx` | Skills Library UI page |
 | `gui/src/renderer/src/components/ImportedAgentsSettings.tsx` | Settings UI for Claude Code plugin imports |
 | `gui/playwright.config.ts` | E2E test configuration |
 | `gui/e2e/README.md` | E2E testing guide and documentation |

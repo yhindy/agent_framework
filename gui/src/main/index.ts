@@ -21,7 +21,10 @@ import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 import { ClaudeConfigService } from './services/ClaudeConfigService'
 import { JsonClaudeService } from './services/JsonClaudeService'
-import type { ClaudeConfigSettings } from '../shared/types/settings'
+import { SkillsLibraryService } from './services/SkillsLibraryService'
+import { UnifiedSkillsService } from './services/UnifiedSkillsService'
+import { HandoffApiService } from './services/HandoffApiService'
+import type { ClaudeConfigSettings, SkillsLibrarySettings } from '../shared/types/settings'
 import type { JsonClaudeStartOptions } from '../shared/types/claudeJson'
 
 const log = createLogger('Main')
@@ -160,6 +163,9 @@ let services: {
   minionsConfig: MinionsConfigService
   claudeConfig: ClaudeConfigService
   jsonClaude: JsonClaudeService
+  skillsLibrary: SkillsLibraryService
+  unifiedSkills: UnifiedSkillsService
+  handoffApi: HandoffApiService
 } | null = null
 
 
@@ -265,6 +271,21 @@ function initializeServices(): void {
   jsonClaudeService.setNotificationService(notificationService)
   jsonClaudeService.setSettingsService(settingsService)
 
+  // Create SkillsLibraryService for Vercel and project-local skills
+  const skillsLibraryService = new SkillsLibraryService()
+  skillsLibraryService.setWindow(mainWindow)
+
+  // Create UnifiedSkillsService to combine all skill sources
+  const unifiedSkillsService = new UnifiedSkillsService(claudeConfigService, skillsLibraryService)
+  unifiedSkillsService.setWindow(mainWindow)
+
+  // Create HandoffApiService for Claude Code /handoff command
+  const handoffApiService = new HandoffApiService()
+  handoffApiService.setAgentService(agentService)
+  handoffApiService.setTerminalService(terminalService)
+  handoffApiService.setProjectService(projectService)
+  handoffApiService.setWindow(mainWindow)
+
   services = {
     project: projectService,
     agent: agentService,
@@ -281,7 +302,10 @@ function initializeServices(): void {
     setupWizard: setupWizardService,
     minionsConfig: minionsConfigService,
     claudeConfig: claudeConfigService,
-    jsonClaude: jsonClaudeService
+    jsonClaude: jsonClaudeService,
+    skillsLibrary: skillsLibraryService,
+    unifiedSkills: unifiedSkillsService,
+    handoffApi: handoffApiService
   }
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
@@ -290,10 +314,18 @@ function initializeServices(): void {
   // Wire up ClaudeConfigService to WorkflowService for imported agents
   services.workflow.setClaudeConfigService(services.claudeConfig)
 
+  // Wire up SkillsLibraryService to WorkflowService for Vercel/project skills
+  services.workflow.setSkillsLibraryService(services.skillsLibrary)
+
   // Initialize Claude config settings from saved settings
   const savedSettings = settingsService.getSettings()
   if (savedSettings.claudeConfig) {
     services.claudeConfig.updateSettings(savedSettings.claudeConfig)
+  }
+
+  // Initialize Skills Library settings from saved settings
+  if (savedSettings.skillsLibrary) {
+    services.skillsLibrary.updateSettings(savedSettings.skillsLibrary)
   }
 
   // Start watching for Claude config changes if auto-refresh is enabled
@@ -301,8 +333,15 @@ function initializeServices(): void {
     services.claudeConfig.startWatching()
   }
 
-  // Do initial scan of Claude plugins
+  // Start watching for skills library changes
+  services.skillsLibrary.startWatching()
+
+  // Do initial scan of Claude plugins and skills
   services.claudeConfig.scanConfigs()
+  services.skillsLibrary.scan()
+
+  // Start the Handoff API server for Claude Code /handoff command
+  services.handoffApi.start()
 
   // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
   const activeProjects = services.project.getActiveProjects()
@@ -632,6 +671,63 @@ function setupIPC(): void {
     return services!.agent.getSuperAgentDetails(projectPath, agentId)
   })
 
+  // Ensure an agent is running (start if not active)
+  // Used by AgentView to start base branch agents when clicked
+  ipcMain.handle('agents:ensureRunning', async (_event, agentId: string, projectPath?: string) => {
+    try {
+      const project = projectPath || services!.project.getCurrentProject()?.path
+      if (!project) {
+        return { started: false, error: 'No project selected' }
+      }
+
+      // Check if terminal is already active
+      if (services!.terminal.hasActiveTerminal(agentId)) {
+        return { started: false } // Already running, no action needed
+      }
+
+      // Get agent info by finding the agent in the list
+      const agents = await services!.agent.listAgents(project)
+      const agent = agents.find(a => a.id === agentId)
+      if (!agent) {
+        return { started: false, error: 'Agent not found' }
+      }
+
+      // Read full agent info from disk
+      const agentInfo = services!.agent.readAgentInfo(agent.worktreePath, agentId, project)
+      if (!agentInfo) {
+        return { started: false, error: 'Could not read agent info' }
+      }
+
+      // Only start if agent has a tool configured
+      if (!agentInfo.tool) {
+        return { started: false, error: 'Agent has no tool configured' }
+      }
+
+      // For base branch agents, don't pass a prompt - just start Claude normally
+      // This lets the user interact with Claude directly without a pre-set task
+      const isBaseBranchAgent = agent.isBaseBranchAgent
+      const promptToUse = isBaseBranchAgent ? undefined : agentInfo.prompt
+
+      // Start the agent
+      log.info(`[agents:ensureRunning] Starting agent ${agentId} (isBase=${isBaseBranchAgent})`)
+      await services!.terminal.startAgent(
+        project,
+        agentId,
+        agentInfo.tool,
+        agentInfo.mode || 'dev',
+        promptToUse,
+        agentInfo.model,
+        agentInfo.yolo || false,
+        agentInfo.chrome !== false
+      )
+
+      return { started: true }
+    } catch (error) {
+      log.error(`[agents:ensureRunning] Failed to start agent ${agentId}:`, error)
+      return { started: false, error: String(error) }
+    }
+  })
+
   // Validate and potentially retry a teleported session
   ipcMain.handle('agents:validateTeleport', async (_event, agentId: string) => {
     try {
@@ -677,6 +773,41 @@ function setupIPC(): void {
     const childAgent = await services!.agent.approvePlan(projectPath, superAgentId, planId)
     // Auto-start the child agent with the prompt and model from the plan
     await services!.terminal.startAgent(projectPath, childAgent.agentId, childAgent.tool, childAgent.mode, childAgent.prompt, childAgent.model, childAgent.yolo, childAgent.chrome !== false)
+  })
+
+  // Handoff handler - create a new agent from an existing one
+  ipcMain.handle('agents:handoff', async (_event, request: import('./services/types/ProjectConfig').HandoffRequest) => {
+    const projectPath = await findProjectForAgent(request.sourceAgentId)
+    const result = await services!.agent.handoffAgent(projectPath, request)
+
+    if (result.success && result.newAgent) {
+      // Trigger updates
+      mainWindow?.webContents.send('agents:updated')
+      mainWindow?.webContents.send('assignments:updated')
+
+      // Auto-start the new agent if it has a prompt
+      if (result.newAgent.prompt) {
+        setTimeout(async () => {
+          try {
+            await services!.terminal.startAgent(
+              projectPath,
+              result.newAgent!.agentId,
+              result.newAgent!.tool,
+              result.newAgent!.mode,
+              result.newAgent!.prompt,
+              result.newAgent!.model,
+              result.newAgent!.yolo,
+              result.newAgent!.chrome !== false
+            )
+            mainWindow?.webContents.send('agents:updated')
+          } catch (error) {
+            log.error('Failed to auto-start handoff agent', error)
+          }
+        }, 2000) // Wait for worktree setup
+      }
+    }
+
+    return result
   })
 
   // Terminal handlers
@@ -1420,6 +1551,70 @@ function setupIPC(): void {
   ipcMain.handle('claudeJson:hasAgent', async (_event, agentId: string) => {
     return services!.jsonClaude.hasAgent(agentId)
   })
+
+  // Skills Library handlers
+  ipcMain.handle('skillsLibrary:scan', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.scan(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getScanResult', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:refresh', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.refresh(projectPath)
+  })
+
+  ipcMain.handle('skillsLibrary:getSettings', async () => {
+    return services!.skillsLibrary.getSettings()
+  })
+
+  ipcMain.handle('skillsLibrary:updateSettings', async (_event, updates: Partial<SkillsLibrarySettings>) => {
+    const updatedSettings = services!.skillsLibrary.updateSettings(updates)
+    // Persist to settings service
+    await services!.settings.updateSettings({ skillsLibrary: updatedSettings })
+    return updatedSettings
+  })
+
+  ipcMain.handle('skillsLibrary:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.skillsLibrary.getEnabledSkills(projectPath)
+  })
+
+  // Unified Skills handlers (combines all sources)
+  ipcMain.handle('unifiedSkills:scan', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.scan(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getScanResult', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getScanResult(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:refresh', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.refresh(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getEnabledSkills', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkills(projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:getSkillById', async (_event, skillId: string, projectPath?: string) => {
+    return services!.unifiedSkills.getSkillById(skillId, projectPath)
+  })
+
+  ipcMain.handle('unifiedSkills:setSkillEnabled', async (_event, skillId: string, enabled: boolean) => {
+    services!.unifiedSkills.setSkillEnabled(skillId, enabled)
+    // Persist settings changes
+    const claudeSettings = services!.claudeConfig.getSettings()
+    const librarySettings = services!.skillsLibrary.getSettings()
+    await services!.settings.updateSettings({
+      claudeConfig: claudeSettings,
+      skillsLibrary: librarySettings
+    })
+  })
+
+  ipcMain.handle('unifiedSkills:getSubagentTypes', async (_event, projectPath?: string) => {
+    return services!.unifiedSkills.getEnabledSkillsAsSubagentTypes(projectPath)
+  })
 }
 
 app.whenReady().then(() => {
@@ -1465,6 +1660,10 @@ app.on('window-all-closed', () => {
     services.testEnv.cleanup()
     services.claudeConfig.cleanup()
     services.jsonClaude.cleanup()
+    services.skillsLibrary.cleanup()
+    services.unifiedSkills.cleanup()
+    // Stop the Handoff API server
+    services.handoffApi.stop()
     // MEMORY FIX: Dispose ClaudeSessionInfoService to clean up watchers and cache
     services.claudeSessionInfo.dispose()
     // MEMORY FIX: Dispose PRPollingService to clean up polling jobs

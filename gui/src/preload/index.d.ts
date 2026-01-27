@@ -20,6 +20,9 @@ declare const api: {
     saveUIState: (agentId: string, uiState: any) => Promise<any>;
     retryResumeAgent: (agentId: string) => Promise<any>;
     startFreshSession: (agentId: string) => Promise<any>;
+ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started: boolean; error?: string }>;
+    // Handoff APIs
+    handoffAgent: (request: import('../main/services/types/ProjectConfig').HandoffRequest) => Promise<import('../main/services/types/ProjectConfig').HandoffResult>;
     sendTerminalInput: (agentId: string, data: string) => void;
     resizeTerminal: (agentId: string, cols: number, rows: number) => void;
     onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => Electron.IpcRenderer;
@@ -133,6 +136,23 @@ declare const api: {
     onClaudeError: (callback: (agentId: string, error: string) => void) => () => Electron.IpcRenderer;
     onClaudeSystemMessage: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
     onClaudeSessionStarted: (callback: (agentId: string, info: any) => void) => () => Electron.IpcRenderer;
+    // Skills Library APIs
+    scanSkillsLibrary: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').LibraryScanResult>;
+    getSkillsLibraryScanResult: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').LibraryScanResult>;
+    refreshSkillsLibrary: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').LibraryScanResult>;
+    getSkillsLibrarySettings: () => Promise<import('../main/services/types/SkillsLibraryTypes').SkillsLibrarySettings>;
+    updateSkillsLibrarySettings: (updates: Partial<import('../main/services/types/SkillsLibraryTypes').SkillsLibrarySettings>) => Promise<import('../main/services/types/SkillsLibraryTypes').SkillsLibrarySettings>;
+    getEnabledSkills: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').ItemDefinition[]>;
+    // Unified Skills APIs
+    scanUnifiedSkills: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').UnifiedScanResult>;
+    getUnifiedSkillsScanResult: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').UnifiedScanResult>;
+    refreshUnifiedSkills: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').UnifiedScanResult>;
+    getUnifiedEnabledSkills: (projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').UnifiedItem[]>;
+    getSkillById: (skillId: string, projectPath?: string) => Promise<import('../main/services/types/SkillsLibraryTypes').UnifiedItem | undefined>;
+    setSkillEnabled: (skillId: string, enabled: boolean) => Promise<void>;
+    getSkillsAsSubagentTypes: (projectPath?: string) => Promise<import('../main/services/types/WorkflowTypes').SubagentType[]>;
+    onSkillsLibraryUpdated: (callback: (result: import('../main/services/types/SkillsLibraryTypes').LibraryScanResult) => void) => () => Electron.IpcRenderer;
+    onUnifiedSkillsUpdated: (callback: (result: import('../main/services/types/SkillsLibraryTypes').UnifiedScanResult) => void) => () => Electron.IpcRenderer;
 };
 export type ElectronAPI = typeof api;
 export {};

@@ -20,6 +20,86 @@
 }
 
 /* =============================================================================
+   LINEAGE BANNER - Shows handoff parent relationship
+   Subtle breadcrumb-style indicator, not a warning
+   ============================================================================= */
+
+.lineage-banner {
+  background: linear-gradient(90deg,
+    rgba(197, 134, 192, 0.08) 0%,
+    rgba(197, 134, 192, 0.03) 50%,
+    transparent 100%
+  );
+  border-bottom: 1px solid rgba(197, 134, 192, 0.15);
+  padding: var(--space-2) var(--space-5);
+}
+
+.lineage-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.lineage-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lineage-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.lineage-parent-branch {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-purple-alt);
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  padding: 2px var(--space-2);
+  background: rgba(197, 134, 192, 0.12);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(197, 134, 192, 0.2);
+}
+
+.lineage-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lineage-mode {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.lineage-mode--inherit {
+  color: var(--color-teal);
+  background: var(--color-teal-dim);
+  border: 1px solid rgba(78, 201, 176, 0.3);
+}
+
+.lineage-mode--fresh {
+  color: var(--color-info);
+  background: var(--color-info-dim);
+  border: 1px solid rgba(68, 138, 255, 0.3);
+}
+
+.lineage-timestamp {
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+/* =============================================================================
    AGENT CONTENT - Main content area with tabs and terminal
    ============================================================================= */
 
@@ -491,4 +571,81 @@
 .teleport-failure-actions .compact-button.danger {
   background: var(--color-error);
   color: white;
+}
+
+/* ============================================
+   Handoff Lineage Banner
+   Shows parent relationship for handed-off agents
+   ============================================ */
+
+.lineage-banner {
+  background: linear-gradient(90deg,
+    rgba(197, 134, 192, 0.08) 0%,
+    rgba(197, 134, 192, 0.03) 50%,
+    transparent 100%
+  );
+  border-bottom: 1px solid rgba(197, 134, 192, 0.15);
+  padding: 8px 20px;
+}
+
+.lineage-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lineage-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lineage-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lineage-parent-branch {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c586c0;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  padding: 2px 8px;
+  background: rgba(197, 134, 192, 0.12);
+  border-radius: 4px;
+  border: 1px solid rgba(197, 134, 192, 0.2);
+}
+
+.lineage-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lineage-mode {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.lineage-mode--inherit {
+  color: #4ec9b0;
+  background: rgba(78, 201, 176, 0.15);
+}
+
+.lineage-mode--fresh {
+  color: #569cd6;
+  background: rgba(86, 156, 214, 0.15);
+}
+
+.lineage-timestamp {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
 }

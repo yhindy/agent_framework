@@ -17,7 +17,9 @@ import {
   ClockIcon,
   HourglassIcon,
   CheckIcon,
-  XIcon
+  XIcon,
+  SkillsIcon,
+  SatelliteIcon
 } from './icons'
 import './Sidebar.css'
 
@@ -34,6 +36,13 @@ interface SidebarProps {
   isCollapsed: boolean
   onToggleCollapse: () => void
   onAgentListChange?: (agents: AgentInfo[]) => void
+}
+
+interface HandoffSource {
+  agentId: string
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string
+  handoffTimestamp: string
 }
 
 interface AgentSession {
@@ -54,6 +63,7 @@ interface AgentSession {
   failureReason?: string  // Why session resume failed
   resumeAttempts?: number  // Number of times we've tried to resume
   currentState?: string  // Current state from backend (waiting, working, etc.)
+  handoffSource?: HandoffSource  // Set if this agent was created via handoff
 }
 
 interface AgentsByProject {
@@ -78,6 +88,26 @@ interface TeleportFailure {
   timestamp: number
 }
 
+/**
+ * Helper to remove an item from a Set, returning the same reference if item wasn't present.
+ */
+function removeFromSet<T>(set: Set<T>, item: T): Set<T> {
+  if (!set.has(item)) return set
+  const next = new Set(set)
+  next.delete(item)
+  return next
+}
+
+/**
+ * Helper to add an item to a Set, returning the same reference if item was already present.
+ */
+function addToSet<T>(set: Set<T>, item: T): Set<T> {
+  if (set.has(item)) return set
+  const next = new Set(set)
+  next.add(item)
+  return next
+}
+
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -85,6 +115,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
+  const [acknowledgedWaitingAgents, setAcknowledgedWaitingAgents] = useState<Set<string>>(new Set())
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [collapsedSuperMinions, setCollapsedSuperMinions] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('collapsedSuperMinions')
@@ -205,28 +236,28 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     const unsubStateChanged = window.electronAPI.onAgentStateChanged((agentId, state) => {
       console.log('[Sidebar] State changed:', agentId, state)
 
-      setWaitingAgents(prev => {
-        const next = new Set(prev)
-        if (state === 'waiting') {
-          next.add(agentId)
-        } else {
-          next.delete(agentId)
-        }
-        return next
-      })
+      if (state === 'waiting') {
+        // Clear acknowledgment so notification shows for new waiting event
+        setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
+        setWaitingAgents(prev => addToSet(prev, agentId))
+      } else {
+        setWaitingAgents(prev => removeFromSet(prev, agentId))
+      }
     })
 
     // Listen for plain terminal waiting state changes
     const unsubPlainWaiting = window.electronAPI.onPlainTerminalWaitingForInput((terminalId) => {
-      setWaitingPlainTerminals(prev => new Set([...prev, terminalId]))
+      // Extract agentId from terminalId (format: "agentId-plain-N" or similar)
+      const parts = terminalId.split('-')
+      const agentId = parts.slice(0, -1).join('-')  // Remove last part to get agentId
+
+      // Clear acknowledgment so notification shows for new waiting event
+      setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
+      setWaitingPlainTerminals(prev => addToSet(prev, terminalId))
     })
 
     const unsubPlainResumed = window.electronAPI.onPlainTerminalResumedWork((terminalId) => {
-      setWaitingPlainTerminals(prev => {
-        const next = new Set(prev)
-        next.delete(terminalId)
-        return next
-      })
+      setWaitingPlainTerminals(prev => removeFromSet(prev, terminalId))
     })
 
     // Listen for teleport validation failures
@@ -410,8 +441,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const handleAgentClick = async (agent: AgentSession, projectPath: string) => {
     localStorage.setItem('lastSelectedProjectPath', projectPath)
     await window.electronAPI.clearUnread(agent.id)
-    const route = agent.isSuperMinion 
-      ? `/workspace/super/${agent.id}` 
+
+    // Acknowledge waiting notification when clicking on a waiting agent
+    if (isAgentWaitingForInput(agent.id)) {
+      setAcknowledgedWaitingAgents(prev => addToSet(prev, agent.id))
+    }
+
+    const route = agent.isSuperMinion
+      ? `/workspace/super/${agent.id}`
       : `/workspace/agent/${agent.id}`
     handleNavigate(route)
     loadAllAgents() // Refresh to clear unread badge
@@ -446,6 +483,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
   const isHomeActive = currentPath === '/workspace' || currentPath === '/workspace/'
   const isArchiveActive = currentPath === '/workspace/archive'
+  const isSkillsActive = currentPath === '/workspace/skills'
   const isSettingsActive = currentPath === '/workspace/settings'
   const activeAgentId = currentPath.startsWith('/workspace/agent/')
     ? currentPath.replace('/workspace/agent/', '')
@@ -514,13 +552,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const renderAgent = (agent: AgentSession, projectPath: string, depth = 0) => {
     const isActive = activeAgentId === agent.id
     const isWaiting = isAgentWaitingForInput(agent.id)
+    const isAcknowledged = acknowledgedWaitingAgents.has(agent.id)
     const isCursor = agent.tool === 'cursor'
     const teleportFailure = getTeleportFailure(agent)
     const hasTeleportFailure = !!teleportFailure
     const showSpinner = !isCursor && agent.terminalPid && !isWaiting && !hasTeleportFailure
     const isCollapsed = collapsedSuperMinions.has(agent.id)
     const showUnreadBadge = agent.hasUnread && !isWaiting && !hasTeleportFailure
-    const showAttentionBadge = isWaiting && !isActive && !hasTeleportFailure
+    const showAttentionBadge = isWaiting && !isActive && !isAcknowledged && !hasTeleportFailure
 
     const handleAgentItemClick = () => handleAgentClick(agent, projectPath)
 
@@ -552,7 +591,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     const classNames = [
       'agent-item',
       isActive && 'active',
-      isWaiting && 'waiting',
+      isWaiting && !isAcknowledged && 'waiting',  // Only show waiting style if not acknowledged
       hasTeleportFailure && 'failed',
       agent.isSuperMinion && 'super-minion',
       agent.isBaseBranchAgent && 'base-branch'
@@ -581,6 +620,15 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
               <span className="agent-type-icon">{getAgentTypeIcon(agent)}</span>
             </div>
             {getAgentDisplayName(agent)}
+            {agent.handoffSource && (
+              <span
+                className="handoff-lineage-badge"
+                title={`Handed off from ${extractBranchName(agent.handoffSource.originalBranch)} (${agent.handoffSource.branchMode} mode)`}
+              >
+                <span className="lineage-connector"></span>
+                <span className="lineage-origin">{extractBranchName(agent.handoffSource.originalBranch)}</span>
+              </span>
+            )}
             {hasTeleportFailure && (
               <div className="failure-badge-container">
                 <div className="failure-badge" title={`Failed to resume: ${teleportFailure.reason}`}><WarningIcon size="sm" /></div>
@@ -711,6 +759,17 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     >
                       <BotIcon size="sm" /> New Minion
                     </div>
+                    <div
+                      className="add-mission-submenu-item teleport-option"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        localStorage.setItem('lastSelectedProjectPath', project.path)
+                        handleTeleport()
+                        setOpenSubmenuProject(null)
+                      }}
+                    >
+                      <SatelliteIcon size="sm" /> Teleport from Cloud
+                    </div>
                   </div>
                 </div>
                 <button
@@ -728,10 +787,19 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                     <div className="empty-state">No minions working</div>
                   )}
                   {(() => {
-                    const roots = sortedAgents.filter(a => !a.parentAgentId)
+                    // NEW: Handoff agents are now top-level, not nested under parents
+                    // We still show the parent-child relationship via visual indicators
+                    //
+                    // Root agents: no parentAgentId AND no handoffSource (original agents)
+                    // Handoff agents: have handoffSource (shown as top-level with lineage badge)
+                    // Child agents: have parentAgentId but no handoffSource (super minion subagents)
+
+                    const roots = sortedAgents.filter(a => !a.parentAgentId && !a.handoffSource)
+                    const handoffAgents = sortedAgents.filter(a => a.handoffSource)
+
                     const childrenMap: Record<string, AgentSession[]> = {}
                     sortedAgents.forEach(a => {
-                      if (a.parentAgentId) {
+                      if (a.parentAgentId && !a.handoffSource) {
                         if (!childrenMap[a.parentAgentId]) childrenMap[a.parentAgentId] = []
                         childrenMap[a.parentAgentId].push(a)
                       }
@@ -765,7 +833,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                         })
                       }
 
-                      // Render child agents
+                      // Render non-handoff child agents nested (super minion subagents)
                       const children = childrenMap[agent.id] || []
                       if (children.length > 0 && !collapsedSuperMinions.has(agent.id)) {
                         children.forEach(child => {
@@ -775,7 +843,14 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
                       return items
                     }
 
-                    return roots.map(root => renderWithChildren(root))
+                    // Render original root agents with their children
+                    const rootItems = roots.flatMap(root => renderWithChildren(root))
+
+                    // Render handoff agents as top-level items (depth 0)
+                    // They display the lineage badge showing their origin
+                    const handoffItems = handoffAgents.map(agent => renderAgent(agent, project.path, 0))
+
+                    return [...rootItems, ...handoffItems]
                   })()}
                 </div>
               )}
@@ -794,6 +869,16 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
             <ClockIcon size="sm" />
           </span>
           <span className="nav-label">Archive</span>
+        </div>
+        <div
+          className={`nav-item skills-nav-item ${isSkillsActive ? 'active' : ''}`}
+          onClick={() => handleNavigate('/workspace/skills')}
+          title="Skills"
+        >
+          <span className="nav-icon">
+            <SkillsIcon size="sm" />
+          </span>
+          <span className="nav-label">Skills</span>
         </div>
         <div
           className={`nav-item settings-nav-item ${isSettingsActive ? 'active' : ''}`}

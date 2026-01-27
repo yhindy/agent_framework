@@ -126,3 +126,42 @@ export function EditIcon(props: IconProps): JSX.Element {
     </BaseIcon>
   )
 }
+
+/** Skills icon - Stacked layers representing skills library */
+export function SkillsIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="skills-icon">
+      {/* Bottom layer */}
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeLinejoin="round" />
+      {/* Middle layer */}
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeLinejoin="round" />
+      {/* Top layer */}
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeLinejoin="round" />
+    </BaseIcon>
+  )
+}
+
+/** Handoff icon - Arrow passing from one node to another */
+export function HandoffIcon(props: IconProps): JSX.Element {
+  return (
+    <BaseIcon {...props} data-testid="handoff-icon">
+      {/* Source node */}
+      <circle cx="6" cy="12" r="3" stroke="currentColor" />
+      {/* Arrow line */}
+      <path
+        d="M9 12H17"
+        stroke="currentColor"
+        strokeLinecap="round"
+      />
+      {/* Arrow head */}
+      <path
+        d="M14 9L17 12L14 15"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Target node (smaller, representing new agent) */}
+      <circle cx="20" cy="12" r="2" stroke="currentColor" />
+    </BaseIcon>
+  )
+}

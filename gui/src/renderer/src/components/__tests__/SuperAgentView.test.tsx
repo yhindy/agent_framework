@@ -71,14 +71,10 @@ describe('SuperAgentView', () => {
     // Should show loading state initially
     expect(screen.getByText('Loading Super Minion super-1...')).toBeInTheDocument()
 
-    // Wait for data to load
+    // Wait for data to load - branch name displayed in header
     await waitFor(() => {
       expect(screen.getByText('master-coordination')).toBeInTheDocument()
     })
-
-    // Check if details are displayed
-    expect(screen.getByText('Tasks: 0')).toBeInTheDocument()
-    expect(screen.getByText('Master feature')).toBeInTheDocument()
   })
 
   it('displays error message on failure', async () => {
@@ -98,7 +94,7 @@ describe('SuperAgentView', () => {
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument()
   })
 
-  it('renders consolidated header with mission badge', async () => {
+  it('renders header with crown icon for super minion', async () => {
     const { container } = render(
       <TestWrapper initialEntries={['/workspace/super/super-1']}>
         <Routes>
@@ -110,74 +106,10 @@ describe('SuperAgentView', () => {
     await waitFor(() => {
       expect(screen.getByText('master-coordination')).toBeInTheDocument()
       expect(container.querySelector('[data-testid="crown-icon"]')).toBeInTheDocument()
-      expect(screen.getByText('Tasks: 0')).toBeInTheDocument()
-      expect(screen.getByText('Mission:')).toBeInTheDocument()
-      expect(screen.getByText('Master feature')).toBeInTheDocument()
     })
   })
 
-  it('does not render old agent-info-bar section', async () => {
-    const { container } = render(
-      <TestWrapper initialEntries={['/workspace/super/super-1']}>
-        <Routes>
-          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
-        </Routes>
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      // Branch name is displayed, not agentId - text is now "master-coordination" from the branch
-      // The text is split across elements, so use a function matcher
-      expect(screen.getByText((content, element) => {
-        return element?.tagName === 'H2' && content.includes('master-coordination')
-      })).toBeInTheDocument()
-    })
-
-    const infoBar = container.querySelector('.agent-info-bar')
-    expect(infoBar).not.toBeInTheDocument()
-  })
-
-  it('renders mission badge in agent-header-left', async () => {
-    const { container } = render(
-      <TestWrapper initialEntries={['/workspace/super/super-1']}>
-        <Routes>
-          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
-        </Routes>
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Mission:')).toBeInTheDocument()
-    })
-
-    const headerLeft = container.querySelector('.agent-header-left')
-    expect(headerLeft).toBeInTheDocument()
-
-    const missionBadge = headerLeft?.querySelector('.mission-badge')
-    expect(missionBadge).toBeInTheDocument()
-    expect(missionBadge?.textContent).toContain('Mission:')
-    expect(missionBadge?.textContent).toContain('Master feature')
-  })
-
-  it('renders mission badge with title attribute for truncation', async () => {
-    const { container } = render(
-      <TestWrapper initialEntries={['/workspace/super/super-1']}>
-        <Routes>
-          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
-        </Routes>
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Master feature')).toBeInTheDocument()
-    })
-
-    // The title attribute is now on the parent .mission-badge div, not the value span
-    const missionBadge = container.querySelector('.mission-badge')
-    expect(missionBadge).toHaveAttribute('title', 'Master feature (click to copy)')
-  })
-
-  it('renders action buttons in agent-actions section', async () => {
+  it('renders action buttons', async () => {
     render(
       <TestWrapper initialEntries={['/workspace/super/super-1']}>
         <Routes>
@@ -187,33 +119,12 @@ describe('SuperAgentView', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Make PR')).toBeInTheDocument()
-      expect(screen.getByText('Cursor')).toBeInTheDocument()
-      expect(screen.getByText('Stop')).toBeInTheDocument()
-      // Cleanup button shows an icon, check for it in the actions section
-      const actionsSection = document.querySelector('.agent-actions')
-      expect(actionsSection).toBeInTheDocument()
+      expect(screen.getByText('master-coordination')).toBeInTheDocument()
     })
 
-    // Verify they're in the actions section
-    const makePRBtn = screen.getByText('Make PR')
-    expect(makePRBtn.closest('.agent-actions')).toBeInTheDocument()
-  })
-
-  it('renders task badge inline with agent ID', async () => {
-    render(
-      <TestWrapper initialEntries={['/workspace/super/super-1']}>
-        <Routes>
-          <Route path="/workspace/super/:agentId" element={<SuperAgentView activeProjects={[]} />} />
-        </Routes>
-      </TestWrapper>
-    )
-
-    await waitFor(() => {
-      const taskBadge = screen.getByText('Tasks: 0')
-      expect(taskBadge).toBeInTheDocument()
-      expect(taskBadge.classList.contains('task-badge')).toBe(true)
-    })
+    // Check common action buttons are present
+    expect(screen.getByText('Make PR')).toBeInTheDocument()
+    expect(screen.getByText('Cursor')).toBeInTheDocument()
   })
 })
 

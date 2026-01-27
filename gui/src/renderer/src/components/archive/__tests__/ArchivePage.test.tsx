@@ -5,19 +5,8 @@ import { ArchivePage } from '../ArchivePage'
 import { SnackbarProvider } from '../../../contexts/SnackbarContext'
 import type { ArchivedAgent } from '../../../../../main/services/types/ProjectConfig'
 
-// Mock window.electronAPI
-const mockListArchivedAgents = vi.fn()
-const mockRestoreArchivedAgent = vi.fn()
-const mockGetCurrentProject = vi.fn()
-
 beforeEach(() => {
   vi.clearAllMocks()
-
-  global.window.electronAPI = {
-    listArchivedAgents: mockListArchivedAgents,
-    restoreArchivedAgent: mockRestoreArchivedAgent,
-    getCurrentProject: mockGetCurrentProject
-  } as any
 })
 
 const mockArchives: ArchivedAgent[] = [
@@ -71,11 +60,11 @@ function renderArchivePage() {
 
 describe('ArchivePage', () => {
   beforeEach(() => {
-    mockGetCurrentProject.mockResolvedValue({ path: '/test/project' })
+    vi.mocked(window.electronAPI.getCurrentProject).mockResolvedValue({ path: '/test/project' })
   })
 
   it('should render loading state initially', () => {
-    mockListArchivedAgents.mockImplementation(() => new Promise(() => {})) // Never resolves
+    vi.mocked(window.electronAPI.listArchivedAgents).mockImplementation(() => new Promise(() => {})) // Never resolves
 
     renderArchivePage()
 
@@ -83,7 +72,7 @@ describe('ArchivePage', () => {
   })
 
   it('should render empty state when no archives exist', async () => {
-    mockListArchivedAgents.mockResolvedValue([])
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([])
 
     renderArchivePage()
 
@@ -95,7 +84,7 @@ describe('ArchivePage', () => {
   })
 
   it('should render list of archived agents', async () => {
-    mockListArchivedAgents.mockResolvedValue(mockArchives)
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue(mockArchives)
 
     renderArchivePage()
 
@@ -109,7 +98,7 @@ describe('ArchivePage', () => {
   })
 
   it('should display cost when available', async () => {
-    mockListArchivedAgents.mockResolvedValue(mockArchives)
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue(mockArchives)
 
     renderArchivePage()
 
@@ -119,10 +108,18 @@ describe('ArchivePage', () => {
   })
 
   it('should call restore API when Restore button is clicked', async () => {
-    mockListArchivedAgents.mockResolvedValue([mockArchives[0]])
-    mockRestoreArchivedAgent.mockResolvedValue({
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
+    vi.mocked(window.electronAPI.restoreArchivedAgent).mockResolvedValue({
       id: 'new-agent-123',
-      agentId: 'restored-agent'
+      agentId: 'restored-agent',
+      branch: 'feature/restored',
+      project: 'test-project',
+      feature: 'Restored feature',
+      status: 'active',
+      tool: 'claude',
+      mode: 'dev',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
     })
 
     renderArchivePage()
@@ -135,7 +132,7 @@ describe('ArchivePage', () => {
     fireEvent.click(restoreButton)
 
     await waitFor(() => {
-      expect(mockRestoreArchivedAgent).toHaveBeenCalledWith(
+      expect(vi.mocked(window.electronAPI.restoreArchivedAgent)).toHaveBeenCalledWith(
         '/test/project',
         'test-agent-1'
       )
@@ -143,8 +140,8 @@ describe('ArchivePage', () => {
   })
 
   it('should show "Restoring..." text while restoring', async () => {
-    mockListArchivedAgents.mockResolvedValue([mockArchives[0]])
-    mockRestoreArchivedAgent.mockImplementation(() => new Promise(() => {})) // Never resolves
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
+    vi.mocked(window.electronAPI.restoreArchivedAgent).mockImplementation(() => new Promise(() => {})) // Never resolves
 
     renderArchivePage()
 
@@ -163,10 +160,18 @@ describe('ArchivePage', () => {
   })
 
   it('should navigate to agent view after successful restore', async () => {
-    mockListArchivedAgents.mockResolvedValue([mockArchives[0]])
-    mockRestoreArchivedAgent.mockResolvedValue({
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
+    vi.mocked(window.electronAPI.restoreArchivedAgent).mockResolvedValue({
       id: 'new-agent-123',
-      agentId: 'restored-agent'
+      agentId: 'restored-agent',
+      branch: 'feature/restored',
+      project: 'test-project',
+      feature: 'Restored feature',
+      status: 'active',
+      tool: 'claude',
+      mode: 'dev',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
     })
 
     renderArchivePage()
@@ -184,7 +189,7 @@ describe('ArchivePage', () => {
   })
 
   it('should show correct status badge colors', async () => {
-    mockListArchivedAgents.mockResolvedValue(mockArchives)
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue(mockArchives)
 
     renderArchivePage()
 
@@ -198,8 +203,8 @@ describe('ArchivePage', () => {
   })
 
   it('should handle restore errors gracefully', async () => {
-    mockListArchivedAgents.mockResolvedValue([mockArchives[0]])
-    mockRestoreArchivedAgent.mockRejectedValue(new Error('Restore failed'))
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue([mockArchives[0]])
+    vi.mocked(window.electronAPI.restoreArchivedAgent).mockRejectedValue(new Error('Restore failed'))
 
     renderArchivePage()
 
@@ -211,7 +216,7 @@ describe('ArchivePage', () => {
     fireEvent.click(restoreButton)
 
     await waitFor(() => {
-      expect(mockRestoreArchivedAgent).toHaveBeenCalled()
+      expect(vi.mocked(window.electronAPI.restoreArchivedAgent)).toHaveBeenCalled()
     })
 
     // Button should be enabled again after error
@@ -221,7 +226,7 @@ describe('ArchivePage', () => {
   })
 
   it('should show tool and model information', async () => {
-    mockListArchivedAgents.mockResolvedValue(mockArchives)
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue(mockArchives)
 
     renderArchivePage()
 
@@ -233,7 +238,7 @@ describe('ArchivePage', () => {
   })
 
   it('should refresh archives when refresh button is clicked', async () => {
-    mockListArchivedAgents.mockResolvedValue(mockArchives)
+    vi.mocked(window.electronAPI.listArchivedAgents).mockResolvedValue(mockArchives)
 
     renderArchivePage()
 
@@ -247,7 +252,7 @@ describe('ArchivePage', () => {
 
     // Should call API again
     await waitFor(() => {
-      expect(mockListArchivedAgents).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(window.electronAPI.listArchivedAgents)).toHaveBeenCalledTimes(2)
     })
   })
 })

@@ -8,7 +8,7 @@ A desktop application for managing and orchestrating AI coding minions in your p
 - **Missions Dashboard**: Visual kanban-style view of all minion missions
 - **Live Terminal Integration**: Interactive terminal sessions for Claude and Cursor CLI minions
 - **Signal Detection**: Minions can send special signals (PLAN_READY, DEV_COMPLETED, etc.) to update the UI
-- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators
+- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators (click to mark as read)
 - **Multi-tool Support**: Works with Claude, Cursor IDE, and Cursor CLI
 
 ## Prerequisites

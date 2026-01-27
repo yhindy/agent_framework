@@ -60,7 +60,9 @@ export {
   RefreshIcon,
   PlusCircleIcon,
   WorkflowIcon,
-  EditIcon
+  EditIcon,
+SkillsIcon,
+  HandoffIcon
 } from './ActionIcons'
 
 // Archive icons

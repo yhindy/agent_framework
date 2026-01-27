@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 // WorkflowService not directly used in AgentService with simplified model
 import { createLogger } from './logger'
@@ -27,6 +27,7 @@ interface AgentSession {
   tool?: string
   isSuperMinion?: boolean
   parentAgentId?: string
+  handoffSource?: HandoffSource
   isBaseBranchAgent?: boolean
   branch?: string
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
@@ -200,6 +201,7 @@ export class AgentService {
       tool: agentInfo.tool,
       isSuperMinion: (agentInfo as any).isSuperMinion || false,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       isBaseBranchAgent: isBase,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
@@ -228,6 +230,7 @@ export class AgentService {
       lastActivity: agentInfo.lastActivity,
       isSuperMinion: (agentInfo as any).isSuperMinion,
       parentAgentId: agentInfo.parentAgentId,
+      handoffSource: agentInfo.handoffSource,
       claudeSessionId: agentInfo.claudeSessionId,
       cloudSessionId: agentInfo.cloudSessionId,
       isTeleportedSession: agentInfo.isTeleportedSession,
@@ -803,6 +806,186 @@ export class AgentService {
     } catch (error: any) {
       // Log but don't throw - setup file commit is best-effort
       log.warn('Error during setup file commit:', error.message)
+    }
+  }
+
+  /**
+   * Sanitize a string to be used as a git branch name.
+   * - Converts to lowercase
+   * - Replaces spaces with hyphens
+   * - Removes special characters (except hyphens, underscores, and alphanumeric)
+   * - Collapses multiple consecutive hyphens
+   * - Trims leading/trailing hyphens
+   */
+  private sanitizeBranchName(name: string): string {
+    if (!name) return ''
+
+    return name
+      .toLowerCase()
+      .replace(/\s+/g, '-')           // Replace spaces with hyphens
+      .replace(/[^a-z0-9-_]/g, '')    // Remove special characters
+      .replace(/-+/g, '-')            // Collapse multiple hyphens
+      .replace(/^-+|-+$/g, '')        // Trim leading/trailing hyphens
+  }
+
+  /**
+   * Validate a handoff request payload.
+   * Checks that all required fields are present and valid.
+   */
+  private isValidHandoffPayload(payload: any): payload is HandoffRequest {
+    if (!payload || typeof payload !== 'object') return false
+    if (!payload.sourceAgentId || typeof payload.sourceAgentId !== 'string' || payload.sourceAgentId.trim() === '') return false
+    if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.trim() === '') return false
+    if (!payload.branchMode || (payload.branchMode !== 'inherit' && payload.branchMode !== 'fresh')) return false
+    return true
+  }
+
+  /**
+   * Handoff from one agent to another.
+   * Creates a new agent that can optionally inherit the source agent's branch.
+   *
+   * @param projectPath - The path to the project
+   * @param request - The handoff request containing source agent, prompt, and options
+   * @returns HandoffResult with the new agent or error information
+   */
+  async handoffAgent(projectPath: string, request: HandoffRequest): Promise<HandoffResult> {
+    // Validate the request
+    if (!this.isValidHandoffPayload(request)) {
+      return {
+        success: false,
+        error: 'Invalid handoff request: missing or invalid required fields (sourceAgentId, prompt, branchMode)'
+      }
+    }
+
+    try {
+      // Find the source agent
+      const agents = await this.listAgents(projectPath)
+      const sourceSession = agents.find(a => a.id === request.sourceAgentId)
+
+      if (!sourceSession) {
+        return {
+          success: false,
+          error: `Source agent ${request.sourceAgentId} not found`
+        }
+      }
+
+      // Read the source agent's full info
+      const sourceAgentInfo = this.readAgentInfo(sourceSession.worktreePath)
+      if (!sourceAgentInfo) {
+        return {
+          success: false,
+          error: `Failed to read source agent info for ${request.sourceAgentId}`
+        }
+      }
+
+      // Determine tool and model (use overrides or inherit from source)
+      const tool = request.tool || sourceAgentInfo.tool
+      const model = request.model || sourceAgentInfo.model
+
+      // Determine yolo and chrome flags (use explicit override or inherit from source)
+      const yolo = request.yolo !== undefined ? request.yolo : sourceAgentInfo.yolo
+      const chrome = request.chrome !== undefined ? request.chrome : sourceAgentInfo.chrome
+
+      // Generate branch name
+      const config = this.getProjectConfig(projectPath)
+      const projectName = config.project.name || projectPath.split('/').pop() || 'project'
+      const hash = Math.random().toString(36).substring(2, 9)
+      const agentId = `${projectName}-${hash}`
+
+      // Generate branch suffix (custom or auto-generated from prompt)
+      let branchSuffix: string
+      if (request.shortName) {
+        branchSuffix = this.sanitizeBranchName(request.shortName)
+      } else {
+        // Generate from first few words of prompt
+        const promptWords = request.prompt.split(/\s+/).slice(0, 3).join('-')
+        branchSuffix = this.sanitizeBranchName(promptWords) || 'handoff'
+      }
+
+      const branch = `feature/${agentId}/${branchSuffix}`
+
+      // Determine base branch for worktree creation
+      // In 'inherit' mode, we branch from the source agent's branch
+      // In 'fresh' mode, we branch from main/master
+      const baseBranch = request.branchMode === 'inherit'
+        ? sourceAgentInfo.branch
+        : config.project.defaultBaseBranch || 'main'
+
+      // Create handoff source metadata
+      const handoffSource: HandoffSource = {
+        agentId: request.sourceAgentId,
+        branchMode: request.branchMode,
+        originalBranch: sourceAgentInfo.branch,
+        handoffTimestamp: new Date().toISOString()
+      }
+
+      // Calculate worktree path
+      const worktreePath = join(dirname(projectPath), agentId)
+
+      // Create AgentInfo for the new agent
+      const newAgentInfo: AgentInfo = {
+        id: `${agentId}-${Date.now()}`,
+        agentId: agentId,
+        branch: branch,
+        project: projectName,
+        feature: request.prompt.substring(0, 100), // First 100 chars as feature description
+        status: 'active',
+        tool: tool,
+        model: model,
+        mode: 'dev',
+        yolo: yolo,
+        chrome: chrome !== false,
+        prompt: request.prompt,
+        parentAgentId: request.sourceAgentId, // Track lineage for tree hierarchy
+        handoffSource: handoffSource,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // Run setup.sh to create the agent worktree
+      const setupScript = join(this.getMinionsPath(), 'bin', 'setup.sh')
+      const configPath = this.getProjectConfigPath(projectPath)
+
+      try {
+        // For inherit mode, pass the base branch as 3rd positional arg (before --config)
+        // setup.sh signature: <agent-id> <branch-name> [base-branch] [--config path]
+        const setupArgs = request.branchMode === 'inherit'
+          ? [newAgentInfo.agentId, newAgentInfo.branch, baseBranch, '--config', configPath]
+          : [newAgentInfo.agentId, newAgentInfo.branch, '--config', configPath]
+
+        const { stdout, stderr } = await execFileAsync(
+          setupScript,
+          setupArgs,
+          { cwd: projectPath }
+        )
+        log.debug('Setup script output:', stdout)
+        if (stderr) log.warn('Setup script errors:', stderr)
+
+        // Write agent info to .agent-info file in the worktree
+        this.writeAgentInfo(worktreePath, newAgentInfo)
+
+        // Commit any setup files to prevent git dirty state
+        await this.commitSetupFiles(worktreePath)
+
+        log.info(`Handoff completed: ${request.sourceAgentId} -> ${newAgentInfo.agentId}`)
+
+        return {
+          success: true,
+          newAgent: newAgentInfo
+        }
+      } catch (error: any) {
+        log.error('Failed to run setup.sh for handoff', error)
+        return {
+          success: false,
+          error: `Failed to create handoff agent: ${error.message}`
+        }
+      }
+    } catch (error: any) {
+      log.error('Handoff failed', error)
+      return {
+        success: false,
+        error: `Handoff failed: ${error.message}`
+      }
     }
   }
 
