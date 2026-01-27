@@ -1037,7 +1037,9 @@ describe('Teleport Session Retry Mechanism', () => {
     // Should mark as failed instead of retrying
     expect(mockAgentService.markAgentAsFailed).toHaveBeenCalledWith(
       expect.any(String),
-      expect.stringContaining('Max retry attempts')
+      expect.stringContaining('Max retry attempts'),
+      'agent-1',           // agentId
+      '/path/to/project'   // projectPath
     )
   })
 
