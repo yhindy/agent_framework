@@ -1738,7 +1738,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const failureMessage = `Max retry attempts (${this.MAX_RESUME_ATTEMPTS}) reached. Session cannot be resumed.`
     log.error(failureMessage)
 
-    await this.agentService?.markAgentAsFailed(worktreePath, failureMessage)
+    await this.agentService?.markAgentAsFailed(worktreePath, failureMessage, agentId, projectPath)
 
     const displayName = this.formatDisplayName(projectPath, agentInfo, agentId)
     this.notificationService?.notifySessionResumeFailed(agentId, displayName, failureMessage)

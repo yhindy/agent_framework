@@ -518,25 +518,39 @@ export class AgentService {
     }
   }
 
-  updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): void {
-    const current = this.readAgentInfo(worktreePath)
+  /**
+   * Update agent info with partial updates.
+   * For new format projects, agentId and projectPath should be provided.
+   *
+   * @param worktreePath - Path to the worktree
+   * @param updates - Partial AgentInfo updates to apply
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
+   */
+  updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string, projectPath?: string): void {
+    const current = this.readAgentInfo(worktreePath, agentId, projectPath)
     if (!current) {
       throw new Error(`Agent info not found at worktree path: ${worktreePath}`)
     }
 
     const updated = { ...current, ...updates, lastActivity: new Date().toISOString() }
-    this.writeAgentInfo(worktreePath, updated)
+    this.writeAgentInfo(worktreePath, updated, projectPath)
   }
 
   /**
    * Mark an agent session as failed with a specific reason.
    * Sets failureReason and marks session as inactive.
+   *
+   * @param worktreePath - Path to the worktree
+   * @param reason - Failure reason message
+   * @param agentId - Optional agent ID for new format lookup
+   * @param projectPath - Optional project path for new format lookup
    */
-  async markAgentAsFailed(worktreePath: string, reason: string): Promise<void> {
+  async markAgentAsFailed(worktreePath: string, reason: string, agentId?: string, projectPath?: string): Promise<void> {
     this.updateAgentInfo(worktreePath, {
       failureReason: reason,
       claudeSessionActive: false
-    })
+    }, agentId, projectPath)
   }
 
   /**
@@ -552,7 +566,7 @@ export class AgentService {
 
     this.updateAgentInfo(agent.worktreePath, {
       displayBranchName: branchName
-    })
+    }, agentId, projectPath)
   }
 
   /**
@@ -1010,7 +1024,7 @@ export class AgentService {
     }
 
     // Update the .agent-info file
-    this.updateAgentInfo(worktreePath, updates)
+    this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
   }
 
   async getSuperAgentDetails(projectPath: string, agentId: string): Promise<SuperAgentInfo> {
@@ -1064,7 +1078,7 @@ export class AgentService {
     // This is more robust than relying on signals - it's based on actual file state
     if (pendingPlans.length > 0 && agentInfo.mode === 'planning') {
       agentInfo.mode = 'dev'
-      this.updateAgentInfo(session.worktreePath, { mode: 'dev' })
+      this.updateAgentInfo(session.worktreePath, { mode: 'dev' }, agentId, projectPath)
     }
 
     // 6. Get task invocations from JSONL if we have a session and service
@@ -1154,7 +1168,7 @@ export class AgentService {
 
     this.updateAgentInfo(childWorktreePath, {
       parentAgentId: superAgentId
-    })
+    }, childAgent.agentId, projectPath)
 
     // 6. Mark plan as approved in .pending-plans.json
     plan.status = 'approved'
@@ -1210,7 +1224,7 @@ export class AgentService {
       children: [],
       pendingPlans: [],
       workflowId
-    } as any)
+    } as any, result.agentId, projectPath)
 
     // Log workflow selection
     if (assignment.workflow) {
@@ -1348,7 +1362,7 @@ export class AgentService {
     }
 
     // Update status to idle/cancelled
-    this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' })
+    this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' }, agentId, projectPath)
 
     // Update session to clear assignment
     const session = this.sessions.get(agentId)
@@ -1384,7 +1398,7 @@ export class AgentService {
     }
 
     // Update the .agent-info file with UI state
-    this.updateAgentInfo(agent.worktreePath, { uiState })
+    this.updateAgentInfo(agent.worktreePath, { uiState }, agentId, projectPath)
 
     // Also update the in-memory session
     const session = this.sessions.get(agentId)
@@ -1557,7 +1571,7 @@ export class AgentService {
           prUrl: prUrl,
           prStatus: 'OPEN',
           status: 'pr_open'
-        })
+        }, assignment.agentId, projectPath)
 
         // Clear detection cache for this assignment
         this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
@@ -1580,7 +1594,7 @@ export class AgentService {
             prUrl: prUrl,
             prStatus: 'OPEN',
             status: 'pr_open'
-          })
+          }, assignment.agentId, projectPath)
 
           // Clear detection cache for this assignment
           this.prDetectionCache.delete(`${projectPath}:${assignmentId}`)
@@ -1749,7 +1763,7 @@ export class AgentService {
           updates.status = 'closed'
         }
 
-        this.updateAgentInfo(worktreePath, updates)
+        this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
       }
 
       // 10. Cache positive result
@@ -1904,7 +1918,7 @@ export class AgentService {
         updates.status = 'closed'
       }
 
-      this.updateAgentInfo(worktreePath, updates)
+      this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
 
       return {
         status,

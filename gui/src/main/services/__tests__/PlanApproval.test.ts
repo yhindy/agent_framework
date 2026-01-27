@@ -138,7 +138,9 @@ describe('AgentService Plan Approval', () => {
     // Verify updateAgentInfo was called to set parentAgentId
     expect((agentService as any).updateAgentInfo).toHaveBeenCalledWith(
       expect.any(String),
-      { parentAgentId: 'super-1' }
+      { parentAgentId: 'super-1' },
+      expect.any(String),  // childAgent.agentId
+      testProjectPath      // projectPath
     )
   })
 

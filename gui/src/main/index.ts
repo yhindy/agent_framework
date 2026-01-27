@@ -327,18 +327,25 @@ function initializeServices(): void {
   // Start watching for skills library changes
   services.skillsLibrary.startWatching()
 
-  // Do initial scan of Claude plugins and skills
-  services.claudeConfig.scanConfigs()
-  services.skillsLibrary.scan()
-
   // Start the Handoff API server for Claude Code /handoff command
   services.handoffApi.start()
+
+  // Set up IPC handlers early so renderer can communicate immediately
+  setupIPC()
 
   // Migrate existing assignments and collect active agents, then cleanup orphaned tmux sessions
   const activeProjects = services.project.getActiveProjects()
 
-  // Async initialization: collect agents, cleanup orphans, then auto-resume
+  // Async initialization: scan plugins/skills, collect agents, cleanup orphans, then auto-resume
+  // This runs asynchronously so it doesn't block the app from becoming responsive
   ;(async () => {
+    // Scan Claude plugins and skills asynchronously to avoid blocking startup
+    try {
+      services!.claudeConfig.scanConfigs()
+      services!.skillsLibrary.scan()
+    } catch (err) {
+      log.error('Failed to scan plugins/skills during startup', err)
+    }
     // First pass: collect all active agent IDs and do migrations
     const allAgentIds: string[] = []
     const agentsByProject = new Map<string, ResumeableAgent[]>()
@@ -404,9 +411,6 @@ function initializeServices(): void {
         .catch(err => log.error(`Failed to auto-resume agents for ${project.path}`, err))
     }
   })().catch(err => log.error('Failed during startup initialization', err))
-
-  // Set up IPC handlers
-  setupIPC()
 }
 
 function setupIPC(): void {
