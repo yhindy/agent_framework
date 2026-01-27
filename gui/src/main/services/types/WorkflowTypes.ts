@@ -12,6 +12,27 @@ export interface SubagentType {
   id: string        // e.g., 'explore', 'implement', 'plan', 'debug'
   name: string      // Human-readable name
   description: string
+  promptContent?: string  // Full prompt for custom (non-Claude-native) agent types
+}
+
+/**
+ * Claude Code's built-in subagent types that can be used directly with Task tool.
+ * Custom types (not in this list) must use general-purpose with promptContent.
+ */
+export const CLAUDE_NATIVE_SUBAGENT_TYPES = [
+  'Explore',
+  'Plan',
+  'general-purpose',
+  'debugger',
+  'code-simplifier',
+  'bold-frontend-designer'
+] as const
+
+/**
+ * Check if a subagent type is natively supported by Claude Code.
+ */
+export function isClaudeNativeType(typeId: string): boolean {
+  return CLAUDE_NATIVE_SUBAGENT_TYPES.includes(typeId as any)
 }
 
 /**
@@ -50,6 +71,41 @@ export interface WorkflowConfig {
  * These map directly to Claude Code's Task tool subagent_type parameter.
  */
 export const DEFAULT_SUBAGENT_TYPES: SubagentType[] = [
+  {
+    id: 'acceptance-criteria',
+    name: 'Acceptance Criteria',
+    description: 'Propose and get human approval for acceptance criteria before implementation',
+    promptContent: `You are an Acceptance Criteria agent. Your job is to ensure alignment with the user before any implementation work begins.
+
+## Your Process
+
+1. **Explore** the codebase to understand context, existing patterns, and constraints
+2. **Ask clarifying questions** using AskUserQuestion if requirements are ambiguous - do this BEFORE proposing criteria
+3. **Propose** clear, numbered, testable acceptance criteria:
+   - Functional: "1. Users can log in with email/password"
+   - Engineering: "2. All new code has unit tests with >80% coverage"
+   - Performance: "3. API response time < 200ms"
+4. **Request approval** using AskUserQuestion:
+   \`\`\`
+   AskUserQuestion(questions=[{
+     "question": "Do you agree with these acceptance criteria?",
+     "header": "Criteria",
+     "options": [
+       {"label": "Yes, proceed", "description": "Move to next phase"},
+       {"label": "Modify criteria", "description": "I have feedback"}
+     ]
+   }])
+   \`\`\`
+5. **Wait** for explicit "Yes, proceed" before completing
+
+## Critical Rules
+
+- Do NOT complete until you receive explicit "Yes, proceed" approval
+- If user says "Modify criteria", incorporate their feedback and re-propose
+- Do NOT skip to implementation or design work
+- Do NOT propose criteria that include open questions - ask questions first, then propose
+- Your ONLY job is getting criteria approved - nothing else`
+  },
   {
     id: 'Explore',
     name: 'Explorer',
@@ -110,27 +166,27 @@ export function createAgent(typeId: string): StepAgent {
 export const DEFAULT_WORKFLOW: WorkflowConfig = {
   id: 'default',
   name: 'Standard Workflow',
-  description: 'Standard workflow with 5 phases: explore, design, review, implement, validate',
+  description: 'Standard workflow with 5 phases: acceptance criteria, design, review, implement, validate',
   steps: [
-    { id: 'step-1', name: 'Explore Codebase', agents: [{ id: 'a1', typeId: 'Explore' }] },
-    { id: 'step-2', name: 'Engineering Design', agents: [{ id: 'a2', typeId: 'Plan' }] },
+    { id: 'step-0', name: 'Acceptance Criteria', agents: [{ id: 'a0', typeId: 'acceptance-criteria' }] },
+    { id: 'step-1', name: 'Engineering Design', agents: [{ id: 'a1', typeId: 'Plan' }] },
     {
-      id: 'step-3',
+      id: 'step-2',
       name: 'Design Review',
       agents: [
-        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
-        { id: 'a4', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
+        { id: 'a2', typeId: 'general-purpose', customPrompt: 'Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.' },
+        { id: 'a3', typeId: 'general-purpose', customPrompt: 'Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.' }
       ]
     },
-    { id: 'step-4', name: 'Implementation', agents: [{ id: 'a5', typeId: 'general-purpose' }] },
+    { id: 'step-3', name: 'Implementation', agents: [{ id: 'a4', typeId: 'general-purpose' }] },
     {
-      id: 'step-5',
+      id: 'step-4',
       name: 'Validation',
       agents: [
-        { id: 'a6', typeId: 'code-simplifier' },
-        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
-        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
-        { id: 'a9', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
+        { id: 'a5', typeId: 'code-simplifier' },
+        { id: 'a6', typeId: 'general-purpose', customPrompt: 'Run all tests and verify they pass. Report any failures.' },
+        { id: 'a7', typeId: 'general-purpose', customPrompt: 'Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.' },
+        { id: 'a8', typeId: 'general-purpose', customPrompt: 'Update documentation as needed based on the implementation changes.' }
       ]
     }
   ],
