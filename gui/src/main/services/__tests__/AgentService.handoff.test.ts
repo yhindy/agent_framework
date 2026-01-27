@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AgentService } from '../AgentService'
 import { AgentInfo, HandoffRequest } from '../types/ProjectConfig'
+import { sanitizeBranchName } from '../../../renderer/src/utils/branchUtils'
 import * as fs from 'fs'
 import * as childProcess from 'child_process'
 
@@ -121,38 +122,31 @@ branch refs/heads/main
 
   describe('sanitizeBranchName', () => {
     it('should replace spaces with hyphens', () => {
-      const result = (agentService as any).sanitizeBranchName('my feature branch')
-      expect(result).toBe('my-feature-branch')
+      expect(sanitizeBranchName('my feature branch')).toBe('my-feature-branch')
     })
 
     it('should remove special characters', () => {
-      const result = (agentService as any).sanitizeBranchName('feature@#$%^&*()name')
-      expect(result).toBe('featurename')
+      expect(sanitizeBranchName('feature@#$%^&*()name')).toBe('featurename')
     })
 
     it('should convert to lowercase', () => {
-      const result = (agentService as any).sanitizeBranchName('MyFeatureBranch')
-      expect(result).toBe('myfeaturebranch')
+      expect(sanitizeBranchName('MyFeatureBranch')).toBe('myfeaturebranch')
     })
 
     it('should handle empty string', () => {
-      const result = (agentService as any).sanitizeBranchName('')
-      expect(result).toBe('')
+      expect(sanitizeBranchName('')).toBe('')
     })
 
     it('should trim leading and trailing hyphens', () => {
-      const result = (agentService as any).sanitizeBranchName('--my-branch--')
-      expect(result).toBe('my-branch')
+      expect(sanitizeBranchName('--my-branch--')).toBe('my-branch')
     })
 
     it('should collapse multiple consecutive hyphens', () => {
-      const result = (agentService as any).sanitizeBranchName('my---branch---name')
-      expect(result).toBe('my-branch-name')
+      expect(sanitizeBranchName('my---branch---name')).toBe('my-branch-name')
     })
 
     it('should handle underscores', () => {
-      const result = (agentService as any).sanitizeBranchName('my_feature_branch')
-      expect(result).toBe('my_feature_branch')
+      expect(sanitizeBranchName('my_feature_branch')).toBe('my_feature_branch')
     })
   })
 

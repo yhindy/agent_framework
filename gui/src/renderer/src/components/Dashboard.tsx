@@ -9,6 +9,7 @@ import AgentCleanupDropdown from './AgentCleanupDropdown'
 import AgentStateIndicator from './AgentStateIndicator'
 import { BotIcon, CrownIcon } from './icons'
 import { WorkflowBuilderPage } from './WorkflowEditor'
+import { validateBranchName } from '../utils/branchUtils'
 import type { DefaultToolSettings } from '../../../shared/types/settings'
 import type {
   WorkflowConfig,
@@ -69,9 +70,6 @@ const TELEPORT_MESSAGES = [
   'Calibrating teleporter coordinates...',
   'Reassembling molecular structure...'
 ]
-
-// Reserved branch names that would collide with special agents or git references
-const RESERVED_BRANCH_NAMES = ['base', 'main', 'master', 'origin', 'head']
 
 // Column configuration for the 3-column Kanban board
 const COLUMN_CONFIG = {
@@ -651,18 +649,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   }
 
   /**
-   * Validate branch name against reserved names.
-   * Returns error message if invalid, empty string if valid.
-   */
-  const validateBranchName = (name: string): string => {
-    const lowercaseName = name.toLowerCase()
-    if (RESERVED_BRANCH_NAMES.includes(lowercaseName)) {
-      return `"${name}" is a reserved name. Reserved: ${RESERVED_BRANCH_NAMES.join(', ')}`
-    }
-    return ''
-  }
-
-  /**
    * Parse session ID from various input formats:
    * - URL format: https://claude.ai/code/session_xxx -> session_xxx
    * - Command format: claude --teleport session_xxx -> session_xxx
@@ -952,8 +938,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                           if (branchError) setBranchError('')
                         }}
                         onBlur={(e) => {
-                          const error = validateBranchName(e.target.value)
-                          setBranchError(error)
+                          setBranchError(validateBranchName(e.target.value) || '')
                         }}
                         placeholder="user-auth"
                         required

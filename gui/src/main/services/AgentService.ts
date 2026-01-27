@@ -6,15 +6,12 @@ import { app } from 'electron'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
-// WorkflowService not directly used in AgentService with simplified model
+import { extractBranchSuffix, sanitizeBranchName, validateBranchName, buildHandoffBranch, RESERVED_BRANCH_NAMES } from '../../renderer/src/utils/branchUtils'
 import { createLogger } from './logger'
 
 const log = createLogger('AgentService')
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
-
-// Reserved branch name suffixes that would collide with special agents or git references
-const RESERVED_BRANCH_SUFFIXES = ['base', 'main', 'master', 'origin', 'head']
 
 interface AgentSession {
   id: string
@@ -684,20 +681,14 @@ export class AgentService {
     let branch = assignment.branch!
 
     if (!agentId) {
-      // Extract branch suffix and use it for agentId (sanitize for git/filesystem)
-      // Use last segment of branch name (e.g., "fix/auth-bug" -> "auth-bug")
-      const branchSuffix = branch.split('/').pop() || branch
-      const sanitizedSuffix = branchSuffix
-        .replace(/[^a-zA-Z0-9_-]/g, '-')  // Replace invalid chars with dashes
-        .replace(/-+/g, '-')               // Collapse multiple dashes
-        .replace(/^-|-$/g, '')             // Remove leading/trailing dashes
+      // Extract branch suffix and use it for agentId
+      const branchSuffix = extractBranchSuffix(branch)
+      const sanitizedSuffix = sanitizeBranchName(branchSuffix)
 
-      // Validate against reserved names (case-insensitive)
-      if (RESERVED_BRANCH_SUFFIXES.includes(sanitizedSuffix.toLowerCase())) {
-        throw new Error(
-          `Branch name "${sanitizedSuffix}" is reserved. Reserved names: ${RESERVED_BRANCH_SUFFIXES.join(', ')}. ` +
-          `These names conflict with special agents or git references.`
-        )
+      // Validate against reserved names
+      const validationError = validateBranchName(branch)
+      if (validationError) {
+        throw new Error(`${validationError}. These names conflict with special agents or git references.`)
       }
 
       agentId = `${projectName}-${sanitizedSuffix}`
@@ -806,25 +797,6 @@ export class AgentService {
   }
 
   /**
-   * Sanitize a string to be used as a git branch name.
-   * - Converts to lowercase
-   * - Replaces spaces with hyphens
-   * - Removes special characters (except hyphens, underscores, and alphanumeric)
-   * - Collapses multiple consecutive hyphens
-   * - Trims leading/trailing hyphens
-   */
-  private sanitizeBranchName(name: string): string {
-    if (!name) return ''
-
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, '-')           // Replace spaces with hyphens
-      .replace(/[^a-z0-9-_]/g, '')    // Remove special characters
-      .replace(/-+/g, '-')            // Collapse multiple hyphens
-      .replace(/^-+|-+$/g, '')        // Trim leading/trailing hyphens
-  }
-
-  /**
    * Validate a handoff request payload.
    * Checks that all required fields are present and valid.
    */
@@ -891,14 +863,14 @@ export class AgentService {
       // Generate branch suffix (custom or auto-generated from prompt)
       let branchSuffix: string
       if (request.shortName) {
-        branchSuffix = this.sanitizeBranchName(request.shortName)
+        branchSuffix = sanitizeBranchName(request.shortName)
       } else {
         // Generate from first few words of prompt
         const promptWords = request.prompt.split(/\s+/).slice(0, 3).join('-')
-        branchSuffix = this.sanitizeBranchName(promptWords) || 'handoff'
+        branchSuffix = sanitizeBranchName(promptWords) || 'handoff'
       }
 
-      const branch = `${agentId}/${branchSuffix}`
+      const branch = buildHandoffBranch(agentId, branchSuffix)
 
       // Determine base branch for worktree creation
       // In 'inherit' mode, we branch from the source agent's branch

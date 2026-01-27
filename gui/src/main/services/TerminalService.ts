@@ -6,6 +6,7 @@ import { existsSync, statSync, writeFileSync, mkdirSync, mkdtempSync } from 'fs'
 import { execSync, execFileSync } from 'child_process'
 import { v5 as uuidv5 } from 'uuid'
 import { AgentInfo, isSuperMinion } from './types/ProjectConfig'
+import { extractBranchSuffix } from '../../renderer/src/utils/branchUtils'
 import { AgentService } from './AgentService'
 import { ClaudeSessionInfoService } from './ClaudeSessionInfoService'
 import { NotificationService } from './NotificationService'
@@ -1005,7 +1006,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
               branchDetectionComplete = true
 
               const projectName = projectPath.split('/').pop() || 'project'
-              const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
+              const branchSuffix = extractBranchSuffix(detectedBranch)
               displayName = `${projectName}: ${branchSuffix}`
 
               this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
@@ -1111,7 +1112,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       // Pattern-based IdleDetector for non-Claude tools (cursor-cli, codex)
       // Format display name as "project: branch_suffix" for cleaner notifications
       const projectName = projectPath.split('/').pop() || 'project'
-      const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+      const branchSuffix = agentInfo?.branch ? extractBranchSuffix(agentInfo.branch) : agentId
       const displayName = `${projectName}: ${branchSuffix}`
 
       // Determine patterns based on tool
@@ -1685,7 +1686,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
    */
   private formatDisplayName(projectPath: string, agentInfo: AgentInfo | null, agentId: string): string {
     const projectName = projectPath.split('/').pop() || 'project'
-    const branchSuffix = agentInfo?.branch?.split('/').pop() || agentId
+    const branchSuffix = agentInfo?.branch ? extractBranchSuffix(agentInfo.branch) : agentId
     return `${projectName}: ${branchSuffix}`
   }
 

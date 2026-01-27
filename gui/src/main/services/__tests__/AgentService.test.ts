@@ -761,7 +761,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "base" is reserved')
+      ).rejects.toThrow('"base" is reserved')
     })
 
     it('should throw error for reserved branch name "main"', async () => {
@@ -772,7 +772,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "main" is reserved')
+      ).rejects.toThrow('"main" is reserved')
     })
 
     it('should throw error for reserved branch name "master"', async () => {
@@ -783,7 +783,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "master" is reserved')
+      ).rejects.toThrow('"master" is reserved')
     })
 
     it('should throw error for reserved branch name "origin"', async () => {
@@ -794,7 +794,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "origin" is reserved')
+      ).rejects.toThrow('"origin" is reserved')
     })
 
     it('should throw error for reserved branch name "head"', async () => {
@@ -805,7 +805,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "head" is reserved')
+      ).rejects.toThrow('"head" is reserved')
     })
 
     it('should throw error for reserved name with feature/ prefix', async () => {
@@ -816,7 +816,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "base" is reserved')
+      ).rejects.toThrow('"feature/base" is reserved')
     })
 
     it('should throw error for reserved name case-insensitively (BASE)', async () => {
@@ -827,7 +827,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "BASE" is reserved')
+      ).rejects.toThrow('"BASE" is reserved')
     })
 
     it('should throw error for reserved name case-insensitively (Main)', async () => {
@@ -838,7 +838,7 @@ describe('AgentService Reserved Branch Name Validation', () => {
           tool: 'claude',
           mode: 'dev'
         })
-      ).rejects.toThrow('Branch name "Main" is reserved')
+      ).rejects.toThrow('"Main" is reserved')
     })
 
     it('should list all reserved names in error message', async () => {
