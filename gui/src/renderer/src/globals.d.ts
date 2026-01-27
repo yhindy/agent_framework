@@ -20,7 +20,7 @@ declare global {
       listAgents: () => Promise<any[]>
       listAgentsForProject: (projectPath: string) => Promise<any[]>
       stopAgent: (agentId: string) => Promise<void>
-      openInCursor: (agentId: string) => Promise<void>
+      openInEditor: (agentId: string) => Promise<void>
       clearUnread: (agentId: string) => Promise<void>
       getSuperAgentDetails: (agentId: string) => Promise<any>
       approvePlan: (superAgentId: string, planId: string) => Promise<void>

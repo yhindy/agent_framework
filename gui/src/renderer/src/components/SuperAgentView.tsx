@@ -205,9 +205,9 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     }
   }, [saveUIStateDebounced])
 
-  const handleOpenCursor = async () => {
+  const handleOpenEditor = async () => {
     if (agent) {
-      await window.electronAPI.openInCursor(agent.agentId)
+      await window.electronAPI.openInEditor(agent.agentId)
     }
   }
 
@@ -379,9 +379,9 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         </button>
       ) : null}
 
-      {/* Cursor Button */}
-      <button onClick={handleOpenCursor} className="compact-button">
-        Cursor
+      {/* Open Editor Button */}
+      <button onClick={handleOpenEditor} className="compact-button">
+        Open Editor
       </button>
 
       {/* Cleanup Dropdown - consistent with AgentView */}

@@ -235,19 +235,19 @@ Manual testing is useful for exploratory testing and UX verification.
 
 ---
 
-## Test 7: "Open in Cursor" Button
+## Test 7: "Open Editor" Button
 
-**Objective**: Verify Cursor integration.
+**Objective**: Verify external editor integration.
 
 1. Click an minion in the sidebar.
 
-2. Click "Open Folder" or "Open in Cursor" button.
+2. Click "Open Folder" or "Open Editor" button.
 
 3. **Expected Result**:
-   - Cursor IDE opens (or comes to front)
+   - The configured editor (Cursor, VS Code, or Zed) opens (or comes to front)
    - The minion's worktree folder is opened
 
-**✅ Pass Criteria**: External Cursor launch works.
+**✅ Pass Criteria**: External editor launch works.
 
 ---
 
