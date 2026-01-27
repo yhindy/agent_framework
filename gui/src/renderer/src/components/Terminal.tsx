@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
 import { createStatefulFilter, StatefulFilter } from '../utils/terminalOutputFilter'
+import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface TerminalProps {
   agentId: string
@@ -61,7 +62,7 @@ let globalListenerInitialized = false
 function initGlobalOutputListener() {
   if (globalListenerInitialized) return
   globalListenerInitialized = true
-  
+
   window.electronAPI.onTerminalOutput((id, data) => {
     // Get or create stateful filter for this agent
     let filter = agentFilters.get(id)
@@ -97,6 +98,50 @@ function initGlobalOutputListener() {
 
 function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
+  const terminalInstanceRef = useRef<XTerm | null>(null)
+
+  // Drag and drop handlers for file path insertion
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer?.types.includes('Files')) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounterRef.current = 0
+      setIsDragOver(false)
+
+      const paths = getDroppedFilePaths(e.nativeEvent)
+      if (paths) {
+        window.electronAPI.sendTerminalInput(agentId, paths)
+        // Focus the terminal after dropping
+        terminalInstanceRef.current?.focus()
+      }
+    },
+    [agentId]
+  )
 
   useEffect(() => {
     initGlobalOutputListener()
@@ -137,6 +182,19 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
     terminal.loadAddon(fitAddon)
 
     let isDisposed = false
+    const isDisposedRef = { current: false }
+
+    // Store terminal instance for drop handler access
+    terminalInstanceRef.current = terminal
+
+    // Set up Shift+Enter handler for literal newline insertion
+    setupShiftEnterHandler(
+      terminal,
+      (data) => window.electronAPI.sendTerminalInput(agentId, data),
+      isDisposedRef
+    )
+
+    // Store the container element reference for use in RAF callback
     const containerElement = terminalRef.current
 
     // Helper to fit terminal and notify main process of size change
@@ -206,6 +264,10 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
 
     return () => {
       isDisposed = true
+      isDisposedRef.current = true
+      terminalInstanceRef.current = null
+
+      // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
       if (activeTerminal?.agentId === agentId) {
         activeTerminal = null
@@ -217,7 +279,16 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
     }
   }, [agentId])
 
-  return <div ref={terminalRef} className="terminal-container" />
+  return (
+    <div
+      ref={terminalRef}
+      className={`terminal-container${isDragOver ? ' drag-over' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    />
+  )
 }
 
 export default Terminal

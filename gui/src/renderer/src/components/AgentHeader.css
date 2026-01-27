@@ -636,6 +636,71 @@
   transform: translate(1px, -1px);
 }
 
+/* =============================================================================
+   PR ACTIONS GROUP - Badge + Refresh button together
+   ============================================================================= */
+
+.header-actions .pr-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Standalone refresh button (separate from badge) */
+.header-actions .pr-refresh-standalone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.header-actions .pr-refresh-standalone:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+  transform: scale(1.05);
+}
+
+.header-actions .pr-refresh-standalone:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.header-actions .pr-refresh-standalone:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-actions .pr-refresh-standalone.cooldown {
+  opacity: 0.4;
+}
+
+.header-actions .pr-refresh-standalone.refreshing .refresh-spinner {
+  display: inline-block;
+  animation: pr-refresh-spin 1s linear infinite;
+}
+
+@keyframes pr-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Legacy inline refresh (kept for backwards compatibility) */
 .header-actions .pr-refresh-btn {
   display: inline-flex;
   align-items: center;

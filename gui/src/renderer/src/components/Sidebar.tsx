@@ -129,6 +129,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     }
   })
   const hasInitializedSuperMinionCollapse = useRef(localStorage.getItem('collapsedSuperMinions') !== null)
+  const collapsedSuperMinionsRef = useRef(collapsedSuperMinions)
   const [showAddModal, setShowAddModal] = useState(false)
   const [openSubmenuProject, setOpenSubmenuProject] = useState<string | null>(null)
   const [failedTeleportSessions, setFailedTeleportSessions] = useState<Map<string, TeleportFailure>>(new Map())
@@ -137,6 +138,11 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const { showLoading, hideLoading } = useLoadingSnackbar()
   const loadingSnackbarRef = useRef<string | null>(null)
   const isInitialLoadRef = useRef(true)
+
+  // Keep ref in sync with collapsedSuperMinions state
+  useEffect(() => {
+    collapsedSuperMinionsRef.current = collapsedSuperMinions
+  }, [collapsedSuperMinions])
 
   // Close project submenu when clicking outside
   useEffect(() => {
@@ -160,7 +166,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
   useEffect(() => {
     // Load agents and query current state from backend
-    const loadAgentsAndStates = async (showIndicator: boolean) => {
+    const loadAgentsAndStates = async (showIndicator: boolean): Promise<void> => {
       // Show loading indicator only on initial load (not on IPC updates)
       if (showIndicator && activeProjects.length > 0) {
         loadingSnackbarRef.current = showLoading({
@@ -176,25 +182,26 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
 
       const agentsByProj: AgentsByProject = {}
       const currentWaitingAgents = new Set<string>()
-      const tasksByAg: TasksByAgent = {}
       const superMinionIds: string[] = []
+      const expandedSuperMinions: string[] = []
+      // Use ref to get current collapsed state (avoids stale closure)
+      const currentCollapsed = collapsedSuperMinionsRef.current
 
+      // Single pass: load agents, collect waiting agents, and categorize super minions
       for (const project of activeProjects) {
         try {
           const agents = await window.electronAPI.listAgentsForProject(project.path)
           agentsByProj[project.path] = agents
 
-          // Use currentState from listAgentsForProject response (includes state inline)
-          // This avoids separate getAgentState calls which were causing N extra listAgents calls
           for (const agent of agents) {
-            // Check waiting state from inline currentState (already fetched by backend)
             if (agent.currentState === 'waiting') {
               currentWaitingAgents.add(agent.id)
             }
-
-            // Track super minions for collapse state initialization
             if (agent.isSuperMinion) {
               superMinionIds.push(agent.id)
+              if (!currentCollapsed.has(agent.id)) {
+                expandedSuperMinions.push(agent.id)
+              }
             }
           }
         } catch (err) {
@@ -204,13 +211,48 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       }
 
       setAgentsByProject(agentsByProj)
-      setTasksByAgent(tasksByAg)
+
+      // Fetch fresh task data for expanded super minions in parallel
+      const expandedTaskResults = await Promise.all(
+        expandedSuperMinions.map(async (agentId) => {
+          try {
+            const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
+            return { agentId, tasks: superDetails?.taskInvocations || [] }
+          } catch (err) {
+            console.error(`Failed to fetch task invocations for ${agentId}:`, err)
+            return { agentId, tasks: [] }
+          }
+        })
+      )
+
+      // Update task data: preserve collapsed super minion tasks, update expanded ones
+      setTasksByAgent(prevTasks => {
+        const newTasks: TasksByAgent = {}
+
+        // Preserve task data for collapsed super minions
+        for (const id of superMinionIds) {
+          if (currentCollapsed.has(id) && prevTasks[id]) {
+            newTasks[id] = prevTasks[id]
+          }
+        }
+
+        // Add fresh task data for expanded super minions
+        for (const { agentId, tasks } of expandedTaskResults) {
+          newTasks[agentId] = tasks
+        }
+
+        return newTasks
+      })
+
       setWaitingAgents(currentWaitingAgents)
+
+      // Initialize collapse state for new super minions on first load
       if (!hasInitializedSuperMinionCollapse.current) {
         setCollapsedSuperMinions(new Set(superMinionIds))
         localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
         hasInitializedSuperMinionCollapse.current = true
       }
+
       console.log('[Sidebar] Loaded agents with current states:', {
         waiting: [...currentWaitingAgents]
       })

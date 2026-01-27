@@ -55,7 +55,7 @@ jobs:
           echo "- **Test E2E**: \`${{ steps.detect.outputs.test_e2e }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **GUI test pattern**: \`${{ steps.detect.outputs.gui_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Minions test pattern**: \`${{ steps.detect.outputs.minions_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **E2E test pattern**: \`${{ steps.detect.outputs.e2e_test_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          echo '- **E2E test pattern**: `${{ steps.detect.outputs.e2e_test_pattern }}`' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Changed files**:" >> $GITHUB_STEP_SUMMARY
           git diff --name-only ${{ github.event.before || 'HEAD^' }} HEAD | head -20 >> $GITHUB_STEP_SUMMARY

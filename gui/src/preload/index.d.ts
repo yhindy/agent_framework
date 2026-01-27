@@ -11,7 +11,7 @@ declare const api: {
     listAgents: () => Promise<any>;
     listAgentsForProject: (projectPath: string) => Promise<any>;
     stopAgent: (agentId: string) => Promise<any>;
-    openInCursor: (agentId: string) => Promise<any>;
+    openInEditor: (agentId: string) => Promise<any>;
     clearUnread: (agentId: string) => Promise<any>;
     getSuperAgentDetails: (agentId: string) => Promise<any>;
     approvePlan: (superAgentId: string, planId: string) => Promise<any>;

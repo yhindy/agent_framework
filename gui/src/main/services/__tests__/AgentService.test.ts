@@ -78,16 +78,9 @@ branch refs/heads/main`
     expect(worktrees).toHaveLength(0)
   })
 
-  it('listAgents filters by .agent-info existence', async () => {
-    // This integration test logic mimics listAgents flow
-
-    // Mock execAsync response for git worktree list
-    // We can't easily mock the private execAsync, so we'll test the public logic if possible
-    // or rely on unit tests for parseWorktrees which is public
-
-    // Let's verify parseWorktrees allows broad matching,
-    // and assume listAgents does the file check (which we see in source code)
-  })
+  // Note: listAgents filtering by .agent-info existence is not unit tested here
+  // because it requires mocking private execAsync. This behavior is covered by
+  // integration tests and the parseWorktrees tests above verify the parsing logic.
 
   it('should return absolute path for super minion rules from bundled resources', () => {
     const agentService = new AgentService()

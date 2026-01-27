@@ -12,6 +12,7 @@ vi.mock('xterm', () => {
     write: vi.fn(),
     scrollToBottom: vi.fn(),
     focus: vi.fn(),
+    attachCustomKeyEventHandler: vi.fn(),
     rows: 24,
     cols: 80
   }
@@ -30,6 +31,7 @@ vi.mock('xterm', () => {
     write = mockTerminalInstance.write
     scrollToBottom = mockTerminalInstance.scrollToBottom
     focus = mockTerminalInstance.focus
+    attachCustomKeyEventHandler = mockTerminalInstance.attachCustomKeyEventHandler
     rows = mockTerminalInstance.rows
     cols = mockTerminalInstance.cols
 
@@ -141,24 +143,12 @@ describe('Terminal - Output Cache Limits', () => {
     expect(lastCall.scrollback).toBe(10000)
   })
 
-  it('handles batched chunk replay without crashing', () => {
-    // This test verifies that batch replay logic doesn't break rendering
-    // The actual batching is an implementation detail verified by the configuration
-    expect(() => {
-      render(<Terminal agentId={mockAgentId} />)
-    }).not.toThrow()
-  })
+  // Note: The following tests are smoke tests that verify the component renders
+  // without throwing. They do NOT test actual batching, large output handling,
+  // or consolidation logic - those behaviors would require mocking the output
+  // stream and verifying the terminal write calls.
 
-  it('renders without crashing with large output', () => {
-    // This test verifies that the terminal can handle large amounts of output
-    // The actual trimming/consolidation logic is tested implicitly through rendering
-    expect(() => {
-      render(<Terminal agentId={mockAgentId} />)
-    }).not.toThrow()
-  })
-
-  it('renders without crashing with rapid consolidation', () => {
-    // This test verifies that consolidation logic doesn't break rendering
+  it('renders without throwing', () => {
     expect(() => {
       render(<Terminal agentId={mockAgentId} />)
     }).not.toThrow()

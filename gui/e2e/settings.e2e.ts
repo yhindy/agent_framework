@@ -185,6 +185,84 @@ test.describe('Settings Page', () => {
     })
   })
 
+  test.describe('Editor Settings', () => {
+    test('should have editor settings with default editor', async ({
+      electronApp,
+      testProject,
+    }) => {
+      const appPage = createAppPage(electronApp)
+      const ipc = createIPCHelpers(appPage)
+
+      await ipc.selectProject(testProject)
+
+      const settings = await ipc.getSettings()
+
+      // Verify editor settings structure exists
+      expect(settings.editor).toBeDefined()
+      expect(settings.editor.defaultEditor).toBeDefined()
+
+      // Default editor should be one of the valid options
+      const validEditors = ['cursor', 'vscode', 'zed']
+      expect(validEditors).toContain(settings.editor.defaultEditor)
+    })
+
+    test('should update editor preference', async ({ electronApp, testProject }) => {
+      const appPage = createAppPage(electronApp)
+      const ipc = createIPCHelpers(appPage)
+
+      await ipc.selectProject(testProject)
+
+      // Get current settings
+      const originalSettings = await ipc.getSettings()
+
+      // Choose a different editor than current
+      const editors = ['cursor', 'vscode', 'zed'] as const
+      const currentEditor = originalSettings.editor?.defaultEditor || 'cursor'
+      const newEditor = editors.find(e => e !== currentEditor) || 'vscode'
+
+      // Update settings
+      const updatedSettings = await ipc.updateSettings({
+        editor: {
+          defaultEditor: newEditor,
+        },
+      })
+
+      // Verify update was applied
+      expect(updatedSettings.editor.defaultEditor).toBe(newEditor)
+
+      // Retrieve settings again to verify persistence
+      const retrievedSettings = await ipc.getSettings()
+      expect(retrievedSettings.editor.defaultEditor).toBe(newEditor)
+    })
+
+    test('should preserve editor settings when updating other sections', async ({
+      electronApp,
+      testProject,
+    }) => {
+      const appPage = createAppPage(electronApp)
+      const ipc = createIPCHelpers(appPage)
+
+      await ipc.selectProject(testProject)
+
+      // Set editor to a known value first
+      await ipc.updateSettings({
+        editor: { defaultEditor: 'zed' },
+      })
+
+      // Update only notifications (different section)
+      await ipc.updateSettings({
+        notifications: {
+          enabled: true,
+          cooldownSeconds: 45,
+        },
+      })
+
+      // Verify editor settings are preserved
+      const newSettings = await ipc.getSettings()
+      expect(newSettings.editor.defaultEditor).toBe('zed')
+    })
+  })
+
   test.describe('Settings API Functionality', () => {
     test('should support checking tool availability', async ({
       electronApp,
