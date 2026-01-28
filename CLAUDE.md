@@ -461,7 +461,7 @@ Main Process (Node.js)
     ├── NotificationService # System notifications
     ├── MinionsConfigService  # Read/write minions.json config
     ├── SetupWizardService    # One-click setup wizard agent
-    └── HandoffApiService     # HTTP API for /handoff command (port 19234)
+    └── HandoffApiService     # HTTP API for /handoff and /spawn-super (port 19234)
          │
          │ IPC (ipcMain.handle)
          ▼
@@ -646,14 +646,15 @@ This helps the new agent understand the broader context of the work.
 
 **Handoff API Service:**
 
-The `HandoffApiService` provides a local HTTP server for programmatic handoff creation:
+The `HandoffApiService` provides a local HTTP server for programmatic agent creation:
 
 - **Port**: `19234` (localhost only, bound to `127.0.0.1`)
 - **Endpoints**:
-  - `POST /api/handoff` - Create a handoff agent
+  - `POST /api/handoff` - Create a handoff agent (single agent, inherits context)
+  - `POST /api/spawn-super` - Spawn super minions (batch, workflow-driven)
   - `GET /api/health` - Health check
 
-**API Request Format:**
+**Handoff API Request Format:**
 ```typescript
 interface HandoffApiRequest {
   sourceAgentId: string      // ID of the agent initiating handoff
@@ -663,7 +664,7 @@ interface HandoffApiRequest {
 }
 ```
 
-**API Response:**
+**Handoff API Response:**
 ```typescript
 interface HandoffApiResponse {
   success: boolean
@@ -698,8 +699,83 @@ Handoff behavior can be configured in Settings under "Agent Handoff":
 - `agents:handoff` - Create a new agent via handoff from an existing agent
 
 **Key Files:**
-- `HandoffApiService.ts` - HTTP server for `/handoff` command API
+- `HandoffApiService.ts` - HTTP server for `/handoff` and `/spawn-super` APIs
 - `AgentService.handoffAgent()` - Core handoff logic
+- `AgentService.spawnSuperMinion()` - Core super minion spawning logic
+
+### Super Minion Spawning
+
+Super minion spawning allows batch creation of workflow-driven agents from an existing agent. Unlike handoff (which continues related work with inherited context), super minions start fresh from main and follow structured workflows.
+
+**How to Trigger:**
+
+Use the `/super-handoff` skill within an agent session. The skill:
+1. Collects spawn details (plans, optional workflow IDs)
+2. Calls the Spawn Super API to create agents in parallel
+3. Reports results showing which agents were created
+
+**Key Differences from Handoff:**
+
+| Aspect | Handoff (`/api/handoff`) | Super Spawn (`/api/spawn-super`) |
+|--------|-------------------------|----------------------------------|
+| Branch mode | `inherit` or `fresh` | Always `fresh` (from main) |
+| Context | Parent context included in prompt | Minimal context (just the plan) |
+| Batch support | Single agent | Up to 10 agents per request |
+| Workflow | None (regular agent) | Workflow-driven (planning mode) |
+
+**Spawn Super API Request:**
+```typescript
+interface SpawnSuperApiRequest {
+  sourceAgentId: string         // ID of the agent initiating spawns
+  spawns: SpawnRequest[]        // Array of spawn requests (max 10)
+}
+
+interface SpawnRequest {
+  plan: string                  // Work description for the super minion
+  workflowId?: string           // Optional: specific workflow (auto-detected if omitted)
+  shortName?: string            // Optional: custom branch suffix
+}
+```
+
+**Spawn Super API Response:**
+```typescript
+interface SpawnSuperResponse {
+  success: boolean              // true if ALL spawns succeeded
+  partialSuccess: boolean       // true if SOME (but not all) succeeded
+  results: SpawnResult[]        // Per-spawn results
+  batchId: string               // Unique ID for this spawn batch
+  totalRequested: number
+  totalSucceeded: number
+  totalFailed: number
+}
+
+interface SpawnResult {
+  success: boolean
+  agentId?: string
+  workflowId?: string
+  error?: string
+}
+```
+
+**Workflow Auto-Detection:**
+If `workflowId` is omitted, it is detected from the plan text:
+- 2+ debug keywords (debug, bug, fix, investigate, root cause, crash, broken, failing, error, issue) triggers `debug-workflow`
+- Otherwise defaults to `default` (Standard Workflow)
+
+**Data Model:**
+
+The `spawnSource` field on `AgentInfo` tracks spawn lineage:
+```typescript
+interface SpawnSource {
+  parentAgentId: string         // Agent that initiated the spawn
+  spawnTimestamp: string        // ISO timestamp
+  workflowId: string            // Which workflow was selected
+  batchId?: string              // For tracking spawns from same request
+}
+```
+
+**UI Events:**
+- `agents:superSpawned` - Notifies renderer when spawns complete (includes batchId and results)
 
 ### Claude Code Config Import
 
@@ -895,8 +971,9 @@ For projects with the old `minions/` folder structure:
 | `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
 | `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
-| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff command API (localhost:19234) |
+| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff and /spawn-super APIs (localhost:19234) |
 | `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
+| `gui/resources/minions/rules/super-handoff.md` | Super handoff skill definition for spawning super minions |
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |

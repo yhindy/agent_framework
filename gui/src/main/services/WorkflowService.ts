@@ -385,6 +385,47 @@ export class WorkflowService {
     return Array.from(workflowMap.values())
   }
 
+  /**
+   * Detect workflow from plan text based on keywords.
+   * Uses conservative 2+ keyword matching for debug workflow detection.
+   *
+   * @param plan - The plan text to analyze
+   * @returns Object with workflowId and confidence level
+   */
+  detectWorkflowFromPlan(plan: string): { workflowId: string; confidence: 'high' | 'low' } {
+    const strongDebugIndicators = [
+      /\bdebug\b/i,
+      /\bbug\b/i,
+      /\bfix\s+(the\s+)?bug/i,
+      /\binvestigate\b/i,
+      /\broot\s*cause/i,
+      /\bcrash/i,
+      /\bbroken\b/i,
+      /\bfailing\b/i,
+      /\berror\b/i,
+      /\bissue\b/i
+    ]
+
+    const matches = strongDebugIndicators.filter(re => re.test(plan))
+
+    if (matches.length >= 2) {
+      log.info('Detected debug workflow from plan (2+ indicators)', {
+        matchCount: matches.length,
+        patterns: matches.map(m => m.toString())
+      })
+      return { workflowId: 'debug-workflow', confidence: 'high' }
+    } else if (matches.length === 1) {
+      // Single match - default to Standard but log warning
+      log.warn(
+        'Plan contains single debug keyword, using Standard workflow. Use explicit workflowId for Debug.',
+        { pattern: matches[0].toString() }
+      )
+      return { workflowId: 'default', confidence: 'low' }
+    }
+
+    return { workflowId: 'default', confidence: 'high' }
+  }
+
   generateRulesMarkdown(workflow: WorkflowConfig): string {
     const lines: string[] = []
 
