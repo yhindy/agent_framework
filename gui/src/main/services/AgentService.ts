@@ -1141,6 +1141,21 @@ Parent agent was working on: ${sourceFeature}
       const projectName = config.project.name || projectPath.split('/').pop() || 'project'
       const baseBranch = config.project.defaultBaseBranch || 'main'
 
+      // Look up source agent to inherit permissions (yolo mode)
+      let sourceYolo = false
+      try {
+        const sourceSession = this.activeSessions.get(sourceAgentId)
+        if (sourceSession) {
+          const sourceInfo = this.readAgentInfo(sourceSession.worktreePath)
+          if (sourceInfo) {
+            sourceYolo = sourceInfo.yolo || false
+          }
+        }
+      } catch {
+        // Source agent not found or unreadable - default to non-yolo
+        log.debug(`Could not read source agent ${sourceAgentId} for yolo inheritance, defaulting to false`)
+      }
+
       // Generate branch name and agent ID
       const hash = Math.random().toString(36).substring(2, 9)
       const agentId = `${projectName}-${hash}`
@@ -1161,7 +1176,8 @@ Parent agent was working on: ${sourceFeature}
       }
 
       // Create AgentInfo for the super minion
-      // Cast to allow isSuperMinion since AgentInfo doesn't include it but we need it for SuperAgentInfo
+      // Note: No parentAgentId set — spawned super minions are top-level agents.
+      // Lineage is tracked via spawnSource instead (unlike handoff which uses parentAgentId for sidebar nesting).
       const agentInfo = {
         id: `${agentId}-${Date.now()}`,
         agentId: agentId,
@@ -1171,10 +1187,9 @@ Parent agent was working on: ${sourceFeature}
         status: 'active',
         tool: 'claude',
         mode: 'planning', // Super minions use planning mode for workflow execution
-        yolo: false,
+        yolo: sourceYolo, // Inherit permissions from parent agent
         chrome: true,
         prompt: plan, // Minimal context - just the plan
-        parentAgentId: sourceAgentId, // Track lineage for tree hierarchy
         spawnSource: spawnSource,
         isSuperMinion: true, // Mark as super minion for workflow execution
         createdAt: new Date().toISOString(),
