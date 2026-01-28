@@ -875,6 +875,25 @@ export class AgentService {
 
   /**
    * Sanitize a string to be used as a git branch name.
+   * Read the yolo flag from a source agent, checking active sessions first
+   * then falling back to reading from the worktree on disk.
+   * Returns false if the source agent cannot be found or read.
+   */
+  private readSourceAgentYolo(sourceAgentId: string, projectPath: string): boolean {
+    try {
+      const sourceSession = this.sessions.get(sourceAgentId)
+      const worktreePath = sourceSession?.worktreePath
+        ?? join(dirname(projectPath), sourceAgentId)
+
+      const sourceInfo = this.readAgentInfo(worktreePath)
+      return sourceInfo?.yolo ?? false
+    } catch (err: any) {
+      log.debug(`Could not read source agent ${sourceAgentId} for yolo inheritance: ${err.message}`)
+      return false
+    }
+  }
+
+  /**
    * - Converts to lowercase
    * - Replaces spaces with hyphens
    * - Removes special characters (except hyphens, underscores, and alphanumeric)
@@ -1141,31 +1160,9 @@ Parent agent was working on: ${sourceFeature}
       const projectName = config.project.name || projectPath.split('/').pop() || 'project'
       const baseBranch = config.project.defaultBaseBranch || 'main'
 
-      // Look up source agent to inherit permissions (yolo mode)
-      // Try active sessions first, then fall back to reading .agent-info from the worktree directory
-      let sourceYolo = false
-      try {
-        const sourceSession = this.activeSessions.get(sourceAgentId)
-        if (sourceSession) {
-          const sourceInfo = this.readAgentInfo(sourceSession.worktreePath)
-          if (sourceInfo) {
-            sourceYolo = sourceInfo.yolo || false
-          }
-        } else {
-          // Source agent may not be in activeSessions (e.g., spawning from the orchestrator itself)
-          // Try reading .agent-info directly from the expected worktree path
-          const sourceWorktreePath = join(dirname(projectPath), sourceAgentId)
-          if (existsSync(join(sourceWorktreePath, '.agent-info'))) {
-            const sourceInfo = this.readAgentInfo(sourceWorktreePath)
-            if (sourceInfo) {
-              sourceYolo = sourceInfo.yolo || false
-            }
-          }
-        }
-      } catch {
-        // Source agent not found or unreadable - default to non-yolo
-        log.debug(`Could not read source agent ${sourceAgentId} for yolo inheritance, defaulting to false`)
-      }
+      // Inherit yolo mode from source agent
+      // Try active session first, then fall back to worktree path on disk
+      const sourceYolo = this.readSourceAgentYolo(sourceAgentId, projectPath)
 
       // Generate branch name and agent ID
       const hash = Math.random().toString(36).substring(2, 9)
@@ -1178,34 +1175,32 @@ Parent agent was working on: ${sourceFeature}
       // Calculate worktree path
       const worktreePath = join(dirname(projectPath), agentId)
 
-      // Create spawn source metadata
-      const spawnSource: SpawnSource = {
-        parentAgentId: sourceAgentId,
-        spawnTimestamp: new Date().toISOString(),
-        workflowId: workflowId,
-        batchId: batchId
-      }
-
       // Create AgentInfo for the super minion
       // Note: No parentAgentId set — spawned super minions are top-level agents.
       // Lineage is tracked via spawnSource instead (unlike handoff which uses parentAgentId for sidebar nesting).
+      const now = new Date().toISOString()
       const agentInfo = {
         id: `${agentId}-${Date.now()}`,
-        agentId: agentId,
-        branch: branch,
+        agentId,
+        branch,
         project: projectName,
-        feature: plan.substring(0, 100), // First 100 chars as feature description
+        feature: plan.substring(0, 100),
         status: 'active',
         tool: 'claude',
-        mode: 'planning', // Super minions use planning mode for workflow execution
-        yolo: sourceYolo, // Inherit permissions from parent agent
+        mode: 'planning',
+        yolo: sourceYolo,
         chrome: true,
-        prompt: plan, // Minimal context - just the plan
-        workflowId: workflowId, // Top-level for SuperAgentView to read
-        spawnSource: spawnSource,
-        isSuperMinion: true, // Mark as super minion for workflow execution
-        createdAt: new Date().toISOString(),
-        lastActivity: new Date().toISOString()
+        prompt: plan,
+        workflowId,
+        spawnSource: {
+          parentAgentId: sourceAgentId,
+          spawnTimestamp: now,
+          workflowId,
+          batchId,
+        } as SpawnSource,
+        isSuperMinion: true,
+        createdAt: now,
+        lastActivity: now,
       } as AgentInfo & { isSuperMinion: true; workflowId: string }
 
       // Acquire mutex for worktree creation (serialize git operations)

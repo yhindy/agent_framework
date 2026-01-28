@@ -1,4 +1,5 @@
 import * as http from 'http'
+import { join, dirname } from 'path'
 import { createLogger } from './logger'
 import type { AgentService } from './AgentService'
 import type { TerminalService } from './TerminalService'
@@ -434,15 +435,20 @@ export class HandoffApiService {
         this.mainWindow.webContents.send('agents:superSpawned', { batchId, results })
       }
 
-      // Auto-start successfully spawned agents
+      // Auto-start successfully spawned agents, inheriting yolo/chrome from spawned agent info
       results.forEach((result, i) => {
         if (result.success && result.agentId) {
+          const spawnedWorktree = join(dirname(projectPath!), result.agentId)
+          const spawnedInfo = this.agentService!.readAgentInfo(spawnedWorktree)
           this.scheduleAgentAutoStart(
             projectPath!,
             result.agentId,
             'claude',
             'planning',
-            request.spawns[i].plan
+            request.spawns[i].plan,
+            undefined, // model
+            spawnedInfo?.yolo ?? false,
+            spawnedInfo?.chrome ?? true
           )
         }
       })

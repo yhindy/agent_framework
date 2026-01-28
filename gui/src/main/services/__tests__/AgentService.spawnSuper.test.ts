@@ -292,7 +292,7 @@ branch refs/heads/main
       expect(result.error).toContain('Failed to spawn super minion')
     })
 
-    it('should set parentAgentId for tree hierarchy', async () => {
+    it('should track lineage via spawnSource (not parentAgentId)', async () => {
       const result = await agentService.spawnSuperMinion(
         projectPath,
         plan,
@@ -309,7 +309,9 @@ branch refs/heads/main
       )
 
       const writtenData = JSON.parse(agentInfoCall![1] as string)
-      expect(writtenData.parentAgentId).toBe(sourceAgentId)
+      // Super minions are top-level agents; lineage is tracked via spawnSource, not parentAgentId
+      expect(writtenData.parentAgentId).toBeUndefined()
+      expect(writtenData.spawnSource.parentAgentId).toBe(sourceAgentId)
     })
 
     it('should set mode to planning for workflow execution', async () => {

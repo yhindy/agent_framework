@@ -700,12 +700,10 @@ function setupIPC(): void {
   ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
     const details = await services!.agent.getSuperAgentDetails(projectPath, agentId)
-    // Merge runtime terminalPid from TerminalService (not stored on disk)
-    if (details) {
-      const activeTerminals = services!.terminal.getActiveTerminals()
-      ;(details as any).terminalPid = activeTerminals.get(agentId) ?? null
-    }
-    return details
+    if (!details) return details
+
+    const activeTerminals = services!.terminal.getActiveTerminals()
+    return { ...details, terminalPid: activeTerminals.get(agentId) ?? null }
   })
 
   // Ensure an agent is running (start if not active)
@@ -895,14 +893,19 @@ function setupIPC(): void {
     mainWindow?.webContents.send('agents:superSpawned', { batchId, results })
 
     // Auto-start successfully spawned agents
+    // Read spawned agent info to inherit yolo/chrome settings
     results.forEach((result, i) => {
       if (result.success && result.agentId) {
+        const spawnedWorktree = join(dirname(projectPath), result.agentId)
+        const spawnedInfo = services!.agent.readAgentInfo(spawnedWorktree)
         scheduleAgentAutoStart({
           projectPath,
           agentId: result.agentId,
           tool: 'claude',
           mode: 'planning',
-          prompt: spawns[i].plan
+          prompt: spawns[i].plan,
+          yolo: spawnedInfo?.yolo ?? false,
+          chrome: spawnedInfo?.chrome ?? true
         })
       }
     })
