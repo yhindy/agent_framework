@@ -1,6 +1,6 @@
 {
   "name": "agent_framework",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "A lightweight framework for running multiple AI coding agents in parallel on any codebase.",
   "main": "index.js",
   "private": true,

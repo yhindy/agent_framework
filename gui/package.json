@@ -1,6 +1,6 @@
 {
   "name": "agent-orchestrator",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "GUI for orchestrating AI coding agents",
   "main": "./out/main/index.js",
   "author": "",
