@@ -25,6 +25,7 @@ ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started
     handoffAgent: (request: import('../main/services/types/ProjectConfig').HandoffRequest) => Promise<import('../main/services/types/ProjectConfig').HandoffResult>;
     sendTerminalInput: (agentId: string, data: string) => void;
     resizeTerminal: (agentId: string, cols: number, rows: number) => void;
+    refreshTerminal: (agentId: string) => Promise<void>;
     onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => Electron.IpcRenderer;
     startPlainTerminal: (agentId: string, terminalId: string) => Promise<any>;
     stopPlainTerminal: (terminalId: string) => Promise<any>;

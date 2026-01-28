@@ -59,7 +59,7 @@ function trimCache(agentId: string) {
 
 // Global listener - set up once, captures ALL output for ALL agents
 let globalListenerInitialized = false
-function initGlobalOutputListener() {
+export function initGlobalOutputListener() {
   if (globalListenerInitialized) return
   globalListenerInitialized = true
 
@@ -217,13 +217,24 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
       terminal.open(containerElement)
       fitAndResize()
 
-      // Replay cached output to restore terminal history
+      // Initialize cache if needed and replay cached output to restore terminal history
+      const cachedOutput = outputCache.get(agentId) || []
       if (!outputCache.has(agentId)) {
-        outputCache.set(agentId, [])
+        outputCache.set(agentId, cachedOutput)
       }
-      const cachedOutput = outputCache.get(agentId)!
+
       for (let i = 0; i < cachedOutput.length; i += REPLAY_BATCH_SIZE) {
         terminal.write(cachedOutput.slice(i, i + REPLAY_BATCH_SIZE).join(''))
+      }
+
+      // If cache is empty when attaching to an existing tmux session, request a refresh.
+      // This sends Ctrl+L to trigger tmux to redraw the screen content.
+      if (cachedOutput.length === 0) {
+        setTimeout(() => {
+          window.electronAPI.refreshTerminal(agentId).catch(() => {
+            // Ignore refresh errors if the agent is not yet running
+          })
+        }, 100)
       }
 
       terminal.scrollToBottom()

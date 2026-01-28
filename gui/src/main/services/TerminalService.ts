@@ -790,8 +790,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     const agentInfo = await this.readAgentInfo(worktreePath)
 
     // Check if tmux session already exists - we'll attach to it instead of spawning new Claude
-    // BUT only if Claude is actually running in the session (not orphaned)
+    // NEW: If Claude is NOT running but tmux exists, still attach (so user sees the shell)
     let attachToExistingTmux = false
+    let attachToOrphanedTmux = false // Tmux exists but Claude crashed/exited
     const useTmux = this.shouldUseTmux()
     if (useTmux) {
       const tmuxSessionName = this.getTmuxSessionName(agentId)
@@ -803,9 +804,11 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           log.info(`Attaching to existing tmux session ${tmuxSessionName} with running Claude`)
           attachToExistingTmux = true
         } else {
-          log.info(`Tmux session ${tmuxSessionName} exists but Claude not running, killing orphaned session`)
-          this.killTmuxSession(agentId)
-          // attachToExistingTmux stays false, will create new session with Claude
+          log.warn(`Tmux session ${tmuxSessionName} exists but Claude not running - attaching to shell only`)
+          attachToOrphanedTmux = true
+          // Don't kill the session - attach to it so user can see what happened
+          // Update agent state to reflect Claude is not running
+          await this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
         }
       }
     } else {
@@ -1209,48 +1212,40 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     this.terminals.set(agentId, session)
 
     // Send the command to the terminal
-    // If tmux mode is enabled, wrap in tmux session
-    if (useTmux && tmuxSessionName) {
-      if (attachToExistingTmux) {
-        // Session already exists (Claude already running) - just attach to it
-        // Wait for shell to initialize before sending tmux attach command
-        log.info(`Attaching to existing tmux session: ${tmuxSessionName}`)
-        setTimeout(() => {
-          terminal.write(`tmux attach-session -t ${tmuxSessionName}\r`)
-        }, 100)
-      } else {
-        // Create new tmux session and run the command
-        // Wait for shell to initialize before sending tmux command (same as attach case)
-        const rawCommand = `${command} ${args.join(' ')}`
-        const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
-        // SECURITY: Use unique temp directory to prevent symlink attacks and race conditions
-        const tempDir = mkdtempSync(join(tmpdir(), 'minion-'))
-        const scriptPath = join(tempDir, `cmd-${sanitizedAgentId}.sh`)
-
-        setTimeout(() => {
-          try {
-            writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
-            log.debug(`Wrote tmux command script to ${scriptPath}`)
-
-            // Create tmux session with two windows:
-            // Window 0 (default) - runs the agent command
-            // Window 1 "shell" - bare terminal for manual work
-            const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
-            terminal.write(`${tmuxCmd}\r`)
-          } catch (err) {
-            log.error('Failed to write command script, falling back to direct command', err)
-            const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
-            const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
-            terminal.write(`${tmuxCmd}\r`)
-          }
-        }, 100)
-      }
-    } else {
+    if (!useTmux || !tmuxSessionName) {
       terminal.write(`${command} ${args.join(' ')}\r`)
+    } else if (attachToExistingTmux || attachToOrphanedTmux) {
+      const reason = attachToOrphanedTmux ? '(orphaned - Claude not running)' : '(Claude running)'
+      log.info(`Attaching to existing tmux session: ${tmuxSessionName} ${reason}`)
+      setTimeout(() => {
+        terminal.write(`tmux attach-session -t ${tmuxSessionName} || (echo "Failed to attach to tmux session ${tmuxSessionName}. Starting fallback shell..." && bash)\r`)
+      }, 100)
+    } else {
+      // Create new tmux session and run the command
+      const rawCommand = `${command} ${args.join(' ')}`
+      const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
+      const tempDir = mkdtempSync(join(tmpdir(), 'minion-'))
+      const scriptPath = join(tempDir, `cmd-${sanitizedAgentId}.sh`)
+
+      setTimeout(() => {
+        try {
+          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
+          log.debug(`Wrote tmux command script to ${scriptPath}`)
+
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        } catch (err) {
+          log.error('Failed to write command script, falling back to direct command', err)
+          const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
+          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
+          terminal.write(`${tmuxCmd}\r`)
+        }
+      }, 100)
     }
 
-    // Persist session ID and flags (skip if just attaching to existing session)
-    if (tool === 'claude' && !attachToExistingTmux) {
+    // Persist session ID and flags (skip if attaching to existing session)
+    // For orphaned sessions, we already marked claudeSessionActive: false above
+    if (tool === 'claude' && !attachToExistingTmux && !attachToOrphanedTmux) {
       const agentInfoUpdate: Partial<AgentInfo> = {
         claudeSessionId: effectiveSessionId,
         claudeSessionActive: true,
@@ -1436,7 +1431,6 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
 
     const resumeFailurePatterns = ['Session not found', 'Could not resume', 'Error resuming session']
     const hasFailure = resumeFailurePatterns.some(pattern => strippedOutput.includes(pattern))
-
     if (!hasFailure) return false
 
     log.warn(`Resume failed for ${agentId}, attempting fresh start...`)
@@ -1526,6 +1520,31 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     if (session.tmuxSession) {
       this.resizeTmuxWindows(session.tmuxSession, cols, rows)
     }
+  }
+
+  /**
+   * Refresh terminal output by sending Ctrl+L to clear and redraw the screen.
+   * This is useful when attaching to an existing tmux session where the initial
+   * screen content may not have been captured in the output cache.
+   *
+   * Only operates on tmux sessions to avoid unexpected behavior in non-tmux terminals.
+   *
+   * @param agentId - The agent ID whose terminal should be refreshed
+   */
+  refreshTerminal(agentId: string): void {
+    const session = this.terminals.get(agentId)
+    if (!session) {
+      log.debug(`Cannot refresh terminal for ${agentId}: no active session`)
+      return
+    }
+
+    if (!session.tmuxSession) {
+      log.debug(`Skipping refresh for ${agentId}: not a tmux session`)
+      return
+    }
+
+    log.debug(`Refreshing terminal for ${agentId}`)
+    session.pty.write('\x0c')
   }
 
   private resizeTmuxWindows(sessionName: string, cols: number, rows: number): void {

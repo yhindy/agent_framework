@@ -816,6 +816,10 @@ function setupIPC(): void {
     services!.terminal.resize(agentId, cols, rows)
   })
 
+  ipcMain.handle('terminal:refresh', async (_event, agentId: string) => {
+    return services!.terminal.refreshTerminal(agentId)
+  })
+
   // Plain terminal handlers
   ipcMain.handle('plainTerminal:start', async (_event, agentId: string, terminalId: string) => {
     log.debug('[IPC] plainTerminal:start called with:', { agentId, terminalId })

@@ -48,6 +48,7 @@ const api = {
     ipcRenderer.send('terminal:input', agentId, data),
   resizeTerminal: (agentId: string, cols: number, rows: number) =>
     ipcRenderer.send('terminal:resize', agentId, cols, rows),
+  refreshTerminal: (agentId: string) => ipcRenderer.invoke('terminal:refresh', agentId),
   onTerminalOutput: (callback: (agentId: string, data: string) => void) => {
     const subscription = (_event: any, agentId: string, data: string) => callback(agentId, data)
     ipcRenderer.on('terminal:output', subscription)
