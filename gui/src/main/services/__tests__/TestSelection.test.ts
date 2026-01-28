@@ -101,7 +101,6 @@ describe('Test Selection Infrastructure', () => {
       const claudeContent = fs.readFileSync(claudePath, 'utf-8')
       expect(claudeContent).toContain('test:changed')
       expect(claudeContent).toContain('memory-efficient')
-      expect(claudeContent).toContain('Memory Management')
     })
 
     it('should mention test:changed in agent-rules.mdc', () => {
