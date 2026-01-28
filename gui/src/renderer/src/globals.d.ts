@@ -31,6 +31,7 @@ declare global {
       // Terminal APIs
       sendTerminalInput: (agentId: string, data: string) => void
       resizeTerminal: (agentId: string, cols: number, rows: number) => void
+      refreshTerminal: (agentId: string) => Promise<void>
       onTerminalOutput: (callback: (agentId: string, data: string) => void) => () => void
 
       // Plain Terminal APIs
