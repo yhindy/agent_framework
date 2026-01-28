@@ -699,7 +699,13 @@ function setupIPC(): void {
 
   ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
-    return services!.agent.getSuperAgentDetails(projectPath, agentId)
+    const details = await services!.agent.getSuperAgentDetails(projectPath, agentId)
+    // Merge runtime terminalPid from TerminalService (not stored on disk)
+    if (details) {
+      const activeTerminals = services!.terminal.getActiveTerminals()
+      ;(details as any).terminalPid = activeTerminals.get(agentId) ?? null
+    }
+    return details
   })
 
   // Ensure an agent is running (start if not active)

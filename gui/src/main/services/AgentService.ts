@@ -1142,6 +1142,7 @@ Parent agent was working on: ${sourceFeature}
       const baseBranch = config.project.defaultBaseBranch || 'main'
 
       // Look up source agent to inherit permissions (yolo mode)
+      // Try active sessions first, then fall back to reading .agent-info from the worktree directory
       let sourceYolo = false
       try {
         const sourceSession = this.activeSessions.get(sourceAgentId)
@@ -1149,6 +1150,16 @@ Parent agent was working on: ${sourceFeature}
           const sourceInfo = this.readAgentInfo(sourceSession.worktreePath)
           if (sourceInfo) {
             sourceYolo = sourceInfo.yolo || false
+          }
+        } else {
+          // Source agent may not be in activeSessions (e.g., spawning from the orchestrator itself)
+          // Try reading .agent-info directly from the expected worktree path
+          const sourceWorktreePath = join(dirname(projectPath), sourceAgentId)
+          if (existsSync(join(sourceWorktreePath, '.agent-info'))) {
+            const sourceInfo = this.readAgentInfo(sourceWorktreePath)
+            if (sourceInfo) {
+              sourceYolo = sourceInfo.yolo || false
+            }
           }
         }
       } catch {
@@ -1190,11 +1201,12 @@ Parent agent was working on: ${sourceFeature}
         yolo: sourceYolo, // Inherit permissions from parent agent
         chrome: true,
         prompt: plan, // Minimal context - just the plan
+        workflowId: workflowId, // Top-level for SuperAgentView to read
         spawnSource: spawnSource,
         isSuperMinion: true, // Mark as super minion for workflow execution
         createdAt: new Date().toISOString(),
         lastActivity: new Date().toISOString()
-      } as AgentInfo & { isSuperMinion: true }
+      } as AgentInfo & { isSuperMinion: true; workflowId: string }
 
       // Acquire mutex for worktree creation (serialize git operations)
       const release = await this.worktreeMutex.acquire()

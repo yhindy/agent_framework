@@ -173,6 +173,27 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     fetchWorkflowName()
   }, [agent?.workflowId])
 
+  // Ensure agent terminal is running (matches AgentView pattern)
+  useEffect(() => {
+    const ensureRunning = async () => {
+      if (agent && !agent.terminalPid && agentId) {
+        try {
+          const result = await window.electronAPI.ensureAgentRunning(agentId)
+          if (result.started) {
+            console.log(`[SuperAgentView] Started agent ${agentId}`)
+            // Reload to pick up terminalPid
+            loadAgent()
+          } else if (result.error) {
+            console.warn(`[SuperAgentView] Could not start agent ${agentId}: ${result.error}`)
+          }
+        } catch (err) {
+          console.error('[SuperAgentView] ensureAgentRunning failed:', err)
+        }
+      }
+    }
+    ensureRunning()
+  }, [agent?.terminalPid, agentId])
+
   useEffect(() => {
     loadAgent()
     loadTestEnvConfig()
