@@ -29,6 +29,16 @@ function stripAnsi(str: string): string {
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
 
+// Escape a string for use inside double quotes in bash
+// Must escape: backslash, double quote, backtick, dollar sign
+export function escapeForDoubleQuotes(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')  // Backslashes first (so we don't double-escape)
+    .replace(/"/g, '\\"')    // Double quotes
+    .replace(/`/g, '\\`')    // Backticks (command substitution)
+    .replace(/\$/g, '\\$')   // Dollar signs (variable expansion)
+}
+
 interface TerminalSession {
   pty: pty.IPty
   agentId: string
@@ -1315,12 +1325,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         const planPrompt = (isSuperMinion && projectPath)
           ? this.generateWorkflowPrompt(projectPath, prompt)
           : `Create a plan for: ${prompt}`
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(planPrompt)}"`)
       }
     } else if (mode === 'dev') {
       args.push('--permission-mode', 'acceptEdits')
       if (prompt) {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(prompt)}"`)
       }
     }
 
@@ -1361,9 +1371,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(planPrompt)}"`)
       } else {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(prompt)}"`)
       }
     }
 
@@ -1394,9 +1404,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           planPrompt = `Create a plan for: ${prompt}`
         }
 
-        args.push(`"${planPrompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(planPrompt)}"`)
       } else {
-        args.push(`"${prompt.replace(/"/g, '\\"')}"`)
+        args.push(`"${escapeForDoubleQuotes(prompt)}"`)
       }
     }
 
