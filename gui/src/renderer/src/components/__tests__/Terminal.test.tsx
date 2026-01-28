@@ -12,6 +12,7 @@ vi.mock('xterm', () => {
     write: vi.fn(),
     scrollToBottom: vi.fn(),
     focus: vi.fn(),
+    attachCustomKeyEventHandler: vi.fn(),
     rows: 24,
     cols: 80
   }
@@ -30,6 +31,7 @@ vi.mock('xterm', () => {
     write = mockTerminalInstance.write
     scrollToBottom = mockTerminalInstance.scrollToBottom
     focus = mockTerminalInstance.focus
+    attachCustomKeyEventHandler = mockTerminalInstance.attachCustomKeyEventHandler
     rows = mockTerminalInstance.rows
     cols = mockTerminalInstance.cols
 

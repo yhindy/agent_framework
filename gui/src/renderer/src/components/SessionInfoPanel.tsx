@@ -26,11 +26,45 @@ interface SessionInfoPanelProps {
   isRunning: boolean
   /** Status for display when session info is not available */
   status?: string
+  /** Optional model for non-Claude tools */
+  model?: string
 }
 
 function formatModelName(model: string): string {
-  // Remove date suffix like -20251001
-  return model.replace(/-\d{8}$/, '')
+  // Strip provider prefixes, date suffixes, and normalize version dots.
+  const withoutDate = model.replace(/-\d{8}$/, '')
+  const withoutPrefix = withoutDate.replace(/^claude-/, '')
+  const dottedVersion = withoutPrefix.replace(/-(\d+)-(\d+)(?=-|$)/g, '-$1.$2')
+  return dottedVersion.toLowerCase()
+}
+
+function formatStatus(status?: string): { label: string; className: string } {
+  if (!status) {
+    return { label: 'Idle', className: 'idle' }
+  }
+
+  const normalized = status.toLowerCase()
+
+  switch (normalized) {
+    case 'in_progress':
+    case 'working':
+      return { label: 'Working', className: 'working' }
+    case 'waiting':
+      return { label: 'Waiting', className: 'waiting' }
+    case 'pr_open':
+      return { label: 'PR Open', className: 'pr_open' }
+    case 'merged':
+      return { label: 'Merged', className: 'merged' }
+    case 'blocked':
+      return { label: 'Blocked', className: 'blocked' }
+    case 'idle':
+      return { label: 'Idle', className: 'idle' }
+    default:
+      return {
+        label: normalized.charAt(0).toUpperCase() + normalized.slice(1),
+        className: 'idle'
+      }
+  }
 }
 
 function formatTokenCount(tokens: number): string {
@@ -56,18 +90,7 @@ function timeAgo(timestamp: string): string {
   return `${Math.floor(diffHours / 24)}d ago`
 }
 
-function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    working: 'Working',
-    idle: 'Idle',
-    pr_open: 'PR Open',
-    merged: 'Merged',
-    blocked: 'Blocked'
-  }
-  return labels[status] || status.charAt(0).toUpperCase() + status.slice(1)
-}
-
-export default function SessionInfoPanel({ agentId, isRunning, status }: SessionInfoPanelProps) {
+export default function SessionInfoPanel({ agentId, isRunning, status, model }: SessionInfoPanelProps) {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
@@ -142,14 +165,23 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
     return null
   }
 
+  const displayModel = model ? formatModelName(model) : null
+  const statusDisplay = formatStatus(status)
+
   // Not running but we have a status - show minimal view with expand option
   if (!isRunning) {
     return (
       <div className="session-info-panel">
         <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
           <div className="session-info-badges">
-            <span className={`state-badge state-${status}`}>
-              {getStatusLabel(status || 'idle')}
+            {displayModel && (
+              <span className="model-badge" title={`Model: ${displayModel}`}>
+                <span className="badge-label">Model:</span>
+                <span className="badge-value">{displayModel}</span>
+              </span>
+            )}
+            <span className={`state-badge state-${statusDisplay.className}`}>
+              {statusDisplay.label}
             </span>
           </div>
           <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
@@ -171,6 +203,12 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
                 </button>
               </span>
             </div>
+            {model && (
+              <div className="info-row">
+                <span className="info-label">Model:</span>
+                <span className="info-value">{displayModel}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -213,22 +251,15 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
     )
   }
 
-  const displayModel = formatModelName(sessionInfo.actualModel)
+  const displaySessionModel = formatModelName(sessionInfo.actualModel)
 
   return (
     <div className="session-info-panel">
       <div className="session-info-collapsed" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="session-info-badges">
-          <span className="model-badge" title={`Model: ${sessionInfo.actualModel}`}>
-            <span className="badge-label">Model:</span>
-            <span className="badge-value">{displayModel}</span>
+          <span className="model-badge model-badge--compact" title={displaySessionModel}>
+            <span className="badge-value">{displaySessionModel}</span>
           </span>
-
-          {sessionInfo.state !== 'unknown' && (
-            <span className={`state-badge state-${sessionInfo.state}`}>
-              {sessionInfo.state === 'working' ? 'Working' : 'Waiting'}
-            </span>
-          )}
         </div>
 
         <button className="expand-button" title={isExpanded ? 'Collapse' : 'Expand'}>
@@ -269,7 +300,7 @@ export default function SessionInfoPanel({ agentId, isRunning, status }: Session
 
           <div className="info-row">
             <span className="info-label">Full Model:</span>
-            <span className="info-value">{sessionInfo.actualModel}</span>
+            <span className="info-value">{sessionInfo.actualModel.toLowerCase()}</span>
           </div>
 
           {sessionInfo.claudeCodeVersion && (

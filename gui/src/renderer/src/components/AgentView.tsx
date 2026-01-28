@@ -9,6 +9,7 @@ import { BotIcon, WarningIcon, TerminalIcon, StopIcon, PlayIcon, PlusIcon, Refre
 import { usePRCreation } from '../hooks/usePRCreation'
 import { usePRPolling } from '../hooks/usePRPolling'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
+import { useSessionInfo } from '../hooks/useSessionInfo'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
 import './AgentView.css'
@@ -303,13 +304,13 @@ function AgentView({ activeProjects }: AgentViewProps) {
     return status?.isRunning || false
   }
 
-  const handleOpenCursor = async () => {
+  const handleOpenEditor = async () => {
     if (!agentId) return
 
     try {
-      await window.electronAPI.openInCursor(agentId)
+      await window.electronAPI.openInEditor(agentId)
     } catch (error: any) {
-      alert('Error opening Cursor: ' + error.message)
+      alert('Error opening editor: ' + error.message)
     }
   }
 
@@ -407,6 +408,14 @@ function AgentView({ activeProjects }: AgentViewProps) {
     }
   }
 
+  // Use session info hook to get working state
+  const agentTerminalRunning = agent?.terminalPid !== null
+  const isClaudeTool = assignment?.tool === 'claude'
+  const { workingState } = useSessionInfo(
+    agentId || '',
+    agentTerminalRunning && isClaudeTool
+  )
+
   if (!agent) {
     return (
       <div className="agent-view">
@@ -478,9 +487,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
         </button>
       ) : null}
 
-      {/* Cursor Button */}
-      <button onClick={handleOpenCursor} className="compact-button">
-        Cursor
+      {/* Open Editor Button */}
+      <button onClick={handleOpenEditor} className="compact-button">
+        Open Editor
       </button>
 
       {/* Cleanup Dropdown */}
@@ -504,6 +513,8 @@ function AgentView({ activeProjects }: AgentViewProps) {
         tool={assignment?.tool}
         isRunning={isRunning}
         status={assignment?.status}
+        workingState={workingState}
+        model={assignment?.model}
         actions={headerActions}
       />
 
@@ -707,4 +718,3 @@ function AgentView({ activeProjects }: AgentViewProps) {
 }
 
 export default AgentView
-

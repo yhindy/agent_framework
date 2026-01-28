@@ -627,9 +627,11 @@ function setupIPC(): void {
     return services!.terminal.stopAgent(agentId)
   })
 
-  ipcMain.handle('agents:openCursor', async (_event, agentId: string) => {
+  ipcMain.handle('agents:openEditor', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
-    return services!.agent.openInCursor(projectPath, agentId)
+    const settings = services!.settings.getSettings()
+    const editor = settings.editor?.defaultEditor || 'cursor'
+    return services!.agent.openInEditor(projectPath, agentId, editor)
   })
 
   ipcMain.handle('agents:clearUnread', async (_event, agentId: string) => {

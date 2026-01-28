@@ -1346,18 +1346,27 @@ Parent agent was working on: ${sourceFeature}
     } as any
   }
 
-  async openInCursor(projectPath: string, agentId: string): Promise<void> {
+  async openInEditor(projectPath: string, agentId: string, editor: 'cursor' | 'vscode' | 'zed' = 'cursor'): Promise<void> {
     const agents = await this.listAgents(projectPath)
     const agent = agents.find(a => a.id === agentId)
-    
+
     if (!agent) {
       throw new Error('Agent not found')
     }
 
-    // Open in Cursor
-    execFile('cursor', [agent.worktreePath], (error) => {
+    // Map editor types to CLI commands
+    const editorCommands: Record<string, string> = {
+      cursor: 'cursor',
+      vscode: 'code',
+      zed: 'zed'
+    }
+    const command = editorCommands[editor] || 'cursor'
+
+    // Open in selected editor
+    execFile(command, [agent.worktreePath], (error) => {
       if (error) {
-        log.error('Error opening Cursor', error)
+        log.error(`Error opening ${editor}`, error)
+        throw new Error(`Failed to open ${editor}. Make sure the '${command}' command is installed and available in your PATH.`)
       }
     })
   }

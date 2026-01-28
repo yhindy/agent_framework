@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ConfirmModal from './ConfirmModal'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
+import { cleanupAgentTerminalCache } from './Terminal'
 import './AgentCleanupDropdown.css'
 
 interface AgentCleanupDropdownProps {
@@ -44,6 +45,7 @@ function AgentCleanupDropdown({
     try {
       setShowCleanupModal(false)
       await window.electronAPI.teardownAgent(agentId, false)
+      cleanupAgentTerminalCache(agentId)
       hideLoading(snackbarId)
       onCleanupComplete?.()
     } catch (error: any) {
@@ -66,6 +68,7 @@ function AgentCleanupDropdown({
     try {
       setShowForceModal(false)
       await window.electronAPI.teardownAgent(agentId, true)
+      cleanupAgentTerminalCache(agentId)
       hideLoading(snackbarId)
 
       onCleanupComplete?.()

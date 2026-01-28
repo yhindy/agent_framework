@@ -32,6 +32,10 @@ interface AgentHeaderProps {
   isRunning?: boolean
   /** Agent status for display in SessionInfoPanel */
   status?: string
+  /** Working state from Claude session info (working/waiting/unknown) */
+  workingState?: 'working' | 'waiting' | 'unknown'
+  /** Optional model for display */
+  model?: string
   /** Action buttons (right side) */
   actions?: ReactNode
   /** Optional task count for super minions */
@@ -47,6 +51,8 @@ function AgentHeader({
   tool,
   isRunning = false,
   status,
+  workingState,
+  model,
   actions,
   taskCount
 }: AgentHeaderProps) {
@@ -131,7 +137,7 @@ function AgentHeader({
         </div>
       )}
 
-      {/* Left section: Icon + Title + Type */}
+      {/* Left section: Icon + Title + Type + Working State */}
       <div className="header-identity">
         <div className="header-icon-wrapper">
           <span className="header-icon">{icon}</span>
@@ -140,7 +146,14 @@ function AgentHeader({
           )}
         </div>
         <div className="header-title-group">
-          <span className="header-type-label">{typeLabel}</span>
+          <div className="header-type-row">
+            <span className="header-type-label">{typeLabel}</span>
+            {workingState && workingState !== 'unknown' && (
+              <span className={`header-working-chip header-working-chip--${workingState}`}>
+                {workingState === 'working' ? 'Working' : 'Waiting'}
+              </span>
+            )}
+          </div>
           <h2 className="header-title">{title}</h2>
         </div>
       </div>
@@ -175,6 +188,7 @@ function AgentHeader({
           agentId={agentId}
           isRunning={tool === 'claude' ? isRunning : false}
           status={status}
+          model={model}
         />
       </div>
 
