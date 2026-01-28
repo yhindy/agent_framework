@@ -38,8 +38,12 @@ describe('HandoffApiService', () => {
     lastActivity: '2024-01-01T12:00:00.000Z'
   }
 
+  // Use a test port to avoid conflicts with running app
+  const TEST_PORT = 19235
+
   beforeEach(() => {
     service = new HandoffApiService()
+    service.setPort(TEST_PORT)
 
     // Setup mock services
     mockAgentService = {
@@ -82,8 +86,8 @@ describe('HandoffApiService', () => {
     service.setWindow(mockMainWindow)
   })
 
-  afterEach(() => {
-    service.stop()
+  afterEach(async () => {
+    await service.stop()
     vi.clearAllMocks()
   })
 
@@ -214,53 +218,42 @@ describe('HandoffApiService', () => {
   })
 
   describe('server lifecycle', () => {
-    it('should start and stop the server', () => {
+    it('should start and stop the server', async () => {
       expect(service.isRunning()).toBe(false)
 
       service.start()
 
       // Give the server time to start
-      return new Promise<void>((resolve) => {
-        setTimeout(() => {
-          expect(service.isRunning()).toBe(true)
-          expect(service.getPort()).toBe(19234)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(service.isRunning()).toBe(true)
+      expect(service.getPort()).toBe(TEST_PORT)
 
-          service.stop()
-
-          setTimeout(() => {
-            expect(service.isRunning()).toBe(false)
-            resolve()
-          }, 100)
-        }, 100)
-      })
+      await service.stop()
+      expect(service.isRunning()).toBe(false)
     })
 
-    it('should not start if already started', () => {
+    it('should not start if already started', async () => {
       service.start()
+
+      // Give the server time to start
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       // Try to start again - should not create duplicate server
       service.start()
 
-      return new Promise<void>((resolve) => {
-        setTimeout(() => {
-          expect(service.isRunning()).toBe(true)
-          service.stop()
-          resolve()
-        }, 100)
-      })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(service.isRunning()).toBe(true)
     })
   })
 
   describe('HTTP endpoints', () => {
-    beforeEach(() => {
-      return new Promise<void>((resolve) => {
-        service.start()
-        setTimeout(resolve, 100)
-      })
+    beforeEach(async () => {
+      service.start()
+      await new Promise((resolve) => setTimeout(resolve, 100))
     })
 
-    afterEach(() => {
-      service.stop()
+    afterEach(async () => {
+      await service.stop()
     })
 
     const makeRequest = (
@@ -271,7 +264,7 @@ describe('HandoffApiService', () => {
       return new Promise((resolve, reject) => {
         const options = {
           hostname: '127.0.0.1',
-          port: 19234,
+          port: TEST_PORT,
           path,
           method,
           headers: {
@@ -312,7 +305,7 @@ describe('HandoffApiService', () => {
 
       expect(response.statusCode).toBe(200)
       expect(response.body.status).toBe('ok')
-      expect(response.body.port).toBe(19234)
+      expect(response.body.port).toBe(TEST_PORT)
     })
 
     it('should return 404 for unknown routes', async () => {
@@ -449,7 +442,7 @@ describe('HandoffApiService', () => {
       const response = await new Promise<{ statusCode: number; body: any }>((resolve, reject) => {
         const options = {
           hostname: '127.0.0.1',
-          port: 19234,
+          port: TEST_PORT,
           path: '/api/handoff',
           method: 'POST',
           headers: {
@@ -532,7 +525,7 @@ describe('HandoffApiService', () => {
       const response = await new Promise<{ statusCode: number; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
         const options = {
           hostname: '127.0.0.1',
-          port: 19234,
+          port: TEST_PORT,
           path: '/api/handoff',
           method: 'OPTIONS'
         }
@@ -556,6 +549,7 @@ describe('HandoffApiService', () => {
     beforeEach(() => {
       // Create service without dependencies
       service = new HandoffApiService()
+      service.setPort(TEST_PORT)
 
       return new Promise<void>((resolve) => {
         service.start()
@@ -573,7 +567,7 @@ describe('HandoffApiService', () => {
       const response = await new Promise<{ statusCode: number; body: any }>((resolve, reject) => {
         const options = {
           hostname: '127.0.0.1',
-          port: 19234,
+          port: TEST_PORT,
           path: '/api/handoff',
           method: 'POST',
           headers: {
@@ -644,7 +638,7 @@ describe('HandoffApiService', () => {
       await new Promise<{ statusCode: number; body: any }>((resolve, reject) => {
         const options = {
           hostname: '127.0.0.1',
-          port: 19234,
+          port: TEST_PORT,
           path: '/api/handoff',
           method: 'POST',
           headers: {
