@@ -24,6 +24,48 @@ export interface HandoffSource {
   handoffTimestamp: string  // ISO timestamp when handoff occurred
 }
 
+/**
+ * SpawnSource: Used for super minion batch spawns via /api/spawn-super
+ * - Always branches fresh from main
+ * - Workflow-driven (debug or standard workflow)
+ * - Minimal context (just the plan)
+ * - Can be part of a batch (has batchId)
+ *
+ * Different from HandoffSource:
+ * - HandoffSource is for agent-to-agent delegation via /api/handoff
+ * - Can inherit (branch from parent) or start fresh
+ * - Continues related work with parent context
+ */
+export interface SpawnSource {
+  parentAgentId: string         // Agent that initiated the spawn
+  spawnTimestamp: string        // ISO timestamp
+  workflowId: string            // Which workflow was selected
+  batchId?: string              // For tracking spawns from same request
+}
+
+/**
+ * Result of a single spawn operation
+ */
+export interface SpawnResult {
+  success: boolean
+  agentId?: string
+  workflowId?: string
+  error?: string
+}
+
+/**
+ * Full response from spawn-super endpoint
+ */
+export interface SpawnSuperResponse {
+  success: boolean              // true if ALL spawns succeeded
+  partialSuccess: boolean       // true if SOME (but not all) succeeded
+  results: SpawnResult[]        // Per-spawn results
+  batchId: string               // Unique ID for this spawn batch
+  totalRequested: number
+  totalSucceeded: number
+  totalFailed: number
+}
+
 export interface HandoffRequest {
   sourceAgentId: string
   prompt: string
@@ -73,6 +115,7 @@ export interface AgentInfo {
   isBaseBranchAgent?: boolean  // Set for the base branch agent
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
   handoffSource?: HandoffSource  // Set if this agent was created via handoff from another agent
+  spawnSource?: SpawnSource  // Set if this agent was created via super minion spawn
 
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality

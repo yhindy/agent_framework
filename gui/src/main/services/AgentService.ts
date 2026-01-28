@@ -4,9 +4,9 @@ import { join, dirname } from 'path'
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
-import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource } from './types/ProjectConfig'
+import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource, SpawnSource, SpawnResult } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
-// WorkflowService not directly used in AgentService with simplified model
+import { Mutex } from 'async-mutex'
 import { createLogger } from './logger'
 
 const log = createLogger('AgentService')
@@ -57,6 +57,10 @@ export class AgentService {
   // Avoids repeated git worktree list calls which can cause EAGAIN spawn errors.
   private projectLookupCache: Map<string, { timestamp: number; projectPath: string }> = new Map()
   private readonly PROJECT_LOOKUP_CACHE_TTL_MS = 30 * 1000 // 30 seconds
+
+  // Mutex for serializing worktree creation operations to prevent race conditions
+  // when multiple spawns happen in parallel (git worktree operations can conflict)
+  private worktreeMutex = new Mutex()
 
   constructor() {
     this.sessions = new Map()
@@ -871,6 +875,25 @@ export class AgentService {
 
   /**
    * Sanitize a string to be used as a git branch name.
+   * Read the yolo flag from a source agent, checking active sessions first
+   * then falling back to reading from the worktree on disk.
+   * Returns false if the source agent cannot be found or read.
+   */
+  private readSourceAgentYolo(sourceAgentId: string, projectPath: string): boolean {
+    try {
+      const sourceSession = this.sessions.get(sourceAgentId)
+      const worktreePath = sourceSession?.worktreePath
+        ?? join(dirname(projectPath), sourceAgentId)
+
+      const sourceInfo = this.readAgentInfo(worktreePath)
+      return sourceInfo?.yolo ?? false
+    } catch (err: any) {
+      log.debug(`Could not read source agent ${sourceAgentId} for yolo inheritance: ${err.message}`)
+      return false
+    }
+  }
+
+  /**
    * - Converts to lowercase
    * - Replaces spaces with hyphens
    * - Removes special characters (except hyphens, underscores, and alphanumeric)
@@ -1105,6 +1128,135 @@ Parent agent was working on: ${sourceFeature}
       return {
         success: false,
         error: `Handoff failed: ${error.message}`
+      }
+    }
+  }
+
+  /**
+   * Spawn a super minion with minimal context.
+   * Creates fresh worktree from main, sets up workflow, and returns the agent info.
+   *
+   * Uses a mutex to serialize worktree creation operations, preventing race conditions
+   * when multiple spawns happen in parallel.
+   *
+   * @param projectPath - Project to spawn in
+   * @param plan - Work description (minimal context)
+   * @param workflowId - Which workflow to use
+   * @param sourceAgentId - Parent agent ID for lineage
+   * @param batchId - Batch ID for tracking
+   * @param shortName - Optional branch suffix
+   */
+  async spawnSuperMinion(
+    projectPath: string,
+    plan: string,
+    workflowId: string,
+    sourceAgentId: string,
+    batchId: string,
+    shortName?: string
+  ): Promise<SpawnResult> {
+    try {
+      // Get project config
+      const config = this.getProjectConfig(projectPath)
+      const projectName = config.project.name || projectPath.split('/').pop() || 'project'
+      const baseBranch = config.project.defaultBaseBranch || 'main'
+
+      // Inherit yolo mode from source agent
+      // Try active session first, then fall back to worktree path on disk
+      const sourceYolo = this.readSourceAgentYolo(sourceAgentId, projectPath)
+
+      // Generate branch name and agent ID
+      const hash = Math.random().toString(36).substring(2, 9)
+      const agentId = `${projectName}-${hash}`
+      const branchSuffix = shortName
+        ? this.sanitizeBranchName(shortName)
+        : `super-${hash}`
+      const branch = `feature/${agentId}/${branchSuffix}`
+
+      // Calculate worktree path
+      const worktreePath = join(dirname(projectPath), agentId)
+
+      // Create AgentInfo for the super minion
+      // Note: No parentAgentId set — spawned super minions are top-level agents.
+      // Lineage is tracked via spawnSource instead (unlike handoff which uses parentAgentId for sidebar nesting).
+      const now = new Date().toISOString()
+      const agentInfo = {
+        id: `${agentId}-${Date.now()}`,
+        agentId,
+        branch,
+        project: projectName,
+        feature: plan.substring(0, 100),
+        status: 'active',
+        tool: 'claude',
+        mode: 'planning',
+        yolo: sourceYolo,
+        chrome: true,
+        prompt: plan,
+        workflowId,
+        spawnSource: {
+          parentAgentId: sourceAgentId,
+          spawnTimestamp: now,
+          workflowId,
+          batchId,
+        } as SpawnSource,
+        isSuperMinion: true,
+        createdAt: now,
+        lastActivity: now,
+      } as AgentInfo & { isSuperMinion: true; workflowId: string }
+
+      // Acquire mutex for worktree creation (serialize git operations)
+      const release = await this.worktreeMutex.acquire()
+      try {
+        // Run setup.sh to create the agent worktree (always fresh from main/master)
+        const setupScript = join(this.getMinionsPath(), 'bin', 'setup.sh')
+        const configPath = this.getProjectConfigPath(projectPath)
+
+        // For spawn, always branch from base (fresh mode)
+        const setupArgs = [agentInfo.agentId, agentInfo.branch, baseBranch, '--config', configPath]
+
+        log.info('Spawning super minion', {
+          batchId,
+          agentId,
+          workflowId,
+          branchSuffix,
+          baseBranch
+        })
+
+        const { stdout, stderr } = await execFileAsync(
+          setupScript,
+          setupArgs,
+          { cwd: projectPath }
+        )
+        log.debug('Setup script output:', stdout)
+        if (stderr) log.warn('Setup script errors:', stderr)
+
+        // Write agent info to .agent-info file in the worktree
+        this.writeAgentInfo(worktreePath, agentInfo)
+
+        // Commit any setup files to prevent git dirty state
+        await this.commitSetupFiles(worktreePath)
+      } finally {
+        release()
+      }
+
+      log.info(`Super minion spawned: ${agentInfo.agentId}`, {
+        batchId,
+        workflowId
+      })
+
+      return {
+        success: true,
+        agentId: agentInfo.agentId,
+        workflowId: workflowId
+      }
+    } catch (error: any) {
+      log.error('Spawn super minion failed', {
+        error: error.message,
+        sourceAgentId,
+        batchId
+      })
+      return {
+        success: false,
+        error: `Failed to spawn super minion: ${error.message}`
       }
     }
   }

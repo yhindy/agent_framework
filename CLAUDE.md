@@ -156,7 +156,88 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 ### IPC Communication
 - Handler names use colon-separated namespaces: `project:select`, `agents:list`
 - Use `ipcMain.handle` for async request/response
+- Use `ipcMain.on`/`send` for fire-and-forget events
 - All APIs defined in `preload/index.ts` and typed in `preload/index.d.ts`
+
+## Testing Conventions
+
+### Vitest (GUI)
+- Test files: `src/main/services/__tests__/*.test.ts`
+- Use `describe`/`it`/`expect` from vitest
+- Mock external modules with `vi.mock()`
+- Clear mocks in `beforeEach`
+
+### Coverage Thresholds
+- GUI Main Process: 60% (lines, functions, branches, statements)
+- GUI Renderer: 50%
+- Minions: 70% lines/functions, 60% branches
+
+### Test Structure
+```typescript
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+describe('ServiceName', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  describe('methodName', () => {
+    it('should do expected behavior', () => {
+      // Arrange
+      // Act
+      // Assert
+    })
+  })
+})
+```
+
+## Architecture Patterns
+
+### Electron Process Model
+```
+Main Process (Node.js)
+    ├── AgentService        # Agent lifecycle, worktrees, PRs
+    ├── TerminalService     # PTY management, Claude sessions
+    ├── ProjectService      # Multi-project workspace management
+    ├── ClaudeSessionInfoService  # Parse Claude JSONL files
+    ├── ClaudeConfigService # Import plugins from ~/.claude/
+    ├── PRPollingService    # GitHub PR status polling
+    ├── NotificationService # System notifications
+    ├── MinionsConfigService  # Read/write minions.json config
+    ├── SetupWizardService    # One-click setup wizard agent
+    └── HandoffApiService     # HTTP API for /handoff and /spawn-super (port 19234)
+         │
+         │ IPC (ipcMain.handle)
+         ▼
+Preload Script (contextBridge)
+         │
+         │ window.electronAPI
+         ▼
+Renderer Process (React)
+    ├── Dashboard           # Main view
+    ├── AgentView           # Agent details + terminal
+    ├── PlanApproval        # Super minion plan review
+    └── ImportedAgentsSettings  # Claude Code plugin imports UI
+```
+
+### Configuration Management
+
+The framework supports two configuration formats:
+
+| Format | Config File | Agent State | Detection |
+|--------|------------|-------------|-----------|
+| **New (v2.0)** | `minions.json` | `.minions/agents/*.json` | Preferred |
+| **Legacy (v1)** | `minions/config.json` | `.agent-info` | Fallback |
+
+**MinionsConfigService** handles reading/writing configuration with automatic format detection:
+- Checks `minions.json` first, falls back to `minions/config.json`
+- Provides migration utilities for legacy projects
+
+**SetupWizardService** manages the one-click setup experience:
+- Detects if a project needs setup or migration
+- Spawns a Claude agent to analyze the project and generate configuration
+- Parses wizard output to create `minions.json`
+- Optionally generates a project-specific CLAUDE.md
 
 ### Agent Lifecycle
 1. **Create Assignment** - User provides prompt, tool, model
@@ -164,6 +245,314 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 3. **Start Agent** - TerminalService spawns PTY with tool
 4. **Monitor** - JSONL parsing for state (Claude), pattern matching (others)
 5. **Teardown** - Clean up worktree when done
+
+### Terminal Modes
+
+| Mode | Description |
+|------|-------------|
+| **inherit** (default) | New agent branches from the source agent's current work (continues from same code state) |
+| **fresh** | New agent branches from main/master (starts with clean baseline) |
+
+**Auto-Detection of Branch Mode:**
+If `branchMode` is not specified in the API request, it is detected from the plan text:
+- Phrases like "clean start", "fresh start", "from scratch", "start fresh", or "clean slate" trigger `fresh` mode
+- All other cases default to `inherit` mode
+
+**Parent Context:**
+When a handoff agent is created, its prompt is automatically prefixed with context about the parent feature:
+```
+You are continuing work that was handed off from another agent.
+Parent feature branch: {parentBranchName}
+Parent work description: {parentPrompt}
+
+---
+
+{newAgentPlan}
+```
+
+This helps the new agent understand the broader context of the work.
+
+**Handoff API Service:**
+
+The `HandoffApiService` provides a local HTTP server for programmatic agent creation:
+
+- **Port**: `19234` (localhost only, bound to `127.0.0.1`)
+- **Endpoints**:
+  - `POST /api/handoff` - Create a handoff agent (single agent, inherits context)
+  - `POST /api/spawn-super` - Spawn super minions (batch, workflow-driven)
+  - `GET /api/health` - Health check
+
+**Handoff API Request Format:**
+```typescript
+interface HandoffApiRequest {
+  sourceAgentId: string      // ID of the agent initiating handoff
+  plan: string               // Work description/plan for new agent
+  branchMode?: 'inherit' | 'fresh'  // Optional, auto-detected from plan if omitted
+  shortName?: string         // Optional custom branch suffix
+}
+```
+
+**Handoff API Response:**
+```typescript
+interface HandoffApiResponse {
+  success: boolean
+  newAgentId?: string        // ID of the created agent (on success)
+  error?: string             // Error message (on failure)
+}
+```
+
+**Data Model:**
+
+The `handoffSource` field on `AgentInfo` tracks handoff lineage:
+```typescript
+interface HandoffSource {
+  agentId: string           // Source agent that initiated the handoff
+  branchMode: 'inherit' | 'fresh'
+  originalBranch: string    // Branch name of the source agent
+  handoffTimestamp: string  // ISO timestamp when handoff occurred
+}
+```
+
+**Settings:**
+
+Handoff behavior can be configured in Settings under "Agent Handoff":
+- **YOLO Mode Inheritance**: When enabled (default), child agents inherit the parent's YOLO mode setting
+
+**UI Indication:**
+- Handoff agents appear indented under their parent in the sidebar
+- A tree connector indicator shows the parent-child relationship
+- Hovering shows the full lineage chain
+
+**IPC Handler:**
+- `agents:handoff` - Create a new agent via handoff from an existing agent
+
+**Key Files:**
+- `HandoffApiService.ts` - HTTP server for `/handoff` and `/spawn-super` APIs
+- `AgentService.handoffAgent()` - Core handoff logic
+- `AgentService.spawnSuperMinion()` - Core super minion spawning logic
+
+### Super Minion Spawning
+
+Super minion spawning allows batch creation of workflow-driven agents from an existing agent. Unlike handoff (which continues related work with inherited context), super minions start fresh from main and follow structured workflows.
+
+**How to Trigger:**
+
+Use the `/super-handoff` skill within an agent session. The skill:
+1. Collects spawn details (plans, optional workflow IDs)
+2. Calls the Spawn Super API to create agents in parallel
+3. Reports results showing which agents were created
+
+**Key Differences from Handoff:**
+
+| Aspect | Handoff (`/api/handoff`) | Super Spawn (`/api/spawn-super`) |
+|--------|-------------------------|----------------------------------|
+| Branch mode | `inherit` or `fresh` | Always `fresh` (from main) |
+| Context | Parent context included in prompt | Minimal context (just the plan) |
+| Batch support | Single agent | Up to 10 agents per request |
+| Workflow | None (regular agent) | Workflow-driven (planning mode) |
+
+**Spawn Super API Request:**
+```typescript
+interface SpawnSuperApiRequest {
+  sourceAgentId: string         // ID of the agent initiating spawns
+  spawns: SpawnRequest[]        // Array of spawn requests (max 10)
+}
+
+interface SpawnRequest {
+  plan: string                  // Work description for the super minion
+  workflowId?: string           // Optional: specific workflow (auto-detected if omitted)
+  shortName?: string            // Optional: custom branch suffix
+}
+```
+
+**Spawn Super API Response:**
+```typescript
+interface SpawnSuperResponse {
+  success: boolean              // true if ALL spawns succeeded
+  partialSuccess: boolean       // true if SOME (but not all) succeeded
+  results: SpawnResult[]        // Per-spawn results
+  batchId: string               // Unique ID for this spawn batch
+  totalRequested: number
+  totalSucceeded: number
+  totalFailed: number
+}
+
+interface SpawnResult {
+  success: boolean
+  agentId?: string
+  workflowId?: string
+  error?: string
+}
+```
+
+**Workflow Auto-Detection:**
+If `workflowId` is omitted, it is detected from the plan text:
+- 2+ debug keywords (debug, bug, fix, investigate, root cause, crash, broken, failing, error, issue) triggers `debug-workflow`
+- Otherwise defaults to `default` (Standard Workflow)
+
+**Data Model:**
+
+The `spawnSource` field on `AgentInfo` tracks spawn lineage:
+```typescript
+interface SpawnSource {
+  parentAgentId: string         // Agent that initiated the spawn
+  spawnTimestamp: string        // ISO timestamp
+  workflowId: string            // Which workflow was selected
+  batchId?: string              // For tracking spawns from same request
+}
+```
+
+**UI Events:**
+- `agents:superSpawned` - Notifies renderer when spawns complete (includes batchId and results)
+
+### Claude Code Config Import
+
+The framework can import agents and skills from Claude Code plugins to use as workflow subagent types. This allows reusing Claude Code's plugin ecosystem within the Agent Framework.
+
+**What it does:**
+- Discovers installed Claude Code plugins from `~/.claude/plugins/cache/`
+- Extracts agent definitions (`.md` files in `agents/` directories)
+- Extracts skill definitions (`SKILL.md` files in `skills/` directories)
+- Makes them available as subagent types in workflows
+- Detects naming conflicts with built-in agents and auto-renames
+
+**How it works:**
+
+1. **ClaudeConfigService** scans the Claude Code plugins cache directory
+2. For each plugin, it reads the plugin manifest (`plugin.json`) and discovers agent/skill files
+3. Agent/skill `.md` files are parsed for YAML frontmatter (name, description) and prompt content
+4. File watching via `chokidar` detects plugin changes and auto-refreshes
+5. Results are cached and sent to the renderer via IPC events
+
+**Plugin Discovery Path:**
+```
+~/.claude/
+└── plugins/
+    └── cache/
+        └── {marketplace}/          # e.g., 'anthropic', 'community'
+            └── {plugin-name}/
+                └── {version}/      # Uses latest version
+                    └── .claude-plugin/
+                        ├── plugin.json
+                        ├── agents/
+                        │   └── *.md
+                        └── skills/
+                            └── {skill-name}/
+                                └── SKILL.md
+```
+
+**Configuration (ClaudeConfigSettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `enabled` | boolean | `true` | Master toggle for imports |
+| `enabledPlugins` | string[] | `[]` | Plugin IDs to enable (empty = all) |
+| `disabledAgentIds` | string[] | `[]` | Specific agent IDs to skip |
+| `autoRefresh` | boolean | `true` | Watch for config changes |
+| `refreshIntervalMs` | number | `30000` | Polling interval (ms) |
+
+**IPC Handlers:**
+- `claudeConfig:getScanResult` - Get cached scan result
+- `claudeConfig:refresh` - Force a rescan
+- `claudeConfig:getSettings` - Get current settings
+- `claudeConfig:setEnabled` - Update settings
+- `claudeConfig:updated` (event) - Notifies renderer of changes
+
+**Conflict Resolution:**
+When an imported agent name conflicts with a built-in agent (e.g., `test`, `review`, `implement`), the imported agent is automatically renamed with an `-imported` suffix to avoid collisions.
+
+**UI Access:**
+Skills and imported agents are accessible via the dedicated **Skills** page in the sidebar. Users can:
+- View all skills grouped by source (Claude Plugins, Global Commands/Agents, Project Commands/Agents)
+- Enable/disable individual skills
+- See override relationships between project and global skills
+- Manually trigger a refresh
+
+### Skills Library
+
+The Skills Library scans and discovers commands/agents from standard Claude Code locations.
+
+**Supported Sources:**
+
+| Source | Path | Format |
+|--------|------|--------|
+| Global Commands | `~/.claude/commands/` | `{name}.md` with optional YAML frontmatter |
+| Global Agents | `~/.claude/agents/` | `{name}.md` with optional YAML frontmatter |
+| Project Commands | `{project}/.claude/commands/` | Same format |
+| Project Agents | `{project}/.claude/agents/` | Same format |
+| Claude Code Plugins | `~/.claude/plugins/cache/` | Plugin manifest + agents folders |
+
+**Skill File Format:**
+```markdown
+---
+name: My Custom Skill
+description: What this skill does
+model: opus
+---
+
+Instructions for Claude when using this skill...
+```
+
+**Override Behavior:**
+Project-local skills override global skills with the same name. This allows projects to customize skills for their specific needs while maintaining access to global skills.
+
+**Configuration (SkillsLibrarySettings):**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `commandsEnabled` | boolean | `true` | Enable ~/.claude/commands/ scanning |
+| `agentsEnabled` | boolean | `true` | Enable ~/.claude/agents/ scanning |
+| `projectSkillsEnabled` | boolean | `true` | Enable project-local commands/agents |
+| `disabledSkillIds` | string[] | `[]` | Specific skill IDs to disable |
+
+**Key Services:**
+- **SkillsLibraryService**: Scans global and project commands/agents directories
+- **UnifiedSkillsService**: Combines all skill sources with override resolution
+- **WorkflowService**: Consumes skills as subagent types for workflows
+
+**IPC Handlers:**
+- `skillsLibrary:scan` - Scan commands/agents directories
+- `skillsLibrary:refresh` - Force a rescan
+- `unifiedSkills:getScanResult` - Get all skills from all sources
+- `unifiedSkills:setSkillEnabled` - Enable/disable a specific skill
+
+## CI/CD Pipeline
+
+GitHub Actions workflow (`.github/workflows/ci.yml`):
+
+1. **detect-changes**: Determines which packages changed
+2. **lint**: TypeScript type checking
+3. **test-gui**: Runs GUI unit tests (macOS runner for node-pty)
+4. **test-minions**: Runs minions package tests
+5. **build-gui**: Smoke test the production build
+   - **Purpose**: Smoke test the production build
+   - **Runner**: ubuntu-latest (Linux/x64)
+   - **Timeout**: 10 minutes
+   - **Dependencies**: Requires lint, test-gui, test-minions to pass or be skipped
+   - **Key steps**:
+     1. Install dependencies: `npm ci`
+     2. Build: `npm run build -w gui`
+     3. Verify artifacts created (main, preload, renderer bundles)
+     4. Upload artifacts (7-day retention)
+6. **test-e2e**: Runs E2E tests against the built Electron app (smart detection)
+   - **Purpose**: Verify full application functionality
+   - **Runner**: macos-latest (required for node-pty and Electron)
+   - **Timeout**: 30 minutes
+   - **Trigger**: Only runs when GUI source code changes (not docs or tests)
+   - **Selective Testing**: Maps changed files to relevant E2E tests:
+     - `main/index.ts` → `app-lifecycle.e2e.ts`, `ipc-communication.e2e.ts`
+     - `services/TerminalService.ts` → `terminal.e2e.ts`
+     - `services/AgentService.ts` → `user-flows.e2e.ts`
+     - `preload/*` → `ipc-communication.e2e.ts`
+     - `renderer/*` → `user-flows.e2e.ts`
+   - **Key steps**:
+     1. Check if E2E tests are needed based on changed files
+     2. Install dependencies and rebuild native modules
+     3. Download build artifacts from build-gui job
+     4. Run selective E2E tests (or all if infrastructure changed)
+     5. Upload test results and HTML report
+
+CI uses intelligent test selection - only runs tests related to changed files.
 
 ### Terminal Modes
 
@@ -204,11 +593,25 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 
 | File | Purpose |
 |------|---------|
-| `gui/src/main/index.ts` | Entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs |
-| `gui/src/main/services/TerminalService.ts` | PTY management, tmux |
-| `gui/src/main/services/HandoffApiService.ts` | HTTP API for handoff |
-| `gui/src/preload/index.ts` | IPC bridge definitions |
+| `gui/src/main/index.ts` | Electron entry point, IPC handlers |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
+| `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
+| `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
+| `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff and /spawn-super APIs (localhost:19234) |
+| `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
+| `gui/resources/minions/rules/super-handoff.md` | Super handoff skill definition for spawning super minions |
+| `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
+| `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
+| `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
+| `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
+| `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
+| `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
+| `gui/src/main/services/SkillsLibraryService.ts` | Scan global and project-local commands/agents |
+| `gui/src/main/services/UnifiedSkillsService.ts` | Combine all skill sources with override resolution |
+| `gui/src/main/services/types/MinionsConfig.ts` | TypeScript types for config schema |
+| `gui/src/main/services/types/ClaudeConfigTypes.ts` | TypeScript types for Claude config import |
+| `gui/src/main/services/types/SkillsLibraryTypes.ts` | TypeScript types for Skills Library |
+| `gui/src/preload/index.ts` | IPC bridge (all renderer APIs) |
 | `gui/src/preload/index.d.ts` | IPC type definitions |
 | `gui/src/shared/types/settings.ts` | Settings types (EditorType, etc.) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |

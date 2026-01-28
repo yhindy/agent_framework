@@ -335,6 +335,69 @@ describe('WorkflowService', () => {
     })
   })
 
+  describe('detectWorkflowFromPlan', () => {
+    it('should return default workflow with high confidence for normal text', () => {
+      const result = service.detectWorkflowFromPlan('Implement the user authentication feature')
+      expect(result.workflowId).toBe('default')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should return debug workflow with high confidence for 2+ debug keywords', () => {
+      const result = service.detectWorkflowFromPlan('Debug the bug in the login flow')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should return default workflow with low confidence for single debug keyword', () => {
+      const result = service.detectWorkflowFromPlan('Add error handling to the form')
+      expect(result.workflowId).toBe('default')
+      expect(result.confidence).toBe('low')
+    })
+
+    it('should detect investigate + bug as debug workflow', () => {
+      const result = service.detectWorkflowFromPlan('Investigate the bug causing crashes')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should detect root cause + error as debug workflow', () => {
+      const result = service.detectWorkflowFromPlan('Find the root cause of this error')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should be case insensitive', () => {
+      const result = service.detectWorkflowFromPlan('DEBUG the BUG in production')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should detect fix bug pattern', () => {
+      const result = service.detectWorkflowFromPlan('Fix the bug in the authentication')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should detect crash + failing', () => {
+      const result = service.detectWorkflowFromPlan('The app keeps crashing and tests are failing')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should detect broken + error', () => {
+      const result = service.detectWorkflowFromPlan('The broken endpoint returns an error')
+      expect(result.workflowId).toBe('debug-workflow')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should not match partial words', () => {
+      // 'debugging' shouldn't match 'debug' word boundary, so 0 matches = default with high confidence
+      const result = service.detectWorkflowFromPlan('Create a debugging utility')
+      expect(result.workflowId).toBe('default')
+      expect(result.confidence).toBe('high') // 0 matches = default with high confidence
+    })
+  })
+
   describe('generateRulesMarkdown', () => {
     it('should generate markdown for a workflow', () => {
       const workflow = service.createWorkflow('Test Workflow', 'A test description')

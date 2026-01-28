@@ -43,6 +43,20 @@ const api = {
     chrome?: boolean
   }) => ipcRenderer.invoke('agents:handoff', request),
 
+  // Spawn Super Minions APIs
+  spawnSuperMinions: (
+    projectPath: string,
+    spawns: { plan: string; workflowId?: string; shortName?: string }[],
+    sourceAgentId: string
+  ) => ipcRenderer.invoke('agents:spawnSuper', projectPath, spawns, sourceAgentId),
+
+  // Event listener for spawn completion
+  onSuperMinionsSpawned: (callback: (data: { batchId: string; results: any[] }) => void) => {
+    const subscription = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('agents:superSpawned', subscription)
+    return () => ipcRenderer.removeListener('agents:superSpawned', subscription)
+  },
+
   // Terminal APIs
   sendTerminalInput: (agentId: string, data: string) =>
     ipcRenderer.send('terminal:input', agentId, data),

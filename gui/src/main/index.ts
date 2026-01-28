@@ -17,6 +17,7 @@ import { TeleportMetadataService } from './services/TeleportMetadataService'
 import { WorkflowService } from './services/WorkflowService'
 import { createLogger } from './services/logger'
 import type { WorkflowConfig, WorkflowStep } from './services/types/WorkflowTypes'
+import type { SpawnResult } from './services/types/ProjectConfig'
 import { SetupWizardService } from './services/SetupWizardService'
 import { MinionsConfigService } from './services/MinionsConfigService'
 import { ClaudeConfigService } from './services/ClaudeConfigService'
@@ -271,12 +272,13 @@ function initializeServices(): void {
   const unifiedSkillsService = new UnifiedSkillsService(claudeConfigService, skillsLibraryService)
   unifiedSkillsService.setWindow(mainWindow)
 
-  // Create HandoffApiService for Claude Code /handoff command
+  // Create HandoffApiService for Claude Code /handoff and /spawn-super commands
   const handoffApiService = new HandoffApiService()
   handoffApiService.setAgentService(agentService)
   handoffApiService.setTerminalService(terminalService)
   handoffApiService.setProjectService(projectService)
   handoffApiService.setWindow(mainWindow)
+  // Note: WorkflowService will be set after services object is created (below)
 
   services = {
     project: projectService,
@@ -301,6 +303,9 @@ function initializeServices(): void {
 
   // Wire up WorkflowService to TerminalService for dynamic rules generation
   terminalService.setWorkflowService(services.workflow)
+
+  // Wire up WorkflowService to HandoffApiService for workflow detection
+  handoffApiService.setWorkflowService(services.workflow)
 
   // Wire up ClaudeConfigService to WorkflowService for imported agents
   services.workflow.setClaudeConfigService(services.claudeConfig)
@@ -444,6 +449,43 @@ function setupIPC(): void {
     }
   }
 
+  // Helper function to auto-start an agent after worktree setup
+  // This encapsulates the common pattern of waiting 2 seconds then starting the agent
+  interface AutoStartOptions {
+    projectPath: string
+    agentId: string
+    tool: string
+    mode: string
+    prompt?: string
+    model?: string
+    yolo?: boolean
+    chrome?: boolean
+    teleportSessionId?: string
+    delayMs?: number
+  }
+
+  const scheduleAgentAutoStart = (options: AutoStartOptions): void => {
+    const delay = options.delayMs ?? 2000
+    setTimeout(async () => {
+      try {
+        await services!.terminal.startAgent(
+          options.projectPath,
+          options.agentId,
+          options.tool,
+          options.mode,
+          options.prompt,
+          options.model,
+          options.yolo ?? false,
+          options.chrome ?? true,
+          options.teleportSessionId
+        )
+        mainWindow?.webContents.send('agents:updated')
+      } catch (error) {
+        log.error(`Failed to auto-start agent ${options.agentId}`, error)
+      }
+    }, delay)
+  }
+
   // Helper function to find which project an assignment belongs to
   const findProjectForAssignment = async (assignmentId: string): Promise<string> => {
     const activeProjectPaths = services!.project.getActiveProjects().map(p => p.path)
@@ -517,23 +559,15 @@ function setupIPC(): void {
         const result = await services!.agent.ensureBaseBranchAgentWithStartup(current.path)
         // Auto-start Claude for newly created base agents
         if (result.shouldStartClaude && result.agentInfo.prompt) {
-          setTimeout(async () => {
-            try {
-              await services!.terminal.startAgent(
-                current.path,
-                result.agentInfo.agentId,
-                result.agentInfo.tool || 'claude',
-                result.agentInfo.mode || 'dev',
-                result.agentInfo.prompt,
-                result.agentInfo.model,
-                false,
-                result.agentInfo.chrome !== false
-              )
-              mainWindow?.webContents.send('agents:updated')
-            } catch (error) {
-              log.error('Failed to auto-start base agent Claude on project switch', error)
-            }
-          }, 2000)
+          scheduleAgentAutoStart({
+            projectPath: current.path,
+            agentId: result.agentInfo.agentId,
+            tool: result.agentInfo.tool || 'claude',
+            mode: result.agentInfo.mode || 'dev',
+            prompt: result.agentInfo.prompt,
+            model: result.agentInfo.model,
+            chrome: result.agentInfo.chrome !== false
+          })
         }
       } catch (error) {
         log.error('Error ensuring base branch agent on project switch', error)
@@ -665,7 +699,11 @@ function setupIPC(): void {
 
   ipcMain.handle('agents:getSuperDetails', async (_event, agentId: string) => {
     const projectPath = await findProjectForAgent(agentId)
-    return services!.agent.getSuperAgentDetails(projectPath, agentId)
+    const details = await services!.agent.getSuperAgentDetails(projectPath, agentId)
+    if (!details) return details
+
+    const activeTerminals = services!.terminal.getActiveTerminals()
+    return { ...details, terminalPid: activeTerminals.get(agentId) ?? null }
   })
 
   // Ensure an agent is running (start if not active)
@@ -784,27 +822,103 @@ function setupIPC(): void {
 
       // Auto-start the new agent if it has a prompt
       if (result.newAgent.prompt) {
-        setTimeout(async () => {
-          try {
-            await services!.terminal.startAgent(
-              projectPath,
-              result.newAgent!.agentId,
-              result.newAgent!.tool,
-              result.newAgent!.mode,
-              result.newAgent!.prompt,
-              result.newAgent!.model,
-              result.newAgent!.yolo,
-              result.newAgent!.chrome !== false
-            )
-            mainWindow?.webContents.send('agents:updated')
-          } catch (error) {
-            log.error('Failed to auto-start handoff agent', error)
-          }
-        }, 2000) // Wait for worktree setup
+        scheduleAgentAutoStart({
+          projectPath,
+          agentId: result.newAgent.agentId,
+          tool: result.newAgent.tool,
+          mode: result.newAgent.mode,
+          prompt: result.newAgent.prompt,
+          model: result.newAgent.model,
+          yolo: result.newAgent.yolo,
+          chrome: result.newAgent.chrome !== false
+        })
       }
     }
 
     return result
+  })
+
+  // Spawn super minions handler - create multiple super minions in parallel
+  ipcMain.handle('agents:spawnSuper', async (
+    _event,
+    projectPath: string,
+    spawns: { plan: string; workflowId?: string; shortName?: string }[],
+    sourceAgentId: string
+  ) => {
+    const batchId = `batch-${Date.now()}`
+
+    log.info('Spawn super minions via IPC', {
+      batchId,
+      sourceAgentId,
+      spawnCount: spawns.length
+    })
+
+    // Process spawns in parallel
+    const spawnPromises = spawns.map(async (spawn) => {
+      // Auto-detect workflow if not specified
+      const detectedWorkflow = spawn.workflowId
+        ? { workflowId: spawn.workflowId, confidence: 'high' as const }
+        : services!.workflow.detectWorkflowFromPlan(spawn.plan)
+
+      const workflowId = detectedWorkflow.workflowId
+
+      return services!.agent.spawnSuperMinion(
+        projectPath,
+        spawn.plan,
+        workflowId,
+        sourceAgentId,
+        batchId,
+        spawn.shortName
+      )
+    })
+
+    const settledResults = await Promise.allSettled(spawnPromises)
+    const results: SpawnResult[] = settledResults.map((settled) => {
+      if (settled.status === 'fulfilled') {
+        return settled.value
+      } else {
+        return {
+          success: false,
+          error: settled.reason?.message || 'Unknown error'
+        }
+      }
+    })
+
+    const totalSucceeded = results.filter(r => r.success).length
+    const totalFailed = results.filter(r => !r.success).length
+
+    // Trigger UI updates
+    mainWindow?.webContents.send('agents:updated')
+    mainWindow?.webContents.send('assignments:updated')
+    mainWindow?.webContents.send('agents:superSpawned', { batchId, results })
+
+    // Auto-start successfully spawned agents
+    // Read spawned agent info to inherit yolo/chrome settings
+    results.forEach((result, i) => {
+      if (result.success && result.agentId) {
+        const spawnedWorktree = join(dirname(projectPath), result.agentId)
+        const spawnedInfo = services!.agent.readAgentInfo(spawnedWorktree)
+        scheduleAgentAutoStart({
+          projectPath,
+          agentId: result.agentId,
+          tool: 'claude',
+          mode: 'planning',
+          prompt: spawns[i].plan,
+          yolo: spawnedInfo?.yolo ?? false,
+          chrome: spawnedInfo?.chrome ?? true
+        })
+      }
+    })
+
+    return {
+      success: totalFailed === 0,
+      partialSuccess: totalSucceeded > 0 && totalFailed > 0,
+      results,
+      batchId,
+      totalRequested: spawns.length,
+      totalSucceeded,
+      totalFailed
+    }
   })
 
   // Terminal handlers
@@ -867,62 +981,56 @@ function setupIPC(): void {
       mainWindow?.webContents.send('assignments:updated')
     }, 1000)
     
-    // Auto-start agent in planning mode if prompt is provided
+    // Auto-start agent if prompt is provided and tool can be auto-started
     // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
-    if (assignment.prompt && assignment.tool !== 'cursor' && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
-      setTimeout(async () => {
-        try {
-          await services!.terminal.startAgent(
-            currentProject.path,
-            result.agentId,  // Use the auto-generated agentId from result
-            assignment.tool,
-            assignment.mode,
-            assignment.prompt,
-            assignment.model,
-            assignment.yolo,
-            assignment.chrome
-          )
-          mainWindow?.webContents.send('agents:updated')
-        } catch (error) {
-          log.error('Failed to auto-start agent', error)
-        }
-      }, 2000) // Wait 2 seconds for worktree to be fully set up
+    const canAutoStart = assignment.prompt &&
+      assignment.tool !== 'cursor' &&
+      (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')
+
+    if (canAutoStart) {
+      scheduleAgentAutoStart({
+        projectPath: currentProject.path,
+        agentId: result.agentId,
+        tool: assignment.tool,
+        mode: assignment.mode,
+        prompt: assignment.prompt,
+        model: assignment.model,
+        yolo: assignment.yolo,
+        chrome: assignment.chrome
+      })
     }
-    
+
     return result
   })
 
   ipcMain.handle('assignments:createForProject', async (_event, projectPath: string, assignment: any) => {
     const result = await services!.agent.createAssignment(projectPath, assignment)
-    
+
     // Trigger updates after worktree is created
     setTimeout(() => {
       mainWindow?.webContents.send('agents:updated')
       mainWindow?.webContents.send('assignments:updated')
     }, 1000)
-    
-    // Auto-start agent in planning mode if prompt is provided
+
+    // Auto-start agent if prompt is provided and tool can be auto-started
     // Note: 'cursor' tool cannot be auto-started - it requires manual "Open in Cursor"
-    if (assignment.prompt && assignment.tool !== 'cursor' && (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')) {
-      setTimeout(async () => {
-        try {
-          await services!.terminal.startAgent(
-            projectPath,
-            result.agentId,  // Use the auto-generated agentId from result
-            assignment.tool,
-            assignment.mode,
-            assignment.prompt,
-            assignment.model,
-            assignment.yolo,
-            assignment.chrome
-          )
-          mainWindow?.webContents.send('agents:updated')
-        } catch (error) {
-          log.error('Failed to auto-start agent', error)
-        }
-      }, 2000) // Wait 2 seconds for worktree to be fully set up
+    const canAutoStart = assignment.prompt &&
+      assignment.tool !== 'cursor' &&
+      (assignment.mode === 'planning' || assignment.mode === 'dev' || assignment.tool === 'cursor-cli')
+
+    if (canAutoStart) {
+      scheduleAgentAutoStart({
+        projectPath,
+        agentId: result.agentId,
+        tool: assignment.tool,
+        mode: assignment.mode,
+        prompt: assignment.prompt,
+        model: assignment.model,
+        yolo: assignment.yolo,
+        chrome: assignment.chrome
+      })
     }
-    
+
     return result
   })
 
@@ -950,23 +1058,16 @@ function setupIPC(): void {
 
     // Auto-start super minion in planning mode
     if (assignment.prompt && assignment.tool !== 'cursor') {
-      setTimeout(async () => {
-        try {
-          await services!.terminal.startAgent(
-            projectPath,
-            result.agentId,
-            assignment.tool,
-            'planning',
-            assignment.prompt,
-            assignment.model,
-            assignment.yolo || false,
-            assignment.chrome !== false
-          )
-          mainWindow?.webContents.send('agents:updated')
-        } catch (error) {
-          log.error('Failed to auto-start super minion', error)
-        }
-      }, 2000)
+      scheduleAgentAutoStart({
+        projectPath,
+        agentId: result.agentId,
+        tool: assignment.tool,
+        mode: 'planning',
+        prompt: assignment.prompt,
+        model: assignment.model,
+        yolo: assignment.yolo,
+        chrome: assignment.chrome !== false
+      })
     }
 
     return result
@@ -1026,32 +1127,14 @@ function setupIPC(): void {
       }, 1000)
 
       // 4. Start the agent with the teleportSessionId parameter
-      setTimeout(async () => {
-        try {
-          await services!.terminal.startAgent(
-            resolvedProjectPath,
-            result.agentId,
-            'claude',
-            'dev',
-            undefined,  // No prompt - teleporting existing session
-            undefined,  // No model override - use session's model
-            false,      // yolo
-            true,       // chrome
-            parsedSessionId  // Pass the validated cloud session ID for teleporting
-          )
-          mainWindow?.webContents.send('agents:updated')
-          log.debug('[IPC] Started teleported agent:', result.agentId)
-
-          // 5. Branch detection is now handled by late detection in TerminalService polling
-          // The initial JSONL is usually empty for teleported sessions, so we rely on
-          // late detection after the first user interaction populates the file
-          log.debug('[IPC] Branch detection will happen via late detection in polling loop')
-
-        } catch (error) {
-          log.error('Failed to start teleported agent', error)
-          throw error
-        }
-      }, 2000) // Wait 2 seconds for worktree to be fully set up
+      // Note: Branch detection happens via late detection in TerminalService polling
+      scheduleAgentAutoStart({
+        projectPath: resolvedProjectPath,
+        agentId: result.agentId,
+        tool: 'claude',
+        mode: 'dev',
+        teleportSessionId: parsedSessionId
+      })
 
       return { agentId: result.agentId }
     } catch (error: any) {

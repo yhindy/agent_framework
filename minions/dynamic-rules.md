@@ -1,48 +1,50 @@
-# Workflow: Standard Workflow
+# Workflow: Debug Workflow
 
-> Standard workflow with 5 phases: acceptance criteria, design, review, implement, validate
+> Systematic debugging: reproduce, investigate, fix, verify
 
 ## Steps
 
 Execute steps in order. Wait for each step to complete before starting the next.
 
-### Step 1: Acceptance Criteria
+### Step 1: Reproduce & Understand
 
-**Agent**: Acceptance Criteria
+**Execution**: Parallel (3 agents)
 
-Propose and get human approval for acceptance criteria before implementation
+Run these agents simultaneously:
 
-### Step 2: Engineering Design
+- **Explorer**: Find the code related to the bug and understand the current behavior
+- **Debugger**: Reproduce the bug and document the steps to trigger it
+- **Acceptance Criteria**: Propose and get human approval for acceptance criteria before implementation
 
-**Agent**: Planner
-
-Architecture and design planning - creates technical specifications and implementation plans
-
-### Step 3: Design Review
+### Step 2: Root Cause Analysis
 
 **Execution**: Parallel (2 agents)
 
 Run these agents simultaneously:
 
-- **General Purpose**: Act as a **senior engineer**. Review the engineering design for technical correctness, best practices, and architectural soundness.
-- **General Purpose**: Act as a **criteria validator**. Verify the design addresses every acceptance criterion and requirements.
+- **Debugger**: Identify the root cause of the bug using logging, breakpoints, and code analysis
+- **General Purpose**: Write a test that catches the bug. It should fail because the bug still exists.
 
-### Step 4: Implementation
+### Step 3: Fix Implementation
 
 **Agent**: General Purpose
 
-Versatile agent for implementation, review, testing, and documentation tasks
+Implement the fix with minimal changes. Write a regression test first.
 
-### Step 5: Validation
+### Step 4: Verification
 
-**Execution**: Parallel (4 agents)
+**Execution**: Parallel (2 agents)
 
 Run these agents simultaneously:
 
-- **Simplifier**: Code simplification - refactors for clarity, removes duplication, improves maintainability
-- **General Purpose**: Run all tests and verify they pass. Report any failures.
-- **General Purpose**: Act as an **acceptance criteria checker**. Verify each acceptance criterion is satisfied by the implementation.
-- **General Purpose**: Update documentation as needed based on the implementation changes.
+- **General Purpose**: Run all tests and verify the fix works
+- **General Purpose**: Review the fix for correctness and potential side effects
+
+### Step 5: Simplifier
+
+**Agent**: Simplifier
+
+Code simplification - refactors for clarity, removes duplication, improves maintainability
 
 ---
 
@@ -113,5 +115,6 @@ You are an Acceptance Criteria agent. Your job is to ensure alignment with the u
 - **Security Review** (`command:security-review`): Review this code for security vulnerabilities:
 - **Send It** (`command:send-it`): Commit your changes, make a PR if one doesnt exist already, then Monitor CI every 60 seconds to see the state of the tests that we have and fix any failures. Merge when CI is green.
 - **Simplify** (`command:simplify`): Use the code-simplifier:code-simplifier agent (not just code-simplifier) to simplify the code that has been written
+- **Super Handoff** (`command:super-handoff`): Spawn multiple super minions (workflow-driven agents) to handle tasks in parallel. The user has requested: $ARGUMENTS Follow these steps carefully to spawn super minions:
 - **bold-frontend-designer** (`agent:bold-frontend-designer`): Use this agent when the user asks about frontend design, UI/UX decisions, component layouts, visual styling, or wants to improve the visual appeal of their interface. This includes requests about making designs more engaging, improving visual hierarchy, spacing decisions, color choices, typography, or when the user mentions their UI looks generic or 'AI-generated'. Examples:\\n\\n<example>\\nContext: User is working on a React dashboard component and wants it to look better.\\nuser: \"This dashboard looks pretty bland, can you make it more visually interesting?\"\\nassistant: \"I'll use the bold-frontend-designer agent to help create a more visually striking design.\"\\n<commentary>\\nSince the user is asking about improving visual design and making something less bland, use the bold-frontend-designer agent which specializes in creating bold, intentional designs rather than generic layouts.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User is building a landing page and asking about layout.\\nuser: \"How should I arrange the hero section and feature cards on this page?\"\\nassistant: \"Let me bring in the bold-frontend-designer agent to help with the spatial arrangement and visual hierarchy.\"\\n<commentary>\\nThe user is asking about page layout and arrangement, which is a core frontend design question that benefits from intentional spatial thinking.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User just created a basic form component.\\nuser: \"I made this form but it looks really basic and uninspired\"\\nassistant: \"I'll use the bold-frontend-designer agent to transform this into something more visually compelling.\"\\n<commentary>\\nThe user explicitly mentions their design looks basic/uninspired, which is exactly when the bold-frontend-designer should be engaged to elevate the visual design.\\n</commentary>\\n</example>
 - **debugger** (`agent:debugger`): Use this agent when the user reports a bug, unexpected behavior, or asks Claude to 'debug' something. This agent excels at systematic hypothesis generation, adding strategic instrumentation/logging, and methodically narrowing down root causes. It should be invoked when there's a mystery to solve - when code isn't behaving as expected and the cause is unclear.\\n\\nExamples:\\n\\n<example>\\nContext: User reports that their function is returning unexpected values.\\nuser: \"Hey, there's a bug in the calculateTotal function - it's returning NaN sometimes but I can't figure out why\"\\nassistant: \"This sounds like a debugging task. Let me use the debugger agent to systematically investigate why calculateTotal is returning NaN.\"\\n<Task tool invocation to launch debugger agent>\\n</example>\\n\\n<example>\\nContext: User encounters an intermittent failure in their application.\\nuser: \"Can you debug this? The API endpoint works sometimes but randomly returns 500 errors\"\\nassistant: \"I'll launch the debugger agent to investigate this intermittent 500 error. This agent will generate hypotheses and add instrumentation to identify the root cause.\"\\n<Task tool invocation to launch debugger agent>\\n</example>\\n\\n<example>\\nContext: User is confused about unexpected behavior.\\nuser: \"Debug this for me - the user session is getting cleared but I have no idea what's causing it\"\\nassistant: \"Let me bring in the debugger agent to methodically trace through the session handling and identify what's causing the unexpected clearing.\"\\n<Task tool invocation to launch debugger agent>\\n</example>
