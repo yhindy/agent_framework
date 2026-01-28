@@ -86,4 +86,28 @@ describe('AgentHeader', () => {
       expect(screen.getByTestId('session-info')).toBeInTheDocument()
     })
   })
+
+  describe('working state chip', () => {
+    it('shows Working chip when workingState is working', () => {
+      render(<AgentHeader {...baseProps} workingState="working" />)
+      expect(screen.getByText('Working')).toBeInTheDocument()
+    })
+
+    it('shows Waiting chip when workingState is waiting', () => {
+      render(<AgentHeader {...baseProps} workingState="waiting" />)
+      expect(screen.getByText('Waiting')).toBeInTheDocument()
+    })
+
+    it('hides chip when workingState is unknown', () => {
+      render(<AgentHeader {...baseProps} workingState="unknown" />)
+      expect(screen.queryByText('Working')).not.toBeInTheDocument()
+      expect(screen.queryByText('Waiting')).not.toBeInTheDocument()
+    })
+
+    it('hides chip when workingState is undefined', () => {
+      render(<AgentHeader {...baseProps} />)
+      expect(screen.queryByText('Working')).not.toBeInTheDocument()
+      expect(screen.queryByText('Waiting')).not.toBeInTheDocument()
+    })
+  })
 })

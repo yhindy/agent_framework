@@ -3,7 +3,7 @@ import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
-import { filterTerminalQueryResponses } from '../utils/terminalOutputFilter'
+import { createStatefulFilter, StatefulFilter } from '../utils/terminalOutputFilter'
 import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface TerminalProps {
@@ -21,8 +21,20 @@ const REPLAY_BATCH_SIZE = 100 // Number of chunks to batch together during repla
 // Cache terminal OUTPUT (not XTerm instances - they can't be re-attached to DOM)
 const outputCache = new Map<string, string[]>()
 
+// Per-agent stateful filters to handle escape sequences split across chunks
+const agentFilters = new Map<string, StatefulFilter>()
+
 // Track the currently active terminal for live output
 let activeTerminal: { agentId: string; terminal: XTerm } | null = null
+
+/**
+ * Clean up cached data for a specific agent.
+ * Call this when an agent is deleted to prevent memory leaks.
+ */
+export function cleanupAgentTerminalCache(agentId: string): void {
+  outputCache.delete(agentId)
+  agentFilters.delete(agentId)
+}
 
 // Helper function to consolidate many small chunks into fewer large ones
 function consolidateCache(agentId: string) {
@@ -50,32 +62,34 @@ let globalListenerInitialized = false
 function initGlobalOutputListener() {
   if (globalListenerInitialized) return
   globalListenerInitialized = true
-  
-  window.electronAPI.onTerminalOutput((id, data) => {
-    // Filter terminal query responses before caching to prevent garbage on replay.
-    // These are PTY responses (DA1, DA2, OSC color) that xterm.js processes live
-    // but appear as visible text when replayed from cache.
-    const filteredData = filterTerminalQueryResponses(data)
 
-    // Always cache filtered output for every agent
-    if (!outputCache.has(id)) {
-      outputCache.set(id, [])
+  window.electronAPI.onTerminalOutput((id, data) => {
+    // Get or create stateful filter for this agent
+    let filter = agentFilters.get(id)
+    if (!filter) {
+      filter = createStatefulFilter()
+      agentFilters.set(id, filter)
+    }
+
+    // Filter PTY query responses before caching (they appear as garbage on replay)
+    const filteredData = filter.process(data)
+
+    // Cache filtered output for every agent
+    let cache = outputCache.get(id)
+    if (!cache) {
+      cache = []
+      outputCache.set(id, cache)
     }
     if (filteredData) {
-      outputCache.get(id)!.push(filteredData)
+      cache.push(filteredData)
     }
 
-    // Trim cache if it exceeds limits
     trimCache(id)
-
-    // Periodically consolidate chunks to prevent array fragmentation
-    const cache = outputCache.get(id)!
     if (cache.length >= CONSOLIDATION_THRESHOLD) {
       consolidateCache(id)
     }
 
-    // If this agent's terminal is currently active, write to it immediately
-    // Use original data for live display so xterm.js can process query responses
+    // Write original data to active terminal (xterm.js processes query responses live)
     if (activeTerminal && activeTerminal.agentId === id) {
       activeTerminal.terminal.write(data)
     }
@@ -130,12 +144,9 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
   )
 
   useEffect(() => {
-    // Initialize global listener on first mount
     initGlobalOutputListener()
-    
     if (!terminalRef.current) return
 
-    // Always create a fresh terminal (XTerm can't be re-attached to a new DOM element)
     const terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: 'block',
@@ -169,8 +180,7 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    
-    // Track if we've been disposed (must be declared before async operations)
+
     let isDisposed = false
     const isDisposedRef = { current: false }
 
@@ -183,43 +193,42 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
       (data) => window.electronAPI.sendTerminalInput(agentId, data),
       isDisposedRef
     )
-    
+
     // Store the container element reference for use in RAF callback
     const containerElement = terminalRef.current
-    
-    // Defer terminal.open() to next frame to prevent React StrictMode issues
-    // StrictMode unmounts immediately after mount, and xterm's internal async operations
-    // from open() would fire on a disposed terminal causing "dimensions" errors
-    const rafId = requestAnimationFrame(() => {
+
+    // Helper to fit terminal and notify main process of size change
+    function fitAndResize(): void {
       if (isDisposed) return
-      
-      terminal.open(containerElement)
-      
       try {
         fitAddon.fit()
-      } catch (err) {
-        // Ignore fit errors on disposed terminal
+        if (terminal.rows && terminal.cols) {
+          window.electronAPI.resizeTerminal(agentId, terminal.cols, terminal.rows)
+        }
+      } catch {
+        // Ignore errors on disposed terminal
       }
-      
-      // Initialize output cache for this agent if needed
+    }
+
+    // Defer open() to next frame to prevent React StrictMode double-mount issues
+    const rafId = requestAnimationFrame(() => {
+      if (isDisposed) return
+
+      terminal.open(containerElement)
+      fitAndResize()
+
+      // Replay cached output to restore terminal history
       if (!outputCache.has(agentId)) {
         outputCache.set(agentId, [])
       }
-
-      // Replay cached output to restore terminal history (batched for performance)
       const cachedOutput = outputCache.get(agentId)!
       for (let i = 0; i < cachedOutput.length; i += REPLAY_BATCH_SIZE) {
-        const batch = cachedOutput.slice(i, i + REPLAY_BATCH_SIZE).join('')
-        terminal.write(batch)
+        terminal.write(cachedOutput.slice(i, i + REPLAY_BATCH_SIZE).join(''))
       }
 
-      // Scroll to bottom after replaying cached content
       terminal.scrollToBottom()
-
-      // Register this as the active terminal for live output
       activeTerminal = { agentId, terminal }
 
-      // Auto-focus if requested (for restoring focus after navigation)
       if (autoFocus) {
         setTimeout(() => {
           if (!isDisposed) {
@@ -229,73 +238,28 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
         }, 100)
       }
 
-      // Call mount callback if provided
-      if (onMount) {
-        onMount()
-      }
-      
-      // Handle terminal input (must be after open)
+      onMount?.()
+
+      // Filter out focus reporting sequences that confuse vim and claude code
       terminal.onData((data) => {
-        // Filter out focus reporting sequences that xterm.js sends but shouldn't go to PTY
-        // \x1b[I = Focus In, \x1b[O = Focus Out (CSI I and CSI O)
-        // These sequences confuse applications like vim and claude code
-        if (data === '\x1b[I' || data === '\x1b[O') {
-          return // Don't send focus sequences to PTY
-        }
-        
+        if (data === '\x1b[I' || data === '\x1b[O') return
         window.electronAPI.sendTerminalInput(agentId, data)
       })
-      
+
       // Secondary fit after layout settles
-      setTimeout(() => {
-        if (isDisposed) return
-        try {
-          fitAddon.fit()
-          if (terminal.rows && terminal.cols) {
-            window.electronAPI.resizeTerminal(agentId, terminal.cols, terminal.rows)
-          }
-        } catch (err) {
-          // Ignore fit errors on disposed terminal
-        }
-      }, 100)
+      setTimeout(fitAndResize, 100)
     })
 
-    // Handle focus to scroll to bottom
-    const handleFocus = () => {
-      terminal.scrollToBottom()
-    }
+    const handleFocus = () => terminal.scrollToBottom()
     containerElement.addEventListener('focus', handleFocus, true)
 
-    // Handle window resize
-    const handleResize = () => {
-      if (isDisposed) return
-      try {
-        fitAddon.fit()
-        if (terminal.rows && terminal.cols) {
-          window.electronAPI.resizeTerminal(agentId, terminal.cols, terminal.rows)
-        }
-      } catch (err) {
-        // Ignore resize errors on disposed terminal
-      }
-    }
-
+    const handleResize = () => fitAndResize()
     window.addEventListener('resize', handleResize)
 
-    // Handle container resize (when parent elements expand/collapse)
     const resizeObserver = new ResizeObserver(() => {
-      if (isDisposed) return
-      try {
-        fitAddon.fit()
-        if (terminal.rows && terminal.cols) {
-          window.electronAPI.resizeTerminal(agentId, terminal.cols, terminal.rows)
-        }
-        // Auto-scroll to bottom after resize so user sees latest output
-        terminal.scrollToBottom()
-      } catch (err) {
-        // Ignore resize errors on disposed terminal
-      }
+      fitAndResize()
+      if (!isDisposed) terminal.scrollToBottom()
     })
-
     resizeObserver.observe(containerElement)
 
     return () => {
@@ -305,9 +269,7 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
 
       // Cancel pending animation frame (prevents open() from running on disposed terminal)
       cancelAnimationFrame(rafId)
-
-      // Clear active terminal if it's this one
-      if (activeTerminal && activeTerminal.agentId === agentId) {
+      if (activeTerminal?.agentId === agentId) {
         activeTerminal = null
       }
       containerElement.removeEventListener('focus', handleFocus, true)

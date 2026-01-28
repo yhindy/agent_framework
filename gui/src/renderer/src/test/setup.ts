@@ -31,7 +31,7 @@ Object.defineProperty(window, 'electronAPI', {
     updateAssignment: vi.fn(),
     createAssignmentForProject: vi.fn(),
     stopAgent: vi.fn(),
-    openInCursor: vi.fn(),
+    openInEditor: vi.fn(),
     teardownAgent: vi.fn(),
     unassignAgent: vi.fn(),
     createPullRequest: vi.fn(),

@@ -210,6 +210,7 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 | `gui/src/main/services/HandoffApiService.ts` | HTTP API for handoff |
 | `gui/src/preload/index.ts` | IPC bridge definitions |
 | `gui/src/preload/index.d.ts` | IPC type definitions |
+| `gui/src/shared/types/settings.ts` | Settings types (EditorType, etc.) |
 | `gui/src/renderer/src/components/Dashboard.tsx` | Main UI component |
 | `gui/src/renderer/src/store/` | Zustand state stores |
 | `minions/bin/setup.sh` | Worktree creation |
