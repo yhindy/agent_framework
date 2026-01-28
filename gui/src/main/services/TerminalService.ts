@@ -1210,27 +1210,30 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         }, 100)
       } else {
         // Create new tmux session and run the command
+        // Wait for shell to initialize before sending tmux command (same as attach case)
         const rawCommand = `${command} ${args.join(' ')}`
         const sanitizedAgentId = agentId.replace(/[^a-zA-Z0-9-_]/g, '_')
         // SECURITY: Use unique temp directory to prevent symlink attacks and race conditions
         const tempDir = mkdtempSync(join(tmpdir(), 'minion-'))
         const scriptPath = join(tempDir, `cmd-${sanitizedAgentId}.sh`)
 
-        try {
-          writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
-          log.debug(`Wrote tmux command script to ${scriptPath}`)
+        setTimeout(() => {
+          try {
+            writeFileSync(scriptPath, `#!/bin/bash\n${rawCommand}\n`, { mode: 0o700 })
+            log.debug(`Wrote tmux command script to ${scriptPath}`)
 
-          // Create tmux session with two windows:
-          // Window 0 (default) - runs the agent command
-          // Window 1 "shell" - bare terminal for manual work
-          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
-          terminal.write(`${tmuxCmd}\r`)
-        } catch (err) {
-          log.error('Failed to write command script, falling back to direct command', err)
-          const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
-          const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
-          terminal.write(`${tmuxCmd}\r`)
-        }
+            // Create tmux session with two windows:
+            // Window 0 (default) - runs the agent command
+            // Window 1 "shell" - bare terminal for manual work
+            const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys 'bash ${scriptPath}' Enter \\; new-window -d -n shell`
+            terminal.write(`${tmuxCmd}\r`)
+          } catch (err) {
+            log.error('Failed to write command script, falling back to direct command', err)
+            const escapedCommand = rawCommand.replace(/'/g, "'\\''").replace(/\n/g, ' ')
+            const tmuxCmd = `tmux new-session -A -s ${tmuxSessionName} \\; send-keys '${escapedCommand}' Enter \\; new-window -d -n shell`
+            terminal.write(`${tmuxCmd}\r`)
+          }
+        }, 100)
       }
     } else {
       terminal.write(`${command} ${args.join(' ')}\r`)

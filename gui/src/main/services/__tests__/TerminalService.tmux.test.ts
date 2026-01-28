@@ -262,6 +262,8 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('sends tmux new-session command when tmux mode is enabled and tmux is available', async () => {
+      vi.useFakeTimers()
+
       // tmux is available, but no existing session
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -278,6 +280,9 @@ describe('TerminalService Tmux Integration', () => {
 
       await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+      // Advance timers to trigger the setTimeout that writes the tmux command
+      await vi.advanceTimersByTimeAsync(150)
+
       // First the shell is spawned
       expect(pty.spawn).toHaveBeenCalled()
 
@@ -288,6 +293,8 @@ describe('TerminalService Tmux Integration', () => {
       // The first write should be the tmux new-session command
       const firstWrite = writeCalls[0][0]
       expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
+
+      vi.useRealTimers()
     })
 
     it('falls back to normal mode when tmux is not available', async () => {
@@ -427,6 +434,8 @@ describe('TerminalService Tmux Integration', () => {
     })
 
     it('writes command to temp script file for tmux mode', async () => {
+      vi.useFakeTimers()
+
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
         if (cmd.includes('has-session')) throw new Error('session not found')
@@ -451,6 +460,9 @@ describe('TerminalService Tmux Integration', () => {
         promptWithQuotes
       )
 
+      // Advance timers to trigger the setTimeout that writes the script and tmux command
+      await vi.advanceTimersByTimeAsync(150)
+
       // Verify script file was written to temp directory with cmd prefix
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringMatching(/cmd-agent-1\.sh$/),
@@ -462,9 +474,13 @@ describe('TerminalService Tmux Integration', () => {
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
       expect(firstWrite).toContain('cmd-agent-1.sh')
+
+      vi.useRealTimers()
     })
 
     it('script file contains the full command with special characters', async () => {
+      vi.useFakeTimers()
+
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
         if (cmd.includes('has-session')) throw new Error('session not found')
@@ -493,6 +509,9 @@ describe('TerminalService Tmux Integration', () => {
         complexPrompt
       )
 
+      // Advance timers to trigger the setTimeout that writes the script
+      await vi.advanceTimersByTimeAsync(150)
+
       // Get the content written to the script file (now in temp dir with cmd- prefix)
       const writeCall = vi.mocked(fs.writeFileSync).mock.calls.find(
         call => String(call[0]).includes('cmd-')
@@ -503,9 +522,13 @@ describe('TerminalService Tmux Integration', () => {
       // Script should contain the raw prompt with quotes and newlines preserved
       expect(scriptContent).toContain("Claude Code's Task tool")
       expect(scriptContent).toContain('## Mission')
+
+      vi.useRealTimers()
     })
 
     it('handles complex super minion prompts via script file', async () => {
+      vi.useFakeTimers()
+
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
         if (cmd.includes('has-session')) throw new Error('session not found')
@@ -535,6 +558,9 @@ describe('TerminalService Tmux Integration', () => {
         complexPrompt
       )
 
+      // Advance timers to trigger the setTimeout that writes the tmux command
+      await vi.advanceTimersByTimeAsync(150)
+
       const writeCalls = mockPty.write.mock.calls
       const firstWrite = writeCalls[0][0]
 
@@ -548,6 +574,8 @@ describe('TerminalService Tmux Integration', () => {
       // Terminal write should be simple - no complex escaping needed
       const beforeCarriageReturn = firstWrite.split('\r')[0]
       expect(beforeCarriageReturn).not.toContain('\n')
+
+      vi.useRealTimers()
     })
   })
 
@@ -751,6 +779,8 @@ describe('TerminalService Settings Integration', () => {
   })
 
   it('uses tmux when setting is explicitly set to tmux', async () => {
+    vi.useFakeTimers()
+
     vi.mocked(execSync).mockImplementation((cmd: string) => {
       if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
       if (cmd.includes('has-session')) throw new Error('session not found')
@@ -768,9 +798,14 @@ describe('TerminalService Settings Integration', () => {
 
     await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+    // Advance timers to trigger the setTimeout that writes the tmux command
+    await vi.advanceTimersByTimeAsync(150)
+
     // Should use tmux (create new session since none exists)
     const firstWrite = mockPty.write.mock.calls[0][0]
     expect(firstWrite).toContain('tmux new-session -A -s minion-agent-1')
+
+    vi.useRealTimers()
   })
 })
 
@@ -923,6 +958,8 @@ describe('TerminalService tmux two windows', () => {
   })
 
   it('creates two tmux windows: agent (window 0) and shell (window 1, detached)', async () => {
+    vi.useFakeTimers()
+
     // tmux is available, but session doesn't exist yet
     vi.mocked(execSync).mockImplementation((cmd: string) => {
       if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -938,6 +975,9 @@ describe('TerminalService tmux two windows', () => {
     })
 
     await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
+
+    // Advance timers to trigger the setTimeout that writes the tmux command
+    await vi.advanceTimersByTimeAsync(150)
 
     // Get the tmux command that was written
     const writeCalls = mockPty.write.mock.calls
@@ -949,9 +989,13 @@ describe('TerminalService tmux two windows', () => {
 
     // Should NOT have select-window (using -d flag instead)
     expect(tmuxCommand).not.toContain('select-window')
+
+    vi.useRealTimers()
   })
 
   it('creates shell window after agent window in tmux command order', async () => {
+    vi.useFakeTimers()
+
     // tmux is available, but session doesn't exist yet
     vi.mocked(execSync).mockImplementation((cmd: string) => {
       if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
@@ -968,6 +1012,9 @@ describe('TerminalService tmux two windows', () => {
 
     await terminalService.startAgent('/path/to/project', 'agent-1', 'claude', 'dev')
 
+    // Advance timers to trigger the setTimeout that writes the tmux command
+    await vi.advanceTimersByTimeAsync(150)
+
     const tmuxCommand = mockPty.write.mock.calls[0][0]
 
     // The order should be: new-session -> send-keys (agent command) -> new-window -d
@@ -977,6 +1024,8 @@ describe('TerminalService tmux two windows', () => {
 
     expect(newSessionIndex).toBeLessThan(sendKeysIndex)
     expect(sendKeysIndex).toBeLessThan(newWindowIndex)
+
+    vi.useRealTimers()
   })
 
   it('attaches to existing tmux session when Claude is running instead of creating new one', async () => {
