@@ -818,6 +818,58 @@ export class AgentService {
   }
 
   /**
+   * Commit all current changes in the worktree before handoff.
+   * Returns success/error status to be handled by caller.
+   */
+  private async commitCurrentChanges(worktreePath: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check if there are any uncommitted changes
+      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
+      if (!statusOutput.trim()) {
+        log.info('No uncommitted changes to commit before handoff')
+        return { success: true }
+      }
+
+      log.info('Committing changes before handoff in:', worktreePath)
+      log.info('Changed files:', statusOutput.trim())
+
+      // Add all changes
+      await execAsync('git add -A', { cwd: worktreePath })
+
+      // Commit with a checkpoint message
+      try {
+        await execFileAsync('git', ['commit', '-m', '[wip] Checkpoint before handoff'], { cwd: worktreePath })
+        log.info('Changes committed successfully before handoff')
+        return { success: true }
+      } catch (commitError: any) {
+        // Handle git identity not configured
+        if (commitError.message.includes('identity unknown') || commitError.stderr?.includes('identity unknown')) {
+          log.info('Git identity unknown, setting default...')
+          await execFileAsync('git', ['config', 'user.email', 'minion@local'], { cwd: worktreePath })
+          await execFileAsync('git', ['config', 'user.name', 'Minion Agent'], { cwd: worktreePath })
+          await execFileAsync('git', ['commit', '-m', '[wip] Checkpoint before handoff'], { cwd: worktreePath })
+          log.info('Changes committed with default identity')
+          return { success: true }
+        } else if (commitError.message.includes('nothing to commit')) {
+          log.info('Nothing to commit after staging')
+          return { success: true }
+        } else if (commitError.stderr?.includes('pre-commit') || commitError.stdout?.includes('pre-commit') || commitError.message.includes('hook failed')) {
+          // Pre-commit hook failure - this is an error the user needs to handle
+          const errorMsg = `Pre-commit hooks failed. Please fix the issues before handoff.\n\n${commitError.stderr || commitError.stdout || commitError.message}`
+          log.error('Commit failed due to pre-commit hooks:', errorMsg)
+          return { success: false, error: errorMsg }
+        } else {
+          log.error('Commit failed:', commitError.message)
+          return { success: false, error: `Failed to commit changes: ${commitError.message}` }
+        }
+      }
+    } catch (error: any) {
+      log.error('Error during pre-handoff commit:', error.message)
+      return { success: false, error: `Error committing changes: ${error.message}` }
+    }
+  }
+
+  /**
    * Sanitize a string to be used as a git branch name.
    * - Converts to lowercase
    * - Replaces spaces with hyphens
@@ -837,15 +889,68 @@ export class AgentService {
   }
 
   /**
+   * Generate a branch suffix from custom name or prompt.
+   * Falls back to 'handoff' if neither produces a valid suffix.
+   */
+  private generateBranchSuffix(shortName?: string, prompt?: string): string {
+    if (shortName) {
+      return this.sanitizeBranchName(shortName)
+    }
+
+    if (prompt) {
+      const promptWords = prompt.split(/\s+/).slice(0, 3).join('-')
+      const sanitized = this.sanitizeBranchName(promptWords)
+      if (sanitized) {
+        return sanitized
+      }
+    }
+
+    return 'handoff'
+  }
+
+  /**
+   * Generate context to prepend to the new agent's prompt.
+   * Provides 2-3 lines of context about the parent feature.
+   */
+  private generateHandoffContext(sourceAgentInfo: AgentInfo, branchMode: 'inherit' | 'fresh'): string {
+    const sourceBranch = sourceAgentInfo.branch
+    const sourceFeature = this.truncateFeatureDescription(sourceAgentInfo)
+
+    const modeDescription = branchMode === 'inherit'
+      ? `You are continuing work from branch \`${sourceBranch}\`.`
+      : `You are starting fresh from main, related to prior work on \`${sourceBranch}\`.`
+
+    return `## Handoff Context
+
+${modeDescription}
+Parent agent was working on: ${sourceFeature}
+
+---
+
+`
+  }
+
+  /**
+   * Extract a truncated feature description from agent info.
+   * Falls back to prompt excerpt or default text.
+   */
+  private truncateFeatureDescription(agentInfo: AgentInfo, maxLength: number = 200): string {
+    const description = agentInfo.feature || agentInfo.prompt?.substring(0, 150) || 'parent agent work'
+    return description.substring(0, maxLength)
+  }
+
+  /**
    * Validate a handoff request payload.
    * Checks that all required fields are present and valid.
    */
   private isValidHandoffPayload(payload: any): payload is HandoffRequest {
     if (!payload || typeof payload !== 'object') return false
-    if (!payload.sourceAgentId || typeof payload.sourceAgentId !== 'string' || payload.sourceAgentId.trim() === '') return false
-    if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.trim() === '') return false
-    if (!payload.branchMode || (payload.branchMode !== 'inherit' && payload.branchMode !== 'fresh')) return false
-    return true
+
+    const hasValidSourceAgentId = typeof payload.sourceAgentId === 'string' && payload.sourceAgentId.trim() !== ''
+    const hasValidPrompt = typeof payload.prompt === 'string' && payload.prompt.trim() !== ''
+    const hasValidBranchMode = payload.branchMode === 'inherit' || payload.branchMode === 'fresh'
+
+    return hasValidSourceAgentId && hasValidPrompt && hasValidBranchMode
   }
 
   /**
@@ -886,13 +991,23 @@ export class AgentService {
         }
       }
 
+      // Commit current changes in source agent's worktree before handoff
+      log.info(`Committing current changes before handoff from ${request.sourceAgentId}`)
+      const commitResult = await this.commitCurrentChanges(sourceSession.worktreePath)
+      if (!commitResult.success) {
+        return {
+          success: false,
+          error: commitResult.error || 'Failed to commit changes before handoff'
+        }
+      }
+
       // Determine tool and model (use overrides or inherit from source)
       const tool = request.tool || sourceAgentInfo.tool
       const model = request.model || sourceAgentInfo.model
 
       // Determine yolo and chrome flags (use explicit override or inherit from source)
-      const yolo = request.yolo !== undefined ? request.yolo : sourceAgentInfo.yolo
-      const chrome = request.chrome !== undefined ? request.chrome : sourceAgentInfo.chrome
+      const yolo = request.yolo ?? sourceAgentInfo.yolo
+      const chrome = request.chrome ?? sourceAgentInfo.chrome
 
       // Generate branch name
       const config = this.getProjectConfig(projectPath)
@@ -901,14 +1016,7 @@ export class AgentService {
       const agentId = `${projectName}-${hash}`
 
       // Generate branch suffix (custom or auto-generated from prompt)
-      let branchSuffix: string
-      if (request.shortName) {
-        branchSuffix = this.sanitizeBranchName(request.shortName)
-      } else {
-        // Generate from first few words of prompt
-        const promptWords = request.prompt.split(/\s+/).slice(0, 3).join('-')
-        branchSuffix = this.sanitizeBranchName(promptWords) || 'handoff'
-      }
+      const branchSuffix = this.generateBranchSuffix(request.shortName, request.prompt)
 
       const branch = `feature/${agentId}/${branchSuffix}`
 
@@ -930,20 +1038,24 @@ export class AgentService {
       // Calculate worktree path
       const worktreePath = join(dirname(projectPath), agentId)
 
+      // Generate handoff context to prepend to the prompt
+      const handoffContext = this.generateHandoffContext(sourceAgentInfo, request.branchMode)
+      const promptWithContext = handoffContext + request.prompt
+
       // Create AgentInfo for the new agent
       const newAgentInfo: AgentInfo = {
         id: `${agentId}-${Date.now()}`,
         agentId: agentId,
         branch: branch,
         project: projectName,
-        feature: request.prompt.substring(0, 100), // First 100 chars as feature description
+        feature: request.prompt.substring(0, 100), // First 100 chars as feature description (without context prefix)
         status: 'active',
         tool: tool,
         model: model,
         mode: 'dev',
         yolo: yolo,
         chrome: chrome !== false,
-        prompt: request.prompt,
+        prompt: promptWithContext,  // Prompt includes handoff context
         parentAgentId: request.sourceAgentId, // Track lineage for tree hierarchy
         handoffSource: handoffSource,
         createdAt: new Date().toISOString(),

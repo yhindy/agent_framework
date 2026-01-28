@@ -121,15 +121,14 @@ describe('HandoffApiService', () => {
       expect(result.error).toContain('plan')
     })
 
-    it('should return invalid for missing branchMode', () => {
+    it('should accept missing branchMode (will be auto-detected)', () => {
       const request = {
         sourceAgentId: 'test-agent-123',
         plan: 'Implement the feature'
       } as HandoffApiRequest
 
       const result = (service as any).validateRequest(request)
-      expect(result.valid).toBe(false)
-      expect(result.error).toContain('branchMode')
+      expect(result.valid).toBe(true)
     })
 
     it('should return invalid for invalid branchMode', () => {
@@ -154,6 +153,63 @@ describe('HandoffApiService', () => {
 
       const result = (service as any).validateRequest(request)
       expect(result.valid).toBe(true)
+    })
+  })
+
+  describe('detectBranchMode', () => {
+    it('should return inherit for normal prompts', () => {
+      const result = service.detectBranchMode('Continue implementing the feature')
+      expect(result).toBe('inherit')
+    })
+
+    it('should detect clean start', () => {
+      const result = service.detectBranchMode('Start with a clean start to fix the architecture')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect fresh start', () => {
+      const result = service.detectBranchMode('Fresh start on this implementation')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect from scratch', () => {
+      const result = service.detectBranchMode('Rebuild the module from scratch')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect new baseline', () => {
+      const result = service.detectBranchMode('Create a new baseline for the feature')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect clean slate', () => {
+      const result = service.detectBranchMode('Start with a clean slate')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect fresh branch', () => {
+      const result = service.detectBranchMode('Create a fresh branch for this work')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect branch from main', () => {
+      const result = service.detectBranchMode('Branch from main to implement this')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect branch from master', () => {
+      const result = service.detectBranchMode('Branch from master for this fix')
+      expect(result).toBe('fresh')
+    })
+
+    it('should detect start over', () => {
+      const result = service.detectBranchMode('We need to start over on this feature')
+      expect(result).toBe('fresh')
+    })
+
+    it('should be case insensitive', () => {
+      const result = service.detectBranchMode('CLEAN START on the refactoring')
+      expect(result).toBe('fresh')
     })
   })
 
@@ -337,6 +393,42 @@ describe('HandoffApiService', () => {
       expect(response.statusCode).toBe(400)
       expect(response.body.success).toBe(false)
       expect(response.body.error).toContain('plan')
+    })
+
+    it('should auto-detect branchMode when not provided', async () => {
+      // Request without branchMode - should auto-detect as 'inherit'
+      const request = {
+        sourceAgentId: 'test-123',
+        plan: 'Continue implementing the feature'
+      }
+
+      const response = await makeRequest('POST', '/api/handoff', request)
+
+      expect(response.statusCode).toBe(200)
+      expect(mockAgentService.handoffAgent).toHaveBeenCalledWith(
+        '/test/project',
+        expect.objectContaining({
+          branchMode: 'inherit'  // Auto-detected as inherit since no clean start phrases
+        })
+      )
+    })
+
+    it('should auto-detect fresh branchMode from clean start phrase', async () => {
+      // Request without branchMode but with clean start phrase
+      const request = {
+        sourceAgentId: 'test-123',
+        plan: 'Start with a clean start to reimplement the feature'
+      }
+
+      const response = await makeRequest('POST', '/api/handoff', request)
+
+      expect(response.statusCode).toBe(200)
+      expect(mockAgentService.handoffAgent).toHaveBeenCalledWith(
+        '/test/project',
+        expect.objectContaining({
+          branchMode: 'fresh'  // Auto-detected as fresh due to 'clean start' phrase
+        })
+      )
     })
 
     it('should return 400 for invalid branchMode', async () => {

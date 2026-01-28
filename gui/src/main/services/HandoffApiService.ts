@@ -12,12 +12,13 @@ const log = createLogger('HandoffApiService')
 const HANDOFF_API_PORT = 19234
 
 /**
- * API request body for handoff endpoint
+ * API request body for handoff endpoint.
+ * Note: branchMode is optional - if not provided, it will be auto-detected from the plan text.
  */
 export interface HandoffApiRequest {
   sourceAgentId: string
   plan: string
-  branchMode: 'inherit' | 'fresh'
+  branchMode?: 'inherit' | 'fresh'  // Optional: auto-detected from plan if not provided
   shortName?: string
 }
 
@@ -192,11 +193,15 @@ export class HandoffApiService {
         return
       }
 
+      // Auto-detect branchMode from plan text if not explicitly provided
+      const branchMode = request.branchMode ?? this.detectBranchMode(request.plan)
+      log.info(`Handoff branchMode: ${branchMode} (explicit: ${request.branchMode !== undefined})`)
+
       // Create the handoff request
       const handoffRequest: HandoffRequest = {
         sourceAgentId: request.sourceAgentId,
         prompt: request.plan,
-        branchMode: request.branchMode,
+        branchMode: branchMode,
         shortName: request.shortName
       }
 
@@ -257,7 +262,8 @@ export class HandoffApiService {
   }
 
   /**
-   * Validate handoff request
+   * Validate handoff request.
+   * Note: branchMode is optional and will be auto-detected if not provided.
    */
   private validateRequest(request: HandoffApiRequest): { valid: boolean; error?: string } {
     if (!request.sourceAgentId) {
@@ -268,11 +274,11 @@ export class HandoffApiService {
       return { valid: false, error: 'Missing required field: plan' }
     }
 
-    if (!request.branchMode) {
-      return { valid: false, error: 'Missing required field: branchMode' }
-    }
+    const validBranchModes = ['inherit', 'fresh'] as const
+    const branchModeProvided = request.branchMode !== undefined
+    const branchModeInvalid = branchModeProvided && !validBranchModes.includes(request.branchMode!)
 
-    if (request.branchMode !== 'inherit' && request.branchMode !== 'fresh') {
+    if (branchModeInvalid) {
       return { valid: false, error: 'branchMode must be "inherit" or "fresh"' }
     }
 
@@ -297,6 +303,33 @@ export class HandoffApiService {
   private sendJson(res: http.ServerResponse, statusCode: number, data: object): void {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(data))
+  }
+
+  /**
+   * Auto-detect branch mode from prompt/plan language.
+   * Returns 'fresh' if prompt contains clean start indicators, 'inherit' otherwise.
+   */
+  detectBranchMode(prompt: string): 'inherit' | 'fresh' {
+    const cleanStartPatterns = [
+      /clean\s+start/i,
+      /fresh\s+start/i,
+      /start\s+fresh/i,
+      /from\s+scratch/i,
+      /new\s+baseline/i,
+      /clean\s+slate/i,
+      /fresh\s+branch/i,
+      /branch\s+from\s+main/i,
+      /branch\s+from\s+master/i,
+      /start\s+over/i,
+    ]
+
+    const matchedPattern = cleanStartPatterns.find(pattern => pattern.test(prompt))
+    if (matchedPattern) {
+      log.info(`Detected 'fresh' branch mode from prompt pattern: ${matchedPattern}`)
+      return 'fresh'
+    }
+
+    return 'inherit'
   }
 
   /**

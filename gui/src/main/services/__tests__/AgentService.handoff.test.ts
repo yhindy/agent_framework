@@ -434,7 +434,7 @@ branch refs/heads/main
       expect(result.error).toContain('Invalid')
     })
 
-    it('should set correct prompt on new agent', async () => {
+    it('should set correct prompt on new agent (with handoff context)', async () => {
       const request: HandoffRequest = {
         sourceAgentId: sourceAgentId,
         prompt: 'Continue implementing the login feature',
@@ -444,7 +444,10 @@ branch refs/heads/main
       const result = await agentService.handoffAgent(projectPath, request)
 
       expect(result.success).toBe(true)
-      expect(result.newAgent!.prompt).toBe('Continue implementing the login feature')
+      // Prompt should include handoff context + original prompt
+      expect(result.newAgent!.prompt).toContain('## Handoff Context')
+      expect(result.newAgent!.prompt).toContain('Continue implementing the login feature')
+      expect(result.newAgent!.prompt).toContain(sourceAgentInfo.branch)
     })
 
     it('should include handoffTimestamp in handoffSource', async () => {
@@ -608,6 +611,424 @@ branch refs/heads/main
       expect(handoffSource.agentId).toBe(sourceAgentId)
       expect(handoffSource.branchMode).toBe('inherit')
       expect(handoffSource.originalBranch).toBe(sourceAgentInfo.branch)
+    })
+  })
+
+  describe('generateHandoffContext', () => {
+    it('should generate context for inherit mode', () => {
+      const result = (agentService as any).generateHandoffContext(sourceAgentInfo, 'inherit')
+
+      expect(result).toContain('## Handoff Context')
+      expect(result).toContain('continuing work from branch')
+      expect(result).toContain(sourceAgentInfo.branch)
+      expect(result).toContain('Parent agent was working on')
+      expect(result).toContain(sourceAgentInfo.feature)
+    })
+
+    it('should generate context for fresh mode', () => {
+      const result = (agentService as any).generateHandoffContext(sourceAgentInfo, 'fresh')
+
+      expect(result).toContain('## Handoff Context')
+      expect(result).toContain('starting fresh from main')
+      expect(result).toContain(sourceAgentInfo.branch)
+      expect(result).toContain('Parent agent was working on')
+    })
+
+    it('should use prompt when feature is not available', () => {
+      const agentWithoutFeature = {
+        ...sourceAgentInfo,
+        feature: '',
+        prompt: 'Work on authentication system'
+      }
+
+      const result = (agentService as any).generateHandoffContext(agentWithoutFeature, 'inherit')
+
+      expect(result).toContain('Work on authentication system')
+    })
+
+    it('should truncate long feature descriptions', () => {
+      const agentWithLongFeature = {
+        ...sourceAgentInfo,
+        feature: 'A'.repeat(300)
+      }
+
+      const result = (agentService as any).generateHandoffContext(agentWithLongFeature, 'inherit')
+
+      // The feature should be truncated to 200 chars
+      expect(result.length).toBeLessThan(500)
+    })
+  })
+
+  describe('commitCurrentChanges', () => {
+    beforeEach(() => {
+      // Setup mocks for commit functionality
+      vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (path === `${projectPath}/minions/config.json`) return true
+        if (path === `${sourceWorktreePath}/.agent-info`) return true
+        return false
+      })
+
+      vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
+        if (path === `${projectPath}/minions/config.json`) {
+          return JSON.stringify({
+            project: { name: projectName, defaultBaseBranch: 'main' },
+            setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+            assignments: [],
+            testEnvironments: []
+          })
+        }
+        if (path === `${sourceWorktreePath}/.agent-info`) {
+          return JSON.stringify(sourceAgentInfo)
+        }
+        throw new Error(`File not found: ${path}`)
+      })
+    })
+
+    it('should succeed when no uncommitted changes', async () => {
+      // Mock git status to return empty (no changes)
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        } else if (command.includes('git worktree list')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: sampleWorktreeOutput, stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: sampleWorktreeOutput, stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      const result = await (agentService as any).commitCurrentChanges(sourceWorktreePath)
+
+      expect(result.success).toBe(true)
+    })
+
+    it('should commit changes when there are uncommitted files', async () => {
+      let gitStatusCalled = false
+      let gitAddCalled = false
+
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          gitStatusCalled = true
+          if (!callback && typeof options === 'object') {
+            return { stdout: 'M modified-file.ts\n', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: 'M modified-file.ts\n', stderr: '' })
+          }
+        } else if (command.includes('git add -A')) {
+          gitAddCalled = true
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        } else if (command.includes('git worktree list')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: sampleWorktreeOutput, stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: sampleWorktreeOutput, stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      vi.mocked(childProcess.execFile).mockImplementation(((
+        _file: string,
+        args: string[],
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (args && args[0] === 'commit') {
+          if (!callback && typeof options === 'object') {
+            return { stdout: 'Committed', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: 'Committed', stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      const result = await (agentService as any).commitCurrentChanges(sourceWorktreePath)
+
+      expect(result.success).toBe(true)
+      expect(gitStatusCalled).toBe(true)
+      expect(gitAddCalled).toBe(true)
+    })
+
+    it('should return error when pre-commit hooks fail', async () => {
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: 'M modified-file.ts\n', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: 'M modified-file.ts\n', stderr: '' })
+          }
+        } else if (command.includes('git add -A')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      vi.mocked(childProcess.execFile).mockImplementation(((
+        _file: string,
+        args: string[],
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (args && args[0] === 'commit') {
+          const error = new Error('hook failed')
+          ;(error as any).stderr = 'pre-commit hook failed'
+          if (!callback && typeof options === 'object') {
+            throw error
+          }
+          if (callback) {
+            callback(error, { stdout: '', stderr: 'pre-commit hook failed' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      const result = await (agentService as any).commitCurrentChanges(sourceWorktreePath)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('pre-commit')
+    })
+  })
+
+  describe('handoff with auto-commit', () => {
+    beforeEach(() => {
+      // Setup mocks for source agent lookup with uncommitted changes
+      vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (path === `${projectPath}/minions/config.json`) return true
+        if (path === `${sourceWorktreePath}/.agent-info`) return true
+        if (path === `${sourceWorktreePath}/.minions-base-info`) return false
+        if (path === `${projectPath}/.minions-base-info`) return false
+        return false
+      })
+
+      vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
+        if (path === `${projectPath}/minions/config.json`) {
+          return JSON.stringify({
+            project: { name: projectName, defaultBaseBranch: 'main' },
+            setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+            assignments: [],
+            testEnvironments: []
+          })
+        }
+        if (path === `${sourceWorktreePath}/.agent-info`) {
+          return JSON.stringify(sourceAgentInfo)
+        }
+        throw new Error(`File not found: ${path}`)
+      })
+    })
+
+    it('should commit source agent changes before creating handoff agent', async () => {
+      let commitCalled = false
+
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: 'M file.ts\n', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: 'M file.ts\n', stderr: '' })
+          }
+        } else if (command.includes('git add -A')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        } else if (command.includes('git worktree list')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: sampleWorktreeOutput, stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: sampleWorktreeOutput, stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      vi.mocked(childProcess.execFile).mockImplementation(((
+        _file: string,
+        args: string[],
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (args && args[0] === 'commit') {
+          commitCalled = true
+        }
+        if (!callback && typeof options === 'object') {
+          return { stdout: 'Success', stderr: '' } as any
+        }
+        if (callback) {
+          callback(null, { stdout: 'Success', stderr: '' })
+        }
+        return {} as any
+      }) as any)
+
+      const request: HandoffRequest = {
+        sourceAgentId: sourceAgentId,
+        prompt: 'Continue working on the feature',
+        branchMode: 'inherit'
+      }
+
+      const result = await agentService.handoffAgent(projectPath, request)
+
+      expect(result.success).toBe(true)
+      expect(commitCalled).toBe(true)
+    })
+
+    it('should include handoff context in new agent prompt', async () => {
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          // No uncommitted changes
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        } else if (command.includes('git worktree list')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: sampleWorktreeOutput, stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: sampleWorktreeOutput, stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      vi.mocked(childProcess.execFile).mockImplementation(((
+        _file: string,
+        _args: string[],
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (!callback && typeof options === 'object') {
+          return { stdout: 'Success', stderr: '' } as any
+        }
+        if (callback) {
+          callback(null, { stdout: 'Success', stderr: '' })
+        }
+        return {} as any
+      }) as any)
+
+      const request: HandoffRequest = {
+        sourceAgentId: sourceAgentId,
+        prompt: 'Continue working on the feature',
+        branchMode: 'inherit'
+      }
+
+      const result = await agentService.handoffAgent(projectPath, request)
+
+      expect(result.success).toBe(true)
+      // Prompt should include handoff context
+      expect(result.newAgent!.prompt).toContain('## Handoff Context')
+      expect(result.newAgent!.prompt).toContain('Continue working on the feature')
+      expect(result.newAgent!.prompt).toContain(sourceAgentInfo.branch)
+    })
+
+    it('should fail handoff when commit fails due to pre-commit hooks', async () => {
+      vi.mocked(childProcess.exec).mockImplementation(((
+        command: string,
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (command.includes('git status --porcelain')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: 'M file.ts\n', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: 'M file.ts\n', stderr: '' })
+          }
+        } else if (command.includes('git add -A')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: '', stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: '', stderr: '' })
+          }
+        } else if (command.includes('git worktree list')) {
+          if (!callback && typeof options === 'object') {
+            return { stdout: sampleWorktreeOutput, stderr: '' } as any
+          }
+          if (callback) {
+            callback(null, { stdout: sampleWorktreeOutput, stderr: '' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      vi.mocked(childProcess.execFile).mockImplementation(((
+        _file: string,
+        args: string[],
+        options: any,
+        callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void
+      ) => {
+        if (args && args[0] === 'commit') {
+          const error = new Error('hook failed')
+          ;(error as any).stderr = 'pre-commit hook failed'
+          if (!callback && typeof options === 'object') {
+            throw error
+          }
+          if (callback) {
+            callback(error, { stdout: '', stderr: 'pre-commit hook failed' })
+          }
+        }
+        return {} as any
+      }) as any)
+
+      const request: HandoffRequest = {
+        sourceAgentId: sourceAgentId,
+        prompt: 'Continue working on the feature',
+        branchMode: 'inherit'
+      }
+
+      const result = await agentService.handoffAgent(projectPath, request)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('pre-commit')
     })
   })
 })
