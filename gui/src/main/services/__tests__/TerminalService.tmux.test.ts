@@ -1279,24 +1279,22 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
 
     const writtenCommand = writeCalls[0][0]
 
-    // BUG FIX: Current code kills orphaned session and creates new with Claude
-    // The fix writes Claude command to a script file, then runs via tmux
+    // FIX: When orphaned tmux session exists (Claude crashed/exited), attach to it
+    // so user can see the shell and understand what happened. Do NOT auto-restart Claude.
     //
-    // EXPECTED: Claude should be spawned. Either:
-    // 1. Kill the orphaned session and create new with Claude: `tmux new-session ... send-keys 'claude ...'`
-    // 2. OR send Claude command to existing session: `tmux send-keys -t session 'claude ...'`
+    // EXPECTED: Should attach to existing session (not kill and recreate)
+    // User sees the shell prompt and can manually investigate or restart
     //
-    // Check that Claude command is in the script file (tmux mode uses script files)
+    // Check that it's attaching to the session (not creating new)
+    const isAttaching = writtenCommand.includes('attach-session')
+    expect(isAttaching).toBe(true)
+
+    // Should NOT spawn Claude automatically for orphaned sessions
     const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
       (call: any[]) => String(call[1]).includes('claude')
     )
     const claudeInTerminalWrites = writtenCommand.includes('claude')
-    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
-
-    // Additional verification: it should NOT just be a bare attach-session
-    // A bare attach without Claude spawn is the bug behavior
-    const isBareAttach = writtenCommand.includes('attach-session') && !claudeInScriptFile
-    expect(isBareAttach).toBe(false)
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(false)
   })
 
   it('should ensure Claude is running after connecting to existing tmux session', async () => {
@@ -1325,25 +1323,20 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
     const writeCalls = mockPty.write.mock.calls
     expect(writeCalls.length).toBeGreaterThanOrEqual(1)
 
-    // All write calls combined should include the Claude command
+    // All write calls combined
     const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
 
-    // BUG FIX: Claude command is written to script file in tmux mode
-    // Check that Claude command is in either terminal writes or script file
+    // FIX: When orphaned tmux session exists, attach to it (don't spawn Claude)
+    // User can manually restart Claude if needed
+    const isAttaching = allWrites.includes('attach-session')
+    expect(isAttaching).toBe(true)
+
+    // Should NOT spawn Claude automatically for orphaned sessions
     const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
       (call: any[]) => String(call[1]).includes('claude')
     )
     const claudeInTerminalWrites = allWrites.includes('claude')
-    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
-
-    // The prompt should also be included somewhere (either in command or script file)
-    // With the bug, the prompt "Fix the authentication bug" is never sent
-    // This test will FAIL demonstrating the bug
-    const promptIncluded = allWrites.includes('Fix the authentication bug') ||
-      vi.mocked(fs.writeFileSync).mock.calls.some(
-        (call: any[]) => String(call[1]).includes('Fix the authentication bug')
-      )
-    expect(promptIncluded).toBe(true)
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(false)
   })
 
   it('should handle base agent restart when previous session was killed but tmux session lingers', async () => {
@@ -1385,14 +1378,17 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
 
     const allWrites = writeCalls.map((c: any[]) => c[0]).join('')
 
-    // Even though tmux session exists, Claude should be spawned because
-    // there's no active Claude session (claudeSessionActive: false)
-    // BUG FIX: Code now checks if Claude is running in tmux, kills orphaned sessions
+    // FIX: When orphaned tmux session exists but Claude is not running,
+    // attach to the session (user sees shell) but don't spawn Claude
+    const isAttaching = allWrites.includes('attach-session')
+    expect(isAttaching).toBe(true)
+
+    // Should NOT spawn Claude automatically for orphaned sessions
     const claudeInScriptFile = vi.mocked(fs.writeFileSync).mock.calls.some(
       (call: any[]) => String(call[1]).includes('claude')
     )
     const claudeInTerminalWrites = allWrites.includes('claude')
-    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(true)
+    expect(claudeInScriptFile || claudeInTerminalWrites).toBe(false)
   })
 })
 

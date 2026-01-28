@@ -1,11 +1,27 @@
 #!/bin/bash
 set -e
 
-VERSION=$1
+# Parse arguments
+AUTO_CONFIRM=false
+VERSION=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -y|--yes)
+      AUTO_CONFIRM=true
+      shift
+      ;;
+    *)
+      VERSION="$1"
+      shift
+      ;;
+  esac
+done
 
 if [ -z "$VERSION" ]; then
-  echo "Usage: ./scripts/release.sh <version>"
+  echo "Usage: ./scripts/release.sh <version> [-y|--yes]"
   echo "Example: ./scripts/release.sh 0.0.2"
+  echo "         ./scripts/release.sh 0.0.2 --yes  # Skip confirmation prompts"
   exit 1
 fi
 
@@ -42,14 +58,11 @@ echo "Last tag: ${LAST_TAG:-none}"
 if [ -n "$LAST_TAG" ]; then
   echo ""
   echo "Commits since $LAST_TAG:"
-  git log "$LAST_TAG"..HEAD --oneline
+  git --no-pager log "$LAST_TAG"..HEAD --oneline
 fi
 
-# Run tests
-echo ""
-echo "=== Running tests ==="
-npm run typecheck -w gui
-npm test
+# Note: Tests run in GitHub Actions after tag is pushed (see .github/workflows/release.yml)
+# Skipping local test run to avoid duplication
 
 # Commit version bump
 echo ""
@@ -64,8 +77,13 @@ git tag -a "$TAG" -m "Release $TAG"
 
 # Push
 echo ""
-read -p "Push commit and tag to origin? (y/n) " -n 1 -r
-echo
+if [ "$AUTO_CONFIRM" = true ]; then
+  REPLY="y"
+else
+  read -p "Push commit and tag to origin? (y/n) " -n 1 -r
+  echo
+fi
+
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   git push origin HEAD
   git push origin "$TAG"

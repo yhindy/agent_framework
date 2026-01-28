@@ -1,6 +1,6 @@
 {
   "name": "minions",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "Core minion framework - agent workers for parallel coding tasks",
   "private": true,
   "scripts": {

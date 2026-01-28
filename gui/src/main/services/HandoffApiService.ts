@@ -11,7 +11,7 @@ import type { BrowserWindow } from 'electron'
 const log = createLogger('HandoffApiService')
 
 // Port chosen to avoid conflicts with common development ports
-const HANDOFF_API_PORT = 19234
+const DEFAULT_HANDOFF_API_PORT = 19234
 
 // Maximum number of spawns allowed per request
 const MAX_SPAWNS_PER_REQUEST = 10
@@ -68,6 +68,14 @@ export class HandoffApiService {
   private projectService: ProjectService | null = null
   private workflowService: WorkflowService | null = null
   private mainWindow: BrowserWindow | null = null
+  private port: number = DEFAULT_HANDOFF_API_PORT
+
+  /**
+   * Set the port to use (for testing)
+   */
+  setPort(port: number): void {
+    this.port = port
+  }
 
   /**
    * Set the AgentService dependency
@@ -119,32 +127,40 @@ export class HandoffApiService {
 
     this.server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        log.error(`Port ${HANDOFF_API_PORT} is already in use. Handoff API will not be available.`)
+        log.error(`Port ${this.port} is already in use. Handoff API will not be available.`)
       } else {
         log.error('HandoffApiService server error:', error)
       }
+      // Reset server reference on error so isRunning() returns false
+      this.server = null
     })
 
     // Bind only to localhost for security
-    this.server.listen(HANDOFF_API_PORT, '127.0.0.1', () => {
-      log.info(`HandoffApiService listening on http://127.0.0.1:${HANDOFF_API_PORT}`)
+    this.server.listen(this.port, '127.0.0.1', () => {
+      log.info(`HandoffApiService listening on http://127.0.0.1:${this.port}`)
     })
   }
 
   /**
    * Stop the HTTP server
    */
-  stop(): void {
-    if (this.server) {
-      this.server.close((err) => {
-        if (err) {
-          log.error('Error stopping HandoffApiService:', err)
-        } else {
-          log.info('HandoffApiService stopped')
-        }
-      })
-      this.server = null
-    }
+  stop(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.server) {
+        const server = this.server
+        this.server = null
+        server.close((err) => {
+          if (err) {
+            log.error('Error stopping HandoffApiService:', err)
+          } else {
+            log.info('HandoffApiService stopped')
+          }
+          resolve()
+        })
+      } else {
+        resolve()
+      }
+    })
   }
 
   /**
@@ -179,7 +195,7 @@ export class HandoffApiService {
    * Handle health check endpoint
    */
   private handleHealth(_req: http.IncomingMessage, res: http.ServerResponse): void {
-    this.sendJson(res, 200, { status: 'ok', port: HANDOFF_API_PORT })
+    this.sendJson(res, 200, { status: 'ok', port: this.port })
   }
 
   /**
@@ -588,7 +604,7 @@ export class HandoffApiService {
    * Get the port the server is listening on
    */
   getPort(): number {
-    return HANDOFF_API_PORT
+    return this.port
   }
 
   /**

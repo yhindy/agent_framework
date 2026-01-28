@@ -5,6 +5,7 @@ import MainLayout from './components/MainLayout'
 import { SnackbarProvider } from './contexts/SnackbarContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import SnackbarContainer from './components/SnackbarContainer'
+import { initGlobalOutputListener } from './components/Terminal'
 import './App.css'
 
 function App() {
@@ -12,7 +13,12 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const init = async () => {
+    // Initialize global terminal output listener BEFORE any agent operations.
+    // This prevents a race condition where the PTY starts sending output before
+    // the listener is registered, which would cause the terminal to appear blank.
+    initGlobalOutputListener()
+
+    async function init() {
       const active = await window.electronAPI.getActiveProjects()
       setActiveProjects(active)
       setLoading(false)
