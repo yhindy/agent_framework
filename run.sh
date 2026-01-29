@@ -29,9 +29,12 @@ fi
 echo "🚀 Starting Agent Framework GUI..."
 echo ""
 
-# Rebuild native modules (node-pty) for current Electron version
-echo "Rebuilding native modules..."
-npm run rebuild -w gui
+# Rebuild native modules (node-pty) if needed
+if [ ! -f "gui/node_modules/node-pty/build/Release/pty.node" ]; then
+  echo "Rebuilding native modules..."
+  npm run rebuild -w gui
+  echo ""
+fi
 
-echo ""
+# Multiple instances are supported - each gets its own API port
 npm run gui:dev

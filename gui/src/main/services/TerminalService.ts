@@ -71,6 +71,7 @@ export class TerminalService {
   private notificationService?: NotificationService
   private workflowService: WorkflowService | null = null
   private settingsService?: SettingsService
+  private handoffApiPortGetter: (() => number) | null = null
 
   // Namespace UUID for agent sessions
   private readonly AGENT_SESSION_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'
@@ -109,6 +110,10 @@ export class TerminalService {
 
   setSettingsService(service: SettingsService): void {
     this.settingsService = service
+  }
+
+  setHandoffApiPortGetter(getter: () => number): void {
+    this.handoffApiPortGetter = getter
   }
 
   /**
@@ -926,6 +931,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     }
     spawnEnv.TERM = 'xterm-256color'
     spawnEnv.COLORTERM = 'truecolor'
+    if (this.handoffApiPortGetter) {
+      spawnEnv.MINION_API_PORT = String(this.handoffApiPortGetter())
+    }
 
     // Validate working directory before spawn
     const cwdExists = existsSync(worktreePath)

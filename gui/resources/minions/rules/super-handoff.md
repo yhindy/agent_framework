@@ -27,7 +27,7 @@ You can invoke this skill by:
 ## API Integration
 
 This skill calls the local orchestrator API:
-- Endpoint: `POST http://127.0.0.1:19234/api/spawn-super`
+- Endpoint: `POST http://127.0.0.1:${MINION_API_PORT:-19234}/api/spawn-super`
 - The orchestrator will create fresh worktrees and start agents
 
 ## API Request Format
@@ -102,10 +102,13 @@ AskUserQuestion(questions=[{
 
 ### API Unreachable
 
-If connection to `localhost:19234` fails:
+If connection to the orchestrator API fails:
 
 ```
-Unable to reach the orchestrator API at localhost:19234.
+Unable to reach the orchestrator API.
+
+The port is set via the MINION_API_PORT environment variable (default: 19234).
+You can also read it from .minions/api-port in the project root.
 
 This usually means the Minion GUI is not running.
 
