@@ -69,6 +69,10 @@ export class HandoffApiService {
   private workflowService: WorkflowService | null = null
   private mainWindow: BrowserWindow | null = null
   private port: number = DEFAULT_HANDOFF_API_PORT
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryCount: number = 0
+  private static readonly MAX_RETRIES = 5
+  private static readonly RETRY_DELAY_MS = 2000
 
   /**
    * Set the port to use (for testing)
@@ -127,16 +131,26 @@ export class HandoffApiService {
 
     this.server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        log.error(`Port ${this.port} is already in use. Handoff API will not be available.`)
+        this.server = null
+        if (this.retryCount < HandoffApiService.MAX_RETRIES) {
+          this.retryCount++
+          log.warn(`Port ${this.port} in use, retrying in ${HandoffApiService.RETRY_DELAY_MS}ms (attempt ${this.retryCount}/${HandoffApiService.MAX_RETRIES})`)
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null
+            this.start()
+          }, HandoffApiService.RETRY_DELAY_MS)
+        } else {
+          log.error(`Port ${this.port} is already in use after ${HandoffApiService.MAX_RETRIES} retries. Handoff API will not be available.`)
+        }
       } else {
         log.error('HandoffApiService server error:', error)
+        this.server = null
       }
-      // Reset server reference on error so isRunning() returns false
-      this.server = null
     })
 
     // Bind only to localhost for security
     this.server.listen(this.port, '127.0.0.1', () => {
+      this.retryCount = 0
       log.info(`HandoffApiService listening on http://127.0.0.1:${this.port}`)
     })
   }
@@ -145,6 +159,11 @@ export class HandoffApiService {
    * Stop the HTTP server
    */
   stop(): Promise<void> {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+    this.retryCount = 0
     return new Promise((resolve) => {
       if (this.server) {
         const server = this.server
