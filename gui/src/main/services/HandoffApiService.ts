@@ -1,5 +1,6 @@
 import * as http from 'http'
 import { join, dirname } from 'path'
+import { mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { createLogger } from './logger'
 import type { AgentService } from './AgentService'
 import type { TerminalService } from './TerminalService'
@@ -69,9 +70,11 @@ export class HandoffApiService {
   private workflowService: WorkflowService | null = null
   private mainWindow: BrowserWindow | null = null
   private port: number = DEFAULT_HANDOFF_API_PORT
+  private activePort: number | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryCount: number = 0
-  private static readonly MAX_RETRIES = 5
+  private portFilePaths: string[] = []
+  private static readonly MAX_RETRIES = 3
   private static readonly RETRY_DELAY_MS = 2000
 
   /**
@@ -117,13 +120,16 @@ export class HandoffApiService {
   }
 
   /**
-   * Start the HTTP server
+   * Start the HTTP server. Tries the default port first, retries on conflict,
+   * then falls back to an OS-assigned port for multi-instance support.
    */
-  start(): void {
+  start(portOverride?: number): void {
     if (this.server) {
       log.warn('HandoffApiService already started')
       return
     }
+
+    const bindPort = portOverride ?? this.port
 
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res)
@@ -134,13 +140,16 @@ export class HandoffApiService {
         this.server = null
         if (this.retryCount < HandoffApiService.MAX_RETRIES) {
           this.retryCount++
-          log.warn(`Port ${this.port} in use, retrying in ${HandoffApiService.RETRY_DELAY_MS}ms (attempt ${this.retryCount}/${HandoffApiService.MAX_RETRIES})`)
+          log.warn(`Port ${bindPort} in use, retrying in ${HandoffApiService.RETRY_DELAY_MS}ms (attempt ${this.retryCount}/${HandoffApiService.MAX_RETRIES})`)
           this.retryTimer = setTimeout(() => {
             this.retryTimer = null
             this.start()
           }, HandoffApiService.RETRY_DELAY_MS)
         } else {
-          log.error(`Port ${this.port} is already in use after ${HandoffApiService.MAX_RETRIES} retries. Handoff API will not be available.`)
+          // Fall back to OS-assigned port for multi-instance support
+          log.warn(`Port ${this.port} unavailable after ${HandoffApiService.MAX_RETRIES} retries, using OS-assigned port`)
+          this.retryCount = 0
+          this.start(0)
         }
       } else {
         log.error('HandoffApiService server error:', error)
@@ -149,9 +158,12 @@ export class HandoffApiService {
     })
 
     // Bind only to localhost for security
-    this.server.listen(this.port, '127.0.0.1', () => {
+    this.server.listen(bindPort, '127.0.0.1', () => {
+      const addr = this.server!.address()
+      this.activePort = typeof addr === 'object' && addr ? addr.port : bindPort
       this.retryCount = 0
-      log.info(`HandoffApiService listening on http://127.0.0.1:${this.port}`)
+      log.info(`HandoffApiService listening on http://127.0.0.1:${this.activePort}`)
+      this.writePortFiles()
     })
   }
 
@@ -164,6 +176,8 @@ export class HandoffApiService {
       this.retryTimer = null
     }
     this.retryCount = 0
+    this.cleanupPortFiles()
+    this.activePort = null
     return new Promise((resolve) => {
       if (this.server) {
         const server = this.server
@@ -214,7 +228,7 @@ export class HandoffApiService {
    * Handle health check endpoint
    */
   private handleHealth(_req: http.IncomingMessage, res: http.ServerResponse): void {
-    this.sendJson(res, 200, { status: 'ok', port: this.port })
+    this.sendJson(res, 200, { status: 'ok', port: this.getPort() })
   }
 
   /**
@@ -620,10 +634,10 @@ export class HandoffApiService {
   }
 
   /**
-   * Get the port the server is listening on
+   * Get the port the server is actually listening on (may differ from default if fallback was used)
    */
   getPort(): number {
-    return this.port
+    return this.activePort ?? this.port
   }
 
   /**
@@ -631,6 +645,47 @@ export class HandoffApiService {
    */
   isRunning(): boolean {
     return this.server !== null && this.server.listening
+  }
+
+  /**
+   * Write the active port to .minions/api-port in each active project directory.
+   * Agents read this file to discover which port to connect to.
+   */
+  private writePortFiles(): void {
+    if (!this.activePort || !this.projectService) return
+
+    const projects = this.projectService.getActiveProjects()
+    this.portFilePaths = []
+
+    for (const project of projects) {
+      try {
+        const minionsDir = join(project.path, '.minions')
+        mkdirSync(minionsDir, { recursive: true })
+        const portFilePath = join(minionsDir, 'api-port')
+        writeFileSync(portFilePath, String(this.activePort))
+        this.portFilePaths.push(portFilePath)
+      } catch (err) {
+        log.warn(`Failed to write port file for project ${project.path}:`, err)
+      }
+    }
+
+    if (this.portFilePaths.length > 0) {
+      log.info(`Wrote api-port file to ${this.portFilePaths.length} project(s)`)
+    }
+  }
+
+  /**
+   * Remove port files written by writePortFiles
+   */
+  private cleanupPortFiles(): void {
+    for (const filePath of this.portFilePaths) {
+      try {
+        unlinkSync(filePath)
+      } catch {
+        // File may already be gone
+      }
+    }
+    this.portFilePaths = []
   }
 
   /**

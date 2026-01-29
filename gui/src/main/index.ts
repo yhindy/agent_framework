@@ -308,6 +308,9 @@ function initializeServices(): void {
   // Wire up WorkflowService to HandoffApiService for workflow detection
   handoffApiService.setWorkflowService(services.workflow)
 
+  // Wire up HandoffApiService port getter to TerminalService for MINION_API_PORT env var
+  terminalService.setHandoffApiPortGetter(() => handoffApiService.getPort())
+
   // Wire up ClaudeConfigService to WorkflowService for imported agents
   services.workflow.setClaudeConfigService(services.claudeConfig)
 
