@@ -199,6 +199,7 @@ function createWindow(): void {
     services.testEnv.setWindow(mainWindow)
     services.fileWatcher.setWindow(mainWindow)
     services.notification.setWindow(mainWindow)
+    services.handoffApi.setWindow(mainWindow)
   }
 
   // Track window focus for notifications
@@ -1702,7 +1703,13 @@ app.whenReady().then(() => {
   initializeServices()
 
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      // Restart services that were stopped in window-all-closed
+      if (services) {
+        services.handoffApi.start()
+      }
+    }
   })
 })
 

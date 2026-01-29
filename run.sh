@@ -28,4 +28,10 @@ fi
 
 echo "🚀 Starting Agent Framework GUI..."
 echo ""
+
+# Rebuild native modules (node-pty) for current Electron version
+echo "Rebuilding native modules..."
+npm run rebuild -w gui
+
+echo ""
 npm run gui:dev
