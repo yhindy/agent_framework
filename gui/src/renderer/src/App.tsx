@@ -6,10 +6,13 @@ import { SnackbarProvider } from './contexts/SnackbarContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import SnackbarContainer from './components/SnackbarContainer'
 import { initGlobalOutputListener } from './components/Terminal'
+import { useAgentStore } from './store/agentStore'
 import './App.css'
 
 function App() {
-  const [activeProjects, setActiveProjects] = useState<any[]>([])
+  const activeProjects = useAgentStore((s) => s.activeProjects)
+  const fetchActiveProjects = useAgentStore((s) => s.fetchActiveProjects)
+  const subscribeToEvents = useAgentStore((s) => s.subscribeToEvents)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,19 +22,21 @@ function App() {
     initGlobalOutputListener()
 
     async function init() {
-      const active = await window.electronAPI.getActiveProjects()
-      setActiveProjects(active)
+      await fetchActiveProjects()
       setLoading(false)
     }
     init()
+
+    // Subscribe to IPC events for centralized state updates
+    const unsubscribe = subscribeToEvents()
+    return () => unsubscribe()
   }, [])
 
   const refreshState = async () => {
-    const active = await window.electronAPI.getActiveProjects()
-    setActiveProjects(active)
+    await fetchActiveProjects()
   }
 
-  const handleProjectSelect = async (_project: any) => {
+  const handleProjectSelect = async (_project: unknown) => {
     // ProjectPicker (via electronAPI) handles the add/select logic backend-side
     // We just need to refresh our state
     await refreshState()

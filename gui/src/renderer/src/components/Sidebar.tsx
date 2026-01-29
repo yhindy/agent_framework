@@ -4,6 +4,8 @@ import ProjectPicker from './ProjectPicker'
 import MissionDropdown from './MissionDropdown'
 import { extractBranchName } from '../utils/branchUtils'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
+import { useAgentStore } from '../store/agentStore'
+import type { Project, AgentSession } from '../store/agentStore'
 import {
   BotIcon,
   CrownIcon,
@@ -23,51 +25,19 @@ import {
 } from './icons'
 import './Sidebar.css'
 
-interface AgentInfo {
+interface SidebarAgentInfo {
   id: string
   isSuperMinion?: boolean
 }
 
 interface SidebarProps {
-  activeProjects: any[]
+  activeProjects: Project[]
   onNavigate: (path: string) => void
   onProjectRemove: (path: string) => void
   onProjectAdd: () => void
   isCollapsed: boolean
   onToggleCollapse: () => void
-  onAgentListChange?: (agents: AgentInfo[]) => void
-}
-
-interface HandoffSource {
-  agentId: string
-  branchMode: 'inherit' | 'fresh'
-  originalBranch: string
-  handoffTimestamp: string
-}
-
-interface AgentSession {
-  id: string
-  assignmentId: string | null
-  worktreePath: string
-  terminalPid: number | null
-  hasUnread: boolean
-  lastActivity: string
-  mode?: string
-  tool?: string
-  projectPath?: string  // Added to track which project the agent belongs to
-  isSuperMinion?: boolean
-  parentAgentId?: string
-  isBaseBranchAgent?: boolean
-  branch?: string
-  displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
-  failureReason?: string  // Why session resume failed
-  resumeAttempts?: number  // Number of times we've tried to resume
-  currentState?: string  // Current state from backend (waiting, working, etc.)
-  handoffSource?: HandoffSource  // Set if this agent was created via handoff
-}
-
-interface AgentsByProject {
-  [projectPath: string]: AgentSession[]
+  onAgentListChange?: (agents: SidebarAgentInfo[]) => void
 }
 
 interface TaskInvocation {
@@ -111,7 +81,9 @@ function addToSet<T>(set: Set<T>, item: T): Set<T> {
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const [agentsByProject, setAgentsByProject] = useState<AgentsByProject>({})
+  const agentsByProject = useAgentStore((s) => s.agentsByProject)
+  const agentStates = useAgentStore((s) => s.agentStates)
+  const fetchAgentsForAllProjects = useAgentStore((s) => s.fetchAgentsForAllProjects)
   const [tasksByAgent, setTasksByAgent] = useState<TasksByAgent>({})
   const [waitingAgents, setWaitingAgents] = useState<Set<string>>(new Set())
   const [waitingPlainTerminals, setWaitingPlainTerminals] = useState<Set<string>>(new Set())
@@ -138,6 +110,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   const { showLoading, hideLoading } = useLoadingSnackbar()
   const loadingSnackbarRef = useRef<string | null>(null)
   const isInitialLoadRef = useRef(true)
+  const hasCompletedInitialFetchRef = useRef(false)
 
   // Keep ref in sync with collapsedSuperMinions state
   useEffect(() => {
@@ -164,11 +137,79 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     return undefined
   }, [openSubmenuProject])
 
+  // Derive waiting agents, task data, and collapse state from store's agentsByProject.
+  // This does NOT fetch agents — the store handles that via subscribeToEvents() in App.tsx.
+  // The initial fetch is done in the mount effect below.
+  const deriveAgentUIState = async (): Promise<void> => {
+    const currentAgentsByProject = useAgentStore.getState().agentsByProject
+    const currentWaitingAgents = new Set<string>()
+    const superMinionIds: string[] = []
+    const expandedSuperMinions: string[] = []
+    const currentCollapsed = collapsedSuperMinionsRef.current
+    const currentAgentStates = useAgentStore.getState().agentStates
+
+    for (const project of activeProjects) {
+      const agents = currentAgentsByProject[project.path] || []
+      for (const agent of agents) {
+        // Check store's agentStates first (most up-to-date), fallback to agent's currentState
+        const storeState = currentAgentStates[agent.id]
+        const effectiveState = storeState || agent.currentState
+        if (effectiveState === 'waiting') {
+          currentWaitingAgents.add(agent.id)
+        }
+        if (agent.isSuperMinion) {
+          superMinionIds.push(agent.id)
+          if (!currentCollapsed.has(agent.id)) {
+            expandedSuperMinions.push(agent.id)
+          }
+        }
+      }
+    }
+
+    // Fetch fresh task data for expanded super minions in parallel
+    const expandedTaskResults = await Promise.all(
+      expandedSuperMinions.map(async (agentId) => {
+        try {
+          const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
+          return { agentId, tasks: superDetails?.taskInvocations || [] }
+        } catch (err) {
+          console.error(`Failed to fetch task invocations for ${agentId}:`, err)
+          return { agentId, tasks: [] }
+        }
+      })
+    )
+
+    // Update task data: preserve collapsed super minion tasks, update expanded ones
+    setTasksByAgent(prevTasks => {
+      const newTasks: TasksByAgent = {}
+      for (const id of superMinionIds) {
+        if (currentCollapsed.has(id) && prevTasks[id]) {
+          newTasks[id] = prevTasks[id]
+        }
+      }
+      for (const { agentId, tasks } of expandedTaskResults) {
+        newTasks[agentId] = tasks
+      }
+      return newTasks
+    })
+
+    setWaitingAgents(currentWaitingAgents)
+
+    // Initialize collapse state for new super minions on first load
+    if (!hasInitializedSuperMinionCollapse.current) {
+      setCollapsedSuperMinions(new Set(superMinionIds))
+      localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
+      hasInitializedSuperMinionCollapse.current = true
+    }
+  }
+
+  // Initial fetch on mount and when activeProjects change
   useEffect(() => {
-    // Load agents and query current state from backend
-    const loadAgentsAndStates = async (showIndicator: boolean): Promise<void> => {
-      // Show loading indicator only on initial load (not on IPC updates)
-      if (showIndicator && activeProjects.length > 0) {
+    const shouldShowIndicator = isInitialLoadRef.current
+    isInitialLoadRef.current = false
+
+    const doInitialFetch = async () => {
+      if (shouldShowIndicator && activeProjects.length > 0) {
         loadingSnackbarRef.current = showLoading({
           title: 'Loading Projects',
           messages: [
@@ -180,120 +221,55 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
         })
       }
 
-      const agentsByProj: AgentsByProject = {}
-      const currentWaitingAgents = new Set<string>()
-      const superMinionIds: string[] = []
-      const expandedSuperMinions: string[] = []
-      // Use ref to get current collapsed state (avoids stale closure)
-      const currentCollapsed = collapsedSuperMinionsRef.current
+      // Fetch agents for each project into the centralized store (initial load)
+      // Use the prop's activeProjects since the store may not have them yet
+      const store = useAgentStore.getState()
+      await Promise.all(activeProjects.map(p => store.fetchAgentsForProject(p.path)))
 
-      // Single pass: load agents, collect waiting agents, and categorize super minions
-      for (const project of activeProjects) {
-        try {
-          const agents = await window.electronAPI.listAgentsForProject(project.path)
-          agentsByProj[project.path] = agents
+      // Now derive UI state from the store
+      await deriveAgentUIState()
 
-          for (const agent of agents) {
-            if (agent.currentState === 'waiting') {
-              currentWaitingAgents.add(agent.id)
-            }
-            if (agent.isSuperMinion) {
-              superMinionIds.push(agent.id)
-              if (!currentCollapsed.has(agent.id)) {
-                expandedSuperMinions.push(agent.id)
-              }
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to load agents for ${project.path}:`, err)
-          agentsByProj[project.path] = []
-        }
-      }
+      hasCompletedInitialFetchRef.current = true
 
-      setAgentsByProject(agentsByProj)
-
-      // Fetch fresh task data for expanded super minions in parallel
-      const expandedTaskResults = await Promise.all(
-        expandedSuperMinions.map(async (agentId) => {
-          try {
-            const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
-            return { agentId, tasks: superDetails?.taskInvocations || [] }
-          } catch (err) {
-            console.error(`Failed to fetch task invocations for ${agentId}:`, err)
-            return { agentId, tasks: [] }
-          }
-        })
-      )
-
-      // Update task data: preserve collapsed super minion tasks, update expanded ones
-      setTasksByAgent(prevTasks => {
-        const newTasks: TasksByAgent = {}
-
-        // Preserve task data for collapsed super minions
-        for (const id of superMinionIds) {
-          if (currentCollapsed.has(id) && prevTasks[id]) {
-            newTasks[id] = prevTasks[id]
-          }
-        }
-
-        // Add fresh task data for expanded super minions
-        for (const { agentId, tasks } of expandedTaskResults) {
-          newTasks[agentId] = tasks
-        }
-
-        return newTasks
-      })
-
-      setWaitingAgents(currentWaitingAgents)
-
-      // Initialize collapse state for new super minions on first load
-      if (!hasInitializedSuperMinionCollapse.current) {
-        setCollapsedSuperMinions(new Set(superMinionIds))
-        localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
-        hasInitializedSuperMinionCollapse.current = true
-      }
-
-      console.log('[Sidebar] Loaded agents with current states:', {
-        waiting: [...currentWaitingAgents]
-      })
-
-      // Hide loading indicator when done
       if (loadingSnackbarRef.current) {
         hideLoading(loadingSnackbarRef.current)
         loadingSnackbarRef.current = null
       }
     }
 
-    // Show loading indicator only on initial load
-    const shouldShowIndicator = isInitialLoadRef.current
-    isInitialLoadRef.current = false
-    loadAgentsAndStates(shouldShowIndicator)
+    doInitialFetch()
+  }, [activeProjects])
 
-    // Listen for agent updates (don't show loading indicator for updates)
-    const unsubscribe = window.electronAPI.onAgentListUpdate(() => {
-      loadAgentsAndStates(false)
-    })
+  // Re-derive UI state whenever the store's agent data or agent states change
+  // (triggered by the store's event subscriptions in App.tsx, NOT duplicate listeners)
+  useEffect(() => {
+    // Skip during initial mount (handled by the effect above)
+    if (!hasCompletedInitialFetchRef.current) return
+    deriveAgentUIState()
+  }, [agentsByProject, agentStates])
 
-    // Listen for state changes (NEW: replaces individual waiting/resumed events)
-    const unsubStateChanged = window.electronAPI.onAgentStateChanged((agentId, state) => {
-      console.log('[Sidebar] State changed:', agentId, state)
-
-      if (state === 'waiting') {
-        // Clear acknowledgment so notification shows for new waiting event
-        setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
-        setWaitingAgents(prev => addToSet(prev, agentId))
-      } else {
-        setWaitingAgents(prev => removeFromSet(prev, agentId))
+  // React to agentStates changes from the store to manage acknowledgedWaitingAgents
+  const prevAgentStatesRef = useRef<Record<string, string>>({})
+  useEffect(() => {
+    const prevStates = prevAgentStatesRef.current
+    for (const [agentId, state] of Object.entries(agentStates)) {
+      const prevState = prevStates[agentId]
+      if (prevState !== state) {
+        if (state === 'waiting') {
+          setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
+        }
       }
-    })
+    }
+    prevAgentStatesRef.current = agentStates
+  }, [agentStates])
 
+  // Subscribe to Sidebar-specific IPC events (NOT handled by the store)
+  useEffect(() => {
     // Listen for plain terminal waiting state changes
     const unsubPlainWaiting = window.electronAPI.onPlainTerminalWaitingForInput((terminalId) => {
-      // Extract agentId from terminalId (format: "agentId-plain-N" or similar)
       const parts = terminalId.split('-')
-      const agentId = parts.slice(0, -1).join('-')  // Remove last part to get agentId
+      const agentId = parts.slice(0, -1).join('-')
 
-      // Clear acknowledgment so notification shows for new waiting event
       setAcknowledgedWaitingAgents(prev => removeFromSet(prev, agentId))
       setWaitingPlainTerminals(prev => addToSet(prev, terminalId))
     })
@@ -332,14 +308,12 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     })
 
     return () => {
-      unsubscribe()
-      unsubStateChanged()
       unsubPlainWaiting()
       unsubPlainResumed()
       unsubTeleportFailed()
       unsubResumeFailed()
     }
-  }, [activeProjects, showLoading, hideLoading])
+  }, [])
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -357,7 +331,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   // IMPORTANT: This must match the exact visual order in the sidebar
   useEffect(() => {
     if (onAgentListChange) {
-      const allAgents: AgentInfo[] = []
+      const allAgents: SidebarAgentInfo[] = []
 
       // Iterate through projects in the same order as activeProjects (matches sidebar render order)
       for (const project of activeProjects) {
@@ -459,23 +433,6 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     })
   }
 
-  const loadAllAgents = async () => {
-    // Fetch agents for all active projects
-    const agentsByProj: AgentsByProject = {}
-    
-    for (const project of activeProjects) {
-      try {
-        const agents = await window.electronAPI.listAgentsForProject(project.path)
-        agentsByProj[project.path] = agents
-      } catch (err) {
-        console.error(`Failed to load agents for ${project.path}:`, err)
-        agentsByProj[project.path] = []
-      }
-    }
-    
-    setAgentsByProject(agentsByProj)
-  }
-
   const handleNavigate = (path: string) => {
     onNavigate(path)
   }
@@ -493,7 +450,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       ? `/workspace/super/${agent.id}`
       : `/workspace/agent/${agent.id}`
     handleNavigate(route)
-    loadAllAgents() // Refresh to clear unread badge
+    fetchAgentsForAllProjects() // Refresh to clear unread badge
   }
 
   const handleAddMinion = (isSuper = false) => {
@@ -510,7 +467,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     setShowAddModal(true)
   }
 
-  const handleProjectSelect = async (_project: any) => {
+  const handleProjectSelect = async (_project: unknown) => {
     // Project has been added to the store, notify parent to refresh
     console.log('[Sidebar] Project selected, notifying parent to refresh')
     setShowAddModal(false)

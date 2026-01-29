@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Sidebar from '../Sidebar'
 import { MemoryRouter } from 'react-router-dom'
 import { SnackbarProvider } from '../../contexts/SnackbarContext'
+import { useAgentStore } from '../../store/agentStore'
 import React from 'react'
 
 // Test wrapper with all required providers
@@ -351,12 +352,6 @@ describe('Sidebar plain terminal waiting', () => {
   })
 
   it('shows badge if either agent or plain terminal is waiting', async () => {
-    let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
-    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
-      agentStateCallback = callback
-      return vi.fn()
-    })
-
     render(
       <TestWrapper>
         <Sidebar
@@ -374,9 +369,12 @@ describe('Sidebar plain terminal waiting', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent waiting via state change (not plain terminal)
-    // At this point, agentStateCallback has been assigned during render
-    agentStateCallback!('agent-1', 'waiting')
+    // Trigger agent waiting via store state change (the store handles onAgentStateChanged)
+    act(() => {
+      useAgentStore.setState((prev) => ({
+        agentStates: { ...prev.agentStates, 'agent-1': 'waiting' }
+      }))
+    })
 
     // Should show badge
     await waitFor(() => {
@@ -419,16 +417,10 @@ describe('Sidebar waiting indicator suppression', () => {
     }
   ]
 
-  let agentStateCallback: ((agentId: string, state: 'working' | 'waiting' | 'unknown') => void) | null = null
-
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(window.electronAPI.listAgentsForProject).mockResolvedValue(mockAgents)
-
-    vi.mocked(window.electronAPI.onAgentStateChanged).mockImplementation((callback) => {
-      agentStateCallback = callback
-      return vi.fn()
-    })
+    useAgentStore.setState({ agentStates: {} })
   })
 
   it('shows indicator for waiting agent when viewing different agent', async () => {
@@ -450,8 +442,12 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent-1 waiting via state change
-    agentStateCallback?.('agent-1', 'waiting')
+    // Trigger agent-1 waiting via store state change
+    act(() => {
+      useAgentStore.setState((prev) => ({
+        agentStates: { ...prev.agentStates, 'agent-1': 'waiting' }
+      }))
+    })
 
     // Should show badge for agent-1 (we're viewing agent-2)
     await waitFor(() => {
@@ -479,8 +475,12 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-1')).toBeInTheDocument()
     })
 
-    // Trigger agent-1 waiting via state change
-    agentStateCallback?.('agent-1', 'waiting')
+    // Trigger agent-1 waiting via store state change
+    act(() => {
+      useAgentStore.setState((prev) => ({
+        agentStates: { ...prev.agentStates, 'agent-1': 'waiting' }
+      }))
+    })
 
     // Should NOT show badge for agent-1 (we're viewing it)
     await waitFor(() => {
@@ -514,9 +514,12 @@ describe('Sidebar waiting indicator suppression', () => {
       expect(screen.getByText('agent-2')).toBeInTheDocument()
     })
 
-    // Trigger both agents waiting via state change
-    agentStateCallback?.('agent-1', 'waiting')
-    agentStateCallback?.('agent-2', 'waiting')
+    // Trigger both agents waiting via store state change
+    act(() => {
+      useAgentStore.setState({
+        agentStates: { 'agent-1': 'waiting', 'agent-2': 'waiting' }
+      })
+    })
 
     // Badge should show for agent-1 (not viewing it)
     // Badge should NOT show for agent-2 (viewing it)
@@ -929,7 +932,7 @@ describe('Sidebar branch name display', () => {
 describe('Sidebar task data persistence', () => {
   // These tests verify that task data is preserved correctly when agent list updates occur.
   // The implementation preserves task data for collapsed super minions and fetches fresh
-  // data for expanded ones during each loadAgentsAndStates call.
+  // data for expanded ones during each deriveAgentUIState call.
 
   const mockProjects = [
     { name: 'test-project', path: '/path/to/project' }
@@ -960,8 +963,6 @@ describe('Sidebar task data persistence', () => {
     }
   ]
 
-  let agentListUpdateCallback: (() => void) | null = null
-
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -978,12 +979,6 @@ describe('Sidebar task data persistence', () => {
       taskInvocations: mockTaskInvocations,
       children: [],
       pendingPlans: []
-    })
-
-    // Capture the onAgentListUpdate callback so we can trigger it manually
-    vi.mocked(window.electronAPI.onAgentListUpdate).mockImplementation((callback) => {
-      agentListUpdateCallback = callback
-      return vi.fn()
     })
   })
 
@@ -1028,16 +1023,21 @@ describe('Sidebar task data persistence', () => {
     // Verify tasks are indeed visible before the update
     expect(screen.queryByText('Test task 1')).toBeInTheDocument()
 
-    // Simulate onAgentListUpdate firing (e.g., from backend notification)
-    agentListUpdateCallback?.()
+    // Simulate agent list update by updating the store's agentsByProject
+    // (this is what the store's onAgentListUpdate handler does)
+    act(() => {
+      useAgentStore.setState({
+        agentsByProject: { '/path/to/project': [mockSuperMinionAgent] }
+      })
+    })
 
-    // Wait for the agent list update to complete
+    // Wait for the re-derive to complete
     await waitFor(() => {
       // The super minion should still be in the DOM
       expect(screen.getByText('super-task')).toBeInTheDocument()
     })
 
-    // Tasks should still be visible after onAgentListUpdate
+    // Tasks should still be visible after the store update
     expect(screen.getByText('Test task 1')).toBeInTheDocument()
     expect(screen.getByText('Test task 2')).toBeInTheDocument()
   })
@@ -1069,13 +1069,21 @@ describe('Sidebar task data persistence', () => {
       expect(screen.getByText('Test task 1')).toBeInTheDocument()
     })
 
-    // Fire multiple agent list updates in succession
-    agentListUpdateCallback?.()
+    // Fire multiple agent list updates by changing the store's agentsByProject
+    act(() => {
+      useAgentStore.setState({
+        agentsByProject: { '/path/to/project': [mockSuperMinionAgent] }
+      })
+    })
     await waitFor(() => {
       expect(screen.getByText('super-task')).toBeInTheDocument()
     })
 
-    agentListUpdateCallback?.()
+    act(() => {
+      useAgentStore.setState({
+        agentsByProject: { '/path/to/project': [{ ...mockSuperMinionAgent }] }
+      })
+    })
     await waitFor(() => {
       expect(screen.getByText('super-task')).toBeInTheDocument()
     })

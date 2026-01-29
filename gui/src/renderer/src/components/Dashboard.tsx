@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { usePRPolling } from '../hooks/usePRPolling'
@@ -9,6 +9,8 @@ import AgentCleanupDropdown from './AgentCleanupDropdown'
 import AgentStateIndicator from './AgentStateIndicator'
 import { BotIcon, CrownIcon } from './icons'
 import { WorkflowBuilderPage } from './WorkflowEditor'
+import { useAgentStore } from '../store/agentStore'
+import type { Project, AssignmentEntry, AgentState } from '../store/agentStore'
 import type { DefaultToolSettings } from '../../../shared/types/settings'
 import type {
   WorkflowConfig,
@@ -17,24 +19,12 @@ import type {
 import './Dashboard.css'
 
 interface DashboardProps {
-  activeProjects: any[]
+  activeProjects: Project[]
   onRefresh: () => void
 }
 
-interface Assignment {
-  id: string
-  agentId: string
-  branch: string
-  feature: string
-  status: string
-  tool: string
-  model?: string
-  mode: string
-  prUrl?: string
-  prStatus?: string
+interface Assignment extends AssignmentEntry {
   projectPath?: string
-  claudeState?: 'working' | 'waiting' | 'unknown'
-  isWaitingForInput?: boolean
 }
 
 const LOADING_MESSAGES = [
@@ -110,7 +100,27 @@ function getDefaultModelForTool(tool: string, toolSettings: DefaultToolSettings)
 function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const storeAssignments = useAgentStore((s) => s.assignments)
+  const storeAgentStates = useAgentStore((s) => s.agentStates)
+  const fetchAssignments = useAgentStore((s) => s.fetchAssignments)
+  const refreshAll = useAgentStore((s) => s.refreshAll)
+
+  // Derive flat assignments array from store's keyed assignments
+  const assignments = useMemo(() => {
+    const allAssignments: Assignment[] = []
+    for (const projectPath of Object.keys(storeAssignments)) {
+      const data = storeAssignments[projectPath]
+      if (data?.assignments) {
+        const projectAssignments = data.assignments.map((a) => ({
+          ...a,
+          projectPath
+        }))
+        allAssignments.push(...projectAssignments)
+      }
+    }
+    return allAssignments
+  }, [storeAssignments])
+
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showTypeSelection, setShowTypeSelection] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
@@ -122,7 +132,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   const { showLoading, hideLoading } = useLoadingSnackbar()
   const [creatingPRFor, setCreatingPRFor] = useState<Set<string>>(new Set())
   const [checkingPRFor, setCheckingPRFor] = useState<Set<string>>(new Set())
-  const [agentStates, setAgentStates] = useState<Map<string, 'working' | 'waiting' | 'unknown'>>(new Map())
   const [showPRConfirm, setShowPRConfirm] = useState(false)
   const [selectedAssignmentForPR, setSelectedAssignmentForPR] = useState<Assignment | null>(null)
   const [autoCommit, setAutoCommit] = useState(true)
@@ -219,27 +228,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   ])
 
   useEffect(() => {
-    loadAssignments()
+    // Fetch assignments into the store on mount and when projects change
+    fetchAssignments()
     checkDependencies()
-
-    // Listen for assignment updates
-    const unsubscribe = window.electronAPI.onAssignmentsUpdate(() => {
-      loadAssignments()
-    })
-
-    // Listen for agent state changes
-    const unsubscribeState = window.electronAPI.onAgentStateChanged((agentId, state) => {
-      setAgentStates(prev => {
-        const next = new Map(prev)
-        next.set(agentId, state)
-        return next
-      })
-    })
-
-    return () => {
-      unsubscribe()
-      unsubscribeState()
-    }
   }, [activeProjects])
 
   // Load default settings on mount and apply to formData
@@ -321,27 +312,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       setGhAvailable(false)
       setGhError('Failed to check dependencies')
     }
-  }
-
-  const loadAssignments = async () => {
-    // Load assignments from all active projects
-    const allAssignments: Assignment[] = []
-    
-    for (const project of activeProjects) {
-      try {
-        const data = await window.electronAPI.getAssignmentsForProject(project.path)
-        // Add projectPath to each assignment for tracking
-        const projectAssignments = data.assignments.map((a: Assignment) => ({
-          ...a,
-          projectPath: project.path
-        }))
-        allAssignments.push(...projectAssignments)
-      } catch (err) {
-        console.error(`Failed to load assignments for ${project.path}:`, err)
-      }
-    }
-    
-    setAssignments(allAssignments)
   }
 
   const handleCreateAssignment = async () => {
@@ -436,11 +406,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       }
       setShowTypeSelection(true)
 
-      // Wait a moment for worktree creation then refresh
-      setTimeout(() => {
-        loadAssignments()
-        onRefresh()  // Refresh parent state too
-      }, 1500)
+      // Refresh state via the centralized store
+      refreshAll()
     } catch (error: any) {
       setIsCreating(false)
       hideLoading(snackbarId)
@@ -521,9 +488,9 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
 
   // Group assignments into 3 columns based on status AND claudeState
   // Helper to get effective claude state (IPC state takes precedence over stored state)
-  const getEffectiveClaudeState = (a: Assignment): 'working' | 'waiting' | 'unknown' => {
-    // First check live IPC state (most up-to-date)
-    const liveState = agentStates.get(a.agentId)
+  const getEffectiveClaudeState = (a: Assignment): AgentState => {
+    // First check live IPC state from the store (most up-to-date)
+    const liveState = storeAgentStates[a.agentId]
     if (liveState) return liveState
 
     // Fall back to stored state from assignment data
@@ -645,7 +612,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
     setShowAddProjectModal(true)
   }
 
-  const handleProjectSelect = async (_project: any) => {
+  const handleProjectSelect = async (_project: unknown) => {
     // Project has been added to the store, notify parent to refresh
     console.log('[Dashboard] Project selected, notifying parent to refresh')
     setShowAddProjectModal(false)
@@ -728,11 +695,8 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       setTeleportInput('')
       setTeleportProjectPath('')
 
-      // Refresh assignments
-      setTimeout(() => {
-        loadAssignments()
-        onRefresh()
-      }, 1500)
+      // Refresh state via the centralized store
+      refreshAll()
     } catch (error: any) {
       setIsTeleporting(false)
       hideLoading(snackbarId)
@@ -793,7 +757,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                             <div onClick={(e) => e.stopPropagation()}>
                               <AgentCleanupDropdown
                                 agentId={assignment.agentId}
-                                onCleanupComplete={loadAssignments}
+                                onCleanupComplete={fetchAssignments}
                               />
                             </div>
                           </div>

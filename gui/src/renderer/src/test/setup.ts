@@ -18,6 +18,8 @@ global.cancelAnimationFrame = vi.fn()
 
 // Mock Electron API
 Object.defineProperty(window, 'electronAPI', {
+  configurable: true,
+  writable: true,
   value: {
     listAgentsForProject: vi.fn(),
     getAssignmentsForProject: vi.fn(),
