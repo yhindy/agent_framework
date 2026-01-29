@@ -183,7 +183,7 @@ branch refs/heads/main
       expect(archived.archivedAt).toBeDefined()
       expect(archived.archiveVersion).toBe(1)
 
-      // Verify writeFileSync was called with correct path
+      // Verify atomicWriteFileSync was called with correct path
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringMatching(/\/test\/project\/\.minions\/archive\/test-project-abc123-\d+\.json$/),
         expect.any(String)

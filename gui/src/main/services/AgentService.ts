@@ -438,24 +438,30 @@ export class AgentService {
    * @param projectPath - Optional project path for new format detection
    */
   writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
-    // Base agents are handled separately via writeBaseAgentInfo
-    if (info.isBaseBranchAgent) {
-      const baseInfoPath = join(worktreePath, '.minions-base-info')
-      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
-      return
-    }
+    try {
+      // Base agents are handled separately via writeBaseAgentInfo
+      if (info.isBaseBranchAgent) {
+        const baseInfoPath = join(worktreePath, '.minions-base-info')
+        writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+        return
+      }
 
-    // Check if this is a new format project
-    const effectiveProjectPath = projectPath || worktreePath
-    if (this.isNewFormatProject(effectiveProjectPath)) {
-      const agentsDir = join(effectiveProjectPath, '.minions', 'agents')
-      mkdirSync(agentsDir, { recursive: true })
-      const agentInfoPath = join(agentsDir, `${info.agentId}.json`)
-      writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
-    } else {
-      // Legacy: write to .agent-info in worktree
-      const agentInfoPath = join(worktreePath, '.agent-info')
-      writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+      // Check if this is a new format project
+      const effectiveProjectPath = projectPath || worktreePath
+      if (this.isNewFormatProject(effectiveProjectPath)) {
+        const agentsDir = join(effectiveProjectPath, '.minions', 'agents')
+        mkdirSync(agentsDir, { recursive: true })
+        const agentInfoPath = join(agentsDir, `${info.agentId}.json`)
+        writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+      } else {
+        // Legacy: write to .agent-info in worktree
+        const agentInfoPath = join(worktreePath, '.agent-info')
+        writeFileSync(agentInfoPath, JSON.stringify(info, null, 2))
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to write agent info for ${info.agentId}: ${message}`)
+      throw new Error(`Failed to write agent info for ${info.agentId} at ${worktreePath}: ${message}`)
     }
   }
 
@@ -504,15 +510,21 @@ export class AgentService {
    * @param info - AgentInfo to write
    */
   writeBaseAgentInfo(projectPath: string, info: AgentInfo): void {
-    if (this.isNewFormatProject(projectPath)) {
-      const minionsDir = join(projectPath, '.minions')
-      mkdirSync(minionsDir, { recursive: true })
-      const baseInfoPath = join(minionsDir, 'base-agent.json')
-      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
-    } else {
-      // Legacy: write to .minions-base-info
-      const baseInfoPath = join(projectPath, '.minions-base-info')
-      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+    try {
+      if (this.isNewFormatProject(projectPath)) {
+        const minionsDir = join(projectPath, '.minions')
+        mkdirSync(minionsDir, { recursive: true })
+        const baseInfoPath = join(minionsDir, 'base-agent.json')
+        writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+      } else {
+        // Legacy: write to .minions-base-info
+        const baseInfoPath = join(projectPath, '.minions-base-info')
+        writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to write base agent info at ${projectPath}: ${message}`)
+      throw new Error(`Failed to write base agent info at ${projectPath}: ${message}`)
     }
   }
 
@@ -684,7 +696,13 @@ export class AgentService {
 
   private saveProjectConfig(projectPath: string, config: ProjectConfig): void {
     const configPath = this.getProjectConfigPath(projectPath)
-    writeFileSync(configPath, JSON.stringify(config, null, 2))
+    try {
+      writeFileSync(configPath, JSON.stringify(config, null, 2))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to save project config at ${configPath}: ${message}`)
+      throw new Error(`Failed to save project config at ${configPath}: ${message}`)
+    }
   }
 
   async createAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<AgentInfo> {
@@ -1430,12 +1448,18 @@ Parent agent was working on: ${sourceFeature}
 
     // 6. Mark plan as approved in .pending-plans.json
     plan.status = 'approved'
-    writeFileSync(plansPath, JSON.stringify(plansData, null, 2))
+    try {
+      writeFileSync(plansPath, JSON.stringify(plansData, null, 2))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to update plan status at ${plansPath}: ${message}`)
+      throw new Error(`Failed to update plan status at ${plansPath}: ${message}`)
+    }
 
     // 7. Update .children-status.json
     const statusPath = join(session.worktreePath, '.children-status.json')
     let statusData: { children: any[] } = { children: [] }
-    
+
     if (existsSync(statusPath)) {
       try {
         const content = readFileSync(statusPath, 'utf-8')
@@ -1452,7 +1476,13 @@ Parent agent was working on: ${sourceFeature}
       lastSignal: null
     })
 
-    writeFileSync(statusPath, JSON.stringify(statusData, null, 2))
+    try {
+      writeFileSync(statusPath, JSON.stringify(statusData, null, 2))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to update children status at ${statusPath}: ${message}`)
+      throw new Error(`Failed to update children status at ${statusPath}: ${message}`)
+    }
 
     return childAgent
   }
@@ -2035,6 +2065,7 @@ Parent agent was working on: ${sourceFeature}
       const worktrees = this.parseWorktrees(stdout, projectName)
 
       let migratedCount = 0
+      const failedAgents: string[] = []
 
       for (const worktree of worktrees) {
         const agentInfoPath = join(worktree.path, '.agent-info')
@@ -2077,17 +2108,26 @@ Parent agent was working on: ${sourceFeature}
             }
 
             // Write new format
-            this.writeAgentInfo(worktree.path, newInfo)
-            migratedCount++
+            try {
+              this.writeAgentInfo(worktree.path, newInfo)
+              migratedCount++
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              log.error(`Failed to migrate agent in ${worktree.path}: ${message}`)
+              failedAgents.push(worktree.path)
+              // Continue with remaining agents
+            }
           }
         }
       }
 
-      // Clear assignments from config.json after migration
-      if (migratedCount > 0 && config.assignments && config.assignments.length > 0) {
+      // Only clear config if ALL migrations succeeded
+      if (migratedCount > 0 && failedAgents.length === 0 && config.assignments && config.assignments.length > 0) {
         log.info(`Migrated ${migratedCount} agents, clearing config.json assignments`)
         config.assignments = []
         this.saveProjectConfig(projectPath, config)
+      } else if (failedAgents.length > 0) {
+        log.warn(`Migration partially failed. ${migratedCount} succeeded, ${failedAgents.length} failed: ${failedAgents.join(', ')}`)
       }
 
       log.info(`Migration complete: ${migratedCount} agents migrated`)
@@ -2209,7 +2249,13 @@ Parent agent was working on: ${sourceFeature}
       isBaseBranchAgent: true
     }
 
-    writeFileSync(baseInfoPath, JSON.stringify(agentInfo, null, 2))
+    try {
+      writeFileSync(baseInfoPath, JSON.stringify(agentInfo, null, 2))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to write base agent info at ${baseInfoPath}: ${message}`)
+      throw new Error(`Failed to write base agent info at ${baseInfoPath}: ${message}`)
+    }
     log.info(`Created base branch agent: ${baseAgentId}`)
 
     return agentInfo
@@ -2370,7 +2416,13 @@ Parent agent was working on: ${sourceFeature}
     // 4. Ensure archive directory exists and write archive file
     const archiveDir = this.ensureArchiveDirectory(projectPath)
     const archivePath = join(archiveDir, `${archiveId}.json`)
-    writeFileSync(archivePath, JSON.stringify(archived, null, 2))
+    try {
+      writeFileSync(archivePath, JSON.stringify(archived, null, 2))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error(`Failed to archive agent ${agentId} at ${archivePath}: ${message}`)
+      throw new Error(`Failed to archive agent ${agentId} at ${archivePath}: ${message}`)
+    }
 
     log.info(`Archived agent ${agentId} to ${archivePath}`)
 
