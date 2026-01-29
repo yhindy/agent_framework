@@ -2,6 +2,20 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { AgentService } from '../AgentService'
 import { existsSync, readFileSync } from 'fs'
 
+// Mock electron
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false,
+    getAppPath: vi.fn(() => '/app')
+  }
+}))
+
+// Mock child_process (needed by createAssignment via setup.sh)
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+  execFile: vi.fn()
+}))
+
 // Mock fs module
 vi.mock('fs', () => ({
   existsSync: vi.fn(),

@@ -339,7 +339,7 @@ describe('AgentService - detectExistingPullRequest', () => {
 
       expect(result).toBeNull()
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[WARN ] [AgentService]',
+        '[WARN ] [PRTrackingService]',
         'detectExistingPullRequest: GitHub CLI error:',
         expect.any(String)
       )
@@ -393,7 +393,7 @@ describe('AgentService - detectExistingPullRequest', () => {
 
       expect(result).toBeNull()
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[INFO ] [AgentService]',
+        '[INFO ] [PRTrackingService]',
         'detectExistingPullRequest: Assignment not found'
       )
 
@@ -439,7 +439,7 @@ describe('AgentService - detectExistingPullRequest', () => {
       expect(lsRemoteCalls.length).toBe(0)
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[INFO ] [AgentService]',
+        '[INFO ] [PRTrackingService]',
         'detectExistingPullRequest: PR already tracked, refreshing status:',
         existingPrUrl
       )

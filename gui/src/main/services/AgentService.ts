@@ -1,13 +1,17 @@
 import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
-import { app } from 'electron'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource, SpawnSource, SpawnResult } from './types/ProjectConfig'
 import { ClaudeSessionInfoService, TaskInvocation } from './ClaudeSessionInfoService'
 import { Mutex } from 'async-mutex'
 import { createLogger } from './logger'
+import { ProjectConfigHelper } from './ProjectConfigHelper'
+import { WorktreeService } from './WorktreeService'
+import { PRTrackingService } from './PRTrackingService'
+import { AgentMigrationService } from './AgentMigrationService'
+import { AgentArchiveService } from './AgentArchiveService'
 
 const log = createLogger('AgentService')
 const execAsync = promisify(exec)
@@ -62,8 +66,43 @@ export class AgentService {
   // when multiple spawns happen in parallel (git worktree operations can conflict)
   private worktreeMutex = new Mutex()
 
+  // Extracted service delegates
+  private projectConfigHelper: ProjectConfigHelper
+  private worktreeService: WorktreeService
+  private prTrackingService: PRTrackingService
+  private agentMigrationService: AgentMigrationService
+  private agentArchiveService: AgentArchiveService
+
   constructor() {
     this.sessions = new Map()
+
+    // Initialize extracted services
+    this.projectConfigHelper = new ProjectConfigHelper()
+    this.worktreeService = new WorktreeService(this.projectConfigHelper)
+    this.prTrackingService = new PRTrackingService(
+      this.projectConfigHelper,
+      this.worktreeService,
+      {
+        getAssignments: (projectPath) => this.getAssignments(projectPath),
+        readAgentInfo: (...args) => this.readAgentInfo(...args),
+        writeAgentInfo: (...args) => this.writeAgentInfo(...args),
+        updateAgentInfo: (...args) => this.updateAgentInfo(...args),
+      }
+    )
+    this.agentMigrationService = new AgentMigrationService(
+      this.projectConfigHelper,
+      this.worktreeService,
+      {
+        writeAgentInfo: (...args) => this.writeAgentInfo(...args),
+      }
+    )
+    // Use arrow functions instead of .bind() so that vi.spyOn() on AgentService methods
+    // is visible to the delegate (bound refs capture the original, not the spy)
+    this.agentArchiveService = new AgentArchiveService({
+      listAgents: (projectPath) => this.listAgents(projectPath),
+      readAgentInfo: (worktreePath) => this.readAgentInfo(worktreePath),
+      createAssignment: (projectPath, assignment) => this.createAssignment(projectPath, assignment),
+    })
   }
 
   setClaudeSessionInfoService(service: ClaudeSessionInfoService): void {
@@ -149,40 +188,13 @@ export class AgentService {
     return existsSync(legacyPath) ? legacyPath : null
   }
 
+  // --- Delegated to PRTrackingService ---
+
   async checkDependencies(): Promise<{ ghInstalled: boolean; ghAuthenticated: boolean; error?: string }> {
-    try {
-      // Check if gh CLI is installed
-      await execAsync('gh --version')
-      
-      // Check if authenticated
-      try {
-        await execAsync('gh auth status')
-        return { ghInstalled: true, ghAuthenticated: true }
-      } catch (authError) {
-        return { 
-          ghInstalled: true, 
-          ghAuthenticated: false,
-          error: 'GitHub CLI not authenticated. Run: gh auth login'
-        }
-      }
-    } catch (error) {
-      // Provide platform-appropriate installation instructions
-      const platform = process.platform
-      let installHint: string
-      if (platform === 'darwin') {
-        installHint = 'brew install gh'
-      } else if (platform === 'win32') {
-        installHint = 'winget install GitHub.cli (or scoop install gh)'
-      } else {
-        installHint = 'See https://cli.github.com/manual/installation'
-      }
-      return {
-        ghInstalled: false,
-        ghAuthenticated: false,
-        error: `GitHub CLI not installed. Install with: ${installHint}`
-      }
-    }
+    return this.prTrackingService.checkDependencies()
   }
+
+  // --- Session helpers ---
 
   /**
    * Create a new AgentSession from AgentInfo
@@ -307,52 +319,20 @@ export class AgentService {
     return agents
   }
 
-  parseWorktrees(output: string, projectName: string): Array<{ path: string; branch: string }> {
-    const worktrees: Array<{ path: string; branch: string }> = []
-    const lines = output.split('\n')
-    
-    let currentWorktree: any = {}
-    for (const line of lines) {
-      if (line.startsWith('worktree ')) {
-        const path = line.substring('worktree '.length)
-        // Include worktrees that start with project name
-        // Supports legacy 'project-agent-N' and new 'project-N'
-        // We filter by .agent-info existence later
-        const dirName = path.split('/').pop()
-        if (dirName && dirName.startsWith(`${projectName}-`)) {
-          currentWorktree.path = path
-        }
-      } else if (line.startsWith('branch ')) {
-        const branch = line.substring('branch '.length).replace('refs/heads/', '')
-        currentWorktree.branch = branch
-      } else if (line === '' && currentWorktree.path) {
-        worktrees.push(currentWorktree)
-        currentWorktree = {}
-      }
-    }
-    
-    if (currentWorktree.path) {
-      worktrees.push(currentWorktree)
-    }
+  // --- Delegated to WorktreeService ---
 
-    return worktrees
+  parseWorktrees(output: string, projectName: string): Array<{ path: string; branch: string }> {
+    return this.worktreeService.parseWorktrees(output, projectName)
   }
+
+  // --- Delegated to AgentMigrationService ---
 
   parseAgentInfo(filePath: string): Record<string, string> {
-    const content = readFileSync(filePath, 'utf-8')
-    const info: Record<string, string> = {}
-
-    for (const line of content.split('\n')) {
-      const [key, value] = line.split('=')
-      if (key && value) {
-        info[key.trim()] = value.trim()
-      }
-    }
-
-    return info
+    return this.agentMigrationService.parseAgentInfo(filePath)
   }
 
-  // New helper functions for JSON .agent-info format
+  // --- Agent info read/write (stays in AgentService - used by many callers) ---
+
   /**
    * Read agent info from file system.
    * For new format projects with minions.json, checks .minions/agents/{id}.json first.
@@ -619,10 +599,10 @@ export class AgentService {
     throw new Error(`Assignment ${assignmentId} not found in any active project`)
   }
 
+  // --- Delegated to ProjectConfigHelper ---
+
   private getMinionsPath(): string {
-    return app.isPackaged
-      ? join(process.resourcesPath, 'minions')
-      : join(app.getAppPath(), 'resources', 'minions')
+    return this.projectConfigHelper.getMinionsPath()
   }
 
   getSuperMinionRulesPath(): string {
@@ -631,14 +611,7 @@ export class AgentService {
   }
 
   private getProjectConfigPath(projectPath: string): string {
-    // New format first: minions.json at project root
-    const newConfigPath = join(projectPath, 'minions.json')
-    if (existsSync(newConfigPath)) {
-      return newConfigPath
-    }
-
-    // Legacy fallback: minions/config.json
-    return join(projectPath, 'minions', 'config.json')
+    return this.projectConfigHelper.getProjectConfigPath(projectPath)
   }
 
   /**
@@ -647,7 +620,7 @@ export class AgentService {
    * @returns true if minions.json exists at project root
    */
   isNewFormatProject(projectPath: string): boolean {
-    return existsSync(join(projectPath, 'minions.json'))
+    return this.projectConfigHelper.isNewFormatProject(projectPath)
   }
 
   /**
@@ -655,37 +628,16 @@ export class AgentService {
    * This must be used consistently for worktree path computation.
    */
   getProjectName(projectPath: string): string {
-    const config = this.getProjectConfig(projectPath)
-    return config.project?.name || projectPath.split('/').pop() || 'project'
+    return this.projectConfigHelper.getProjectName(projectPath)
   }
 
   private getProjectConfig(projectPath: string): ProjectConfig {
-    const configPath = this.getProjectConfigPath(projectPath)
-    if (!existsSync(configPath)) {
-      return {
-        project: { name: 'unknown', defaultBaseBranch: 'main' },
-        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
-        assignments: [],
-        testEnvironments: []
-      }
-    }
-    try {
-      return JSON.parse(readFileSync(configPath, 'utf-8'))
-    } catch (e) {
-      log.error('Error parsing config.json', e)
-      return {
-        project: { name: 'unknown', defaultBaseBranch: 'main' },
-        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
-        assignments: [],
-        testEnvironments: []
-      }
-    }
+    return this.projectConfigHelper.getProjectConfig(projectPath)
   }
 
-  private saveProjectConfig(projectPath: string, config: ProjectConfig): void {
-    const configPath = this.getProjectConfigPath(projectPath)
-    writeFileSync(configPath, JSON.stringify(config, null, 2))
-  }
+  // saveProjectConfig is available via this.projectConfigHelper.saveProjectConfig()
+
+  // --- Assignment creation (stays in AgentService - core lifecycle logic) ---
 
   async createAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<AgentInfo> {
     const config = this.getProjectConfig(projectPath)
@@ -722,12 +674,7 @@ export class AgentService {
     }
 
     // Calculate worktree path
-    let worktreePath: string
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${agentId}`)
-    }
+    const worktreePath = this.projectConfigHelper.getWorktreePath(projectPath, agentId)
 
     // Create AgentInfo object
     const agentInfo: AgentInfo = {
@@ -776,105 +723,17 @@ export class AgentService {
     return agentInfo
   }
 
-  /**
-   * Commit any uncommitted setup files in the worktree.
-   * This is called after setup.sh runs to ensure the worktree is clean.
-   * Files like minions/rules/*, .cursor/rules/*, and .agent-info are committed.
-   */
+  // --- Delegated to WorktreeService ---
+
   private async commitSetupFiles(worktreePath: string): Promise<void> {
-    try {
-      // Check if there are any uncommitted changes
-      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
-      if (!statusOutput.trim()) {
-        log.info('No uncommitted setup files to commit')
-        return
-      }
-
-      log.info('Committing setup files in:', worktreePath)
-      log.info('Changed files:', statusOutput.trim())
-
-      // Add all changes (setup files, .agent-info, etc.)
-      await execAsync('git add -A', { cwd: worktreePath })
-
-      // Commit with a setup message
-      try {
-        await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
-        log.info('Setup files committed successfully')
-      } catch (commitError: any) {
-        // Handle git identity not configured
-        if (commitError.message.includes('identity unknown') || commitError.stderr?.includes('identity unknown')) {
-          log.info('Git identity unknown, setting default...')
-          await execFileAsync('git', ['config', 'user.email', 'minion@local'], { cwd: worktreePath })
-          await execFileAsync('git', ['config', 'user.name', 'Minion Setup'], { cwd: worktreePath })
-          await execFileAsync('git', ['commit', '-m', 'Worktree setup files'], { cwd: worktreePath })
-          log.info('Setup files committed with default identity')
-        } else if (commitError.message.includes('nothing to commit')) {
-          log.info('Nothing to commit after staging')
-        } else {
-          // Log but don't throw - setup file commit is best-effort
-          log.warn('Failed to commit setup files:', commitError.message)
-        }
-      }
-    } catch (error: any) {
-      // Log but don't throw - setup file commit is best-effort
-      log.warn('Error during setup file commit:', error.message)
-    }
+    return this.worktreeService.commitSetupFiles(worktreePath)
   }
 
-  /**
-   * Commit all current changes in the worktree before handoff.
-   * Returns success/error status to be handled by caller.
-   */
   private async commitCurrentChanges(worktreePath: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      // Check if there are any uncommitted changes
-      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
-      if (!statusOutput.trim()) {
-        log.info('No uncommitted changes to commit before handoff')
-        return { success: true }
-      }
-
-      log.info('Committing changes before handoff in:', worktreePath)
-      log.info('Changed files:', statusOutput.trim())
-
-      // Add all changes
-      await execAsync('git add -A', { cwd: worktreePath })
-
-      // Commit with a checkpoint message
-      try {
-        await execFileAsync('git', ['commit', '-m', '[wip] Checkpoint before handoff'], { cwd: worktreePath })
-        log.info('Changes committed successfully before handoff')
-        return { success: true }
-      } catch (commitError: any) {
-        // Handle git identity not configured
-        if (commitError.message.includes('identity unknown') || commitError.stderr?.includes('identity unknown')) {
-          log.info('Git identity unknown, setting default...')
-          await execFileAsync('git', ['config', 'user.email', 'minion@local'], { cwd: worktreePath })
-          await execFileAsync('git', ['config', 'user.name', 'Minion Agent'], { cwd: worktreePath })
-          await execFileAsync('git', ['commit', '-m', '[wip] Checkpoint before handoff'], { cwd: worktreePath })
-          log.info('Changes committed with default identity')
-          return { success: true }
-        } else if (commitError.message.includes('nothing to commit')) {
-          log.info('Nothing to commit after staging')
-          return { success: true }
-        } else if (commitError.stderr?.includes('pre-commit') || commitError.stdout?.includes('pre-commit') || commitError.message.includes('hook failed')) {
-          // Pre-commit hook failure - this is an error the user needs to handle
-          const errorMsg = `Pre-commit hooks failed. Please fix the issues before handoff.\n\n${commitError.stderr || commitError.stdout || commitError.message}`
-          log.error('Commit failed due to pre-commit hooks:', errorMsg)
-          return { success: false, error: errorMsg }
-        } else {
-          log.error('Commit failed:', commitError.message)
-          return { success: false, error: `Failed to commit changes: ${commitError.message}` }
-        }
-      }
-    } catch (error: any) {
-      log.error('Error during pre-handoff commit:', error.message)
-      return { success: false, error: `Error committing changes: ${error.message}` }
-    }
+    return this.worktreeService.commitCurrentChanges(worktreePath)
   }
 
   /**
-   * Sanitize a string to be used as a git branch name.
    * Read the yolo flag from a source agent, checking active sessions first
    * then falling back to reading from the worktree on disk.
    * Returns false if the source agent cannot be found or read.
@@ -893,43 +752,17 @@ export class AgentService {
     }
   }
 
-  /**
-   * - Converts to lowercase
-   * - Replaces spaces with hyphens
-   * - Removes special characters (except hyphens, underscores, and alphanumeric)
-   * - Collapses multiple consecutive hyphens
-   * - Trims leading/trailing hyphens
-   */
+  // --- Delegated to WorktreeService ---
+
   private sanitizeBranchName(name: string): string {
-    if (!name) return ''
-
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, '-')           // Replace spaces with hyphens
-      .replace(/[^a-z0-9-_]/g, '')    // Remove special characters
-      .replace(/-+/g, '-')            // Collapse multiple hyphens
-      .replace(/^-+|-+$/g, '')        // Trim leading/trailing hyphens
+    return this.worktreeService.sanitizeBranchName(name)
   }
 
-  /**
-   * Generate a branch suffix from custom name or prompt.
-   * Falls back to 'handoff' if neither produces a valid suffix.
-   */
   private generateBranchSuffix(shortName?: string, prompt?: string): string {
-    if (shortName) {
-      return this.sanitizeBranchName(shortName)
-    }
-
-    if (prompt) {
-      const promptWords = prompt.split(/\s+/).slice(0, 3).join('-')
-      const sanitized = this.sanitizeBranchName(promptWords)
-      if (sanitized) {
-        return sanitized
-      }
-    }
-
-    return 'handoff'
+    return this.worktreeService.generateBranchSuffix(shortName, prompt)
   }
+
+  // --- Handoff logic (stays in AgentService - core lifecycle) ---
 
   /**
    * Generate context to prepend to the new agent's prompt.
@@ -1271,15 +1104,7 @@ Parent agent was working on: ${sourceFeature}
     }
 
     // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
+    const worktreePath = this.projectConfigHelper.getWorktreePath(projectPath, assignment.agentId)
 
     // Update the .agent-info file
     this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
@@ -1289,7 +1114,7 @@ Parent agent was working on: ${sourceFeature}
     // 1. Get all agents to find the super agent and its children
     const agents = await this.listAgents(projectPath)
     const session = agents.find(a => a.id === agentId)
-    
+
     if (!session) {
       throw new Error('Super agent not found')
     }
@@ -1307,7 +1132,7 @@ Parent agent was working on: ${sourceFeature}
     // 3. Find and read full info for all children
     const childSessions = agents.filter(a => a.parentAgentId === agentId)
     const children: AgentInfo[] = []
-    
+
     for (const childSession of childSessions) {
       const childInfo = this.readAgentInfo(childSession.worktreePath)
       if (childInfo) {
@@ -1364,7 +1189,7 @@ Parent agent was working on: ${sourceFeature}
     // 1. Get super agent details to find worktree path
     const agents = await this.listAgents(projectPath)
     const session = agents.find(a => a.id === superAgentId)
-    
+
     if (!session) {
       throw new Error('Super agent not found')
     }
@@ -1414,15 +1239,7 @@ Parent agent was working on: ${sourceFeature}
     plan.childAgentId = childAgent.agentId
 
     // 5. Update child's .agent-info to set parentAgentId
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-    
-    let childWorktreePath: string
-    if (childAgent.agentId.startsWith(`${projectName}-`)) {
-      childWorktreePath = join(dirname(projectPath), childAgent.agentId)
-    } else {
-      childWorktreePath = join(dirname(projectPath), `${projectName}-${childAgent.agentId}`)
-    }
+    const childWorktreePath = this.projectConfigHelper.getWorktreePath(projectPath, childAgent.agentId)
 
     this.updateAgentInfo(childWorktreePath, {
       parentAgentId: superAgentId
@@ -1435,7 +1252,7 @@ Parent agent was working on: ${sourceFeature}
     // 7. Update .children-status.json
     const statusPath = join(session.worktreePath, '.children-status.json')
     let statusData: { children: any[] } = { children: [] }
-    
+
     if (existsSync(statusPath)) {
       try {
         const content = readFileSync(statusPath, 'utf-8')
@@ -1463,18 +1280,10 @@ Parent agent was working on: ${sourceFeature}
       ...assignment,
       mode: 'planning'
     })
-    
+
     // Calculate worktree path to update .agent-info with super minion metadata
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-    
-    let worktreePath: string
-    if (result.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), result.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${result.agentId}`)
-    }
-    
+    const worktreePath = this.projectConfigHelper.getWorktreePath(projectPath, result.agentId)
+
     // Update .agent-info with super minion fields
     const workflowId = assignment.workflow?.id
     this.updateAgentInfo(worktreePath, {
@@ -1618,15 +1427,7 @@ Parent agent was working on: ${sourceFeature}
 
   async unassignAgent(projectPath: string, agentId: string): Promise<void> {
     // Update the .agent-info to mark as unassigned
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${agentId}`)
-    }
+    const worktreePath = this.projectConfigHelper.getWorktreePath(projectPath, agentId)
 
     // Update status to idle/cancelled
     this.updateAgentInfo(worktreePath, { status: 'cancelled', mode: 'idle' }, agentId, projectPath)
@@ -1673,201 +1474,19 @@ Parent agent was working on: ${sourceFeature}
       session.uiState = uiState
     }
   }
+
+  // --- Delegated to WorktreeService ---
+
   private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {
-    // 1. Try to get from project config first
-    const config = this.getProjectConfig(projectPath)
-    if (config.project?.defaultBaseBranch) {
-      log.debug(`Using default branch from config: ${config.project.defaultBaseBranch}`)
-      return config.project.defaultBaseBranch
-    }
-
-    try {
-      // 2. Try to get default branch from gh CLI
-      const { stdout } = await execAsync('gh repo view --json defaultBranchRef --jq .defaultBranchRef.name', { cwd: worktreePath })
-      if (stdout.trim()) {
-        return stdout.trim()
-      }
-    } catch (error) {
-      log.info('Could not get default branch from gh, trying git...')
-    }
-
-    try {
-      // 3. Fallback: check if 'main' or 'master' exists locally
-      const { stdout: branches } = await execAsync('git branch -a', { cwd: worktreePath })
-      if (branches.includes('remotes/origin/main') || branches.includes(' main\n')) {
-        return 'main'
-      }
-    } catch (error) {
-      // Ignore
-    }
-    
-    return 'master'
+    return this.worktreeService.getDefaultBranch(projectPath, worktreePath)
   }
 
-  private async getRemote(worktreePath: string): Promise<string> {
-    try {
-      const { stdout } = await execAsync('git remote', { cwd: worktreePath })
-      const remotes = stdout.trim().split('\n').filter(r => r.trim())
-      if (remotes.includes('origin')) return 'origin'
-      if (remotes.length > 0) return remotes[0]
-    } catch (error) {
-      // Ignore
-    }
-    return 'origin'
-  }
+  // getRemote is available via this.worktreeService.getRemote()
+
+  // --- Delegated to PRTrackingService ---
 
   async createPullRequest(projectPath: string, assignmentId: string, autoCommit: boolean = false): Promise<{ url: string }> {
-    const { assignments } = await this.getAssignments(projectPath)
-    const assignment = assignments.find(a => a.id === assignmentId)
-
-    if (!assignment) {
-      throw new Error('Assignment not found')
-    }
-
-    // Allow PR creation from in_progress, review, or completed states
-    if (['pending', 'blocked', 'closed'].includes(assignment.status)) {
-      throw new Error(`Cannot create PR for assignment in '${assignment.status}' status`)
-    }
-
-    // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
-
-    if (!existsSync(worktreePath)) {
-      throw new Error('Agent worktree not found')
-    }
-
-    try {
-      // Check for uncommitted changes
-      const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: worktreePath })
-      if (statusOutput.trim()) {
-        if (autoCommit) {
-          // Auto-commit changes
-          log.info('Auto-committing changes...')
-          await execAsync('git add -A', { cwd: worktreePath })
-          const commitMessage = `Complete: ${assignment.feature}`
-          
-          try {
-            await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
-            log.info('Changes committed')
-          } catch (commitError: any) {
-            // If identity is unknown, try to set a default one
-            if (commitError.message.includes('identity unknown')) {
-              log.info('Git identity unknown, setting default...')
-              await execFileAsync('git', ['config', 'user.email', 'agent@minions.ai'], { cwd: worktreePath })
-              await execFileAsync('git', ['config', 'user.name', 'Minion Agent'], { cwd: worktreePath })
-              await execFileAsync('git', ['commit', '-m', commitMessage], { cwd: worktreePath })
-              log.info('Changes committed with default identity')
-            } else if (commitError.stderr && (commitError.stderr.includes('pre-commit') || commitError.stdout.includes('pre-commit') || commitError.message.includes('hook failed'))) {
-              throw new Error(`Pre-commit hooks failed. Please fix the issues and try again.\n\n${commitError.stderr || commitError.stdout || commitError.message}`)
-            } else if (commitError.message.includes('nothing to commit')) {
-              log.info('Nothing to commit')
-            } else {
-              throw commitError
-            }
-          }
-        } else {
-          throw new Error('Branch has uncommitted changes. Please commit all changes before creating a PR.')
-        }
-      }
-
-      // Get default branch and remote
-      const baseBranch = await this.getDefaultBranch(projectPath, worktreePath)
-      const remote = await this.getRemote(worktreePath)
-      log.debug(`Using base branch: ${baseBranch}, remote: ${remote}`)
-
-      // Check if there are commits on this branch
-      try {
-        const { stdout: commitCount } = await execFileAsync('git', ['rev-list', '--count', `${baseBranch}..${assignment.branch}`], { cwd: worktreePath })
-        if (parseInt(commitCount.trim()) === 0) {
-          throw new Error(`No commits on branch '${assignment.branch}' compared to '${baseBranch}'. Make sure changes are committed before creating a PR.`)
-        }
-      } catch (error: any) {
-        if (error.message.includes('No commits')) {
-          throw error
-        }
-        // If the command fails for other reasons, continue - branch might not have base branch locally
-      }
-
-      // Push the branch to remote
-      log.debug(`Pushing branch to ${remote}...`)
-      try {
-        await execFileAsync('git', ['push', '-u', remote, assignment.branch], { cwd: worktreePath })
-      } catch (pushError: any) {
-        // If it's already up to date, that's fine
-        if (pushError.stderr && (pushError.stderr.includes('Everything up-to-date') || pushError.stdout.includes('Everything up-to-date'))) {
-          log.info('Branch is already up to date')
-        } else if (pushError.stderr && (pushError.stderr.includes('pre-push') || pushError.stdout.includes('pre-push') || pushError.message.includes('hook failed'))) {
-          throw new Error(`Pre-push hooks failed. Please fix the issues and try again.\n\n${pushError.stderr || pushError.stdout || pushError.message}`)
-        } else {
-          log.error('Push error details', pushError)
-          throw new Error(`Failed to push branch to ${remote}: ${pushError.message}`)
-        }
-      }
-
-      // Use prompt for PR body, fallback to feature description
-      const prBody = assignment.prompt || assignment.feature
-
-      // Create PR title from feature
-      const prTitle = assignment.feature.length > 72 
-        ? assignment.feature.substring(0, 69) + '...'
-        : assignment.feature
-
-      // Try to create PR
-      log.info('Creating PR...')
-      try {
-        const { stdout } = await execFileAsync(
-          'gh',
-          ['pr', 'create', '--title', prTitle, '--body', prBody, '--base', baseBranch, '--head', assignment.branch],
-          { cwd: worktreePath }
-        )
-        
-        // Extract PR URL from output
-        const urlMatch = stdout.match(/https:\/\/github\.com\/[^\s]+/)
-        const prUrl = urlMatch ? urlMatch[0] : stdout.trim()
-
-        // Update .agent-info with PR URL and status
-        this.updateAgentInfo(worktreePath, {
-          prUrl: prUrl,
-          prStatus: 'OPEN',
-          status: 'pr_open'
-        }, assignment.agentId, projectPath)
-
-        log.info('PR created:', prUrl)
-        return { url: prUrl }
-      } catch (prError: any) {
-        // Check if PR already exists
-        if (prError.message.includes('already exists')) {
-          log.info('PR already exists, fetching URL...')
-          const { stdout } = await execFileAsync(
-            'gh',
-            ['pr', 'list', '--head', assignment.branch, '--json', 'url', '--jq', '.[0].url'],
-            { cwd: worktreePath }
-          )
-          const prUrl = stdout.trim()
-
-          // Update .agent-info
-          this.updateAgentInfo(worktreePath, {
-            prUrl: prUrl,
-            prStatus: 'OPEN',
-            status: 'pr_open'
-          }, assignment.agentId, projectPath)
-
-          return { url: prUrl }
-        }
-        throw prError
-      }
-    } catch (error: any) {
-      log.error('Failed to create PR:', error)
-      throw new Error(`Failed to create pull request: ${error.message}`)
-    }
+    return this.prTrackingService.createPullRequest(projectPath, assignmentId, autoCommit)
   }
 
   async detectExistingPullRequest(
@@ -1880,294 +1499,26 @@ Parent agent was working on: ${sourceFeature}
     prStatus?: string
     createdAt?: string
   } | null> {
-    // NOTE: Caching is now handled by PRPollingService
-    // This method just performs the actual detection
-
-    try {
-      // 1. Load assignment
-      const { assignments } = await this.getAssignments(projectPath)
-      const assignment = assignments.find(a => a.id === assignmentId)
-
-      if (!assignment) {
-        log.info('detectExistingPullRequest: Assignment not found')
-        return null
-      }
-
-      // 2. If prUrl already exists, do a fresh status check to get latest state
-      if (assignment.prUrl) {
-        log.info('detectExistingPullRequest: PR already tracked, refreshing status:', assignment.prUrl)
-        try {
-          const statusResult = await this.checkPullRequestStatus(projectPath, assignmentId, { silent: true })
-          // checkPullRequestStatus returns { status: 'ERROR' } on failure instead of throwing
-          if (statusResult.status === 'ERROR') {
-            log.warn('detectExistingPullRequest: Failed to refresh status:', statusResult.error)
-            // Fall back to stored status
-            return {
-              found: true,
-              prUrl: assignment.prUrl,
-              prStatus: assignment.prStatus
-            }
-          }
-          return {
-            found: true,
-            prUrl: assignment.prUrl,
-            prStatus: statusResult.status,
-            createdAt: statusResult.createdAt
-          }
-        } catch (error: any) {
-          log.warn('detectExistingPullRequest: Failed to refresh status:', error.message)
-          // Fall back to stored status
-          return {
-            found: true,
-            prUrl: assignment.prUrl,
-            prStatus: assignment.prStatus
-          }
-        }
-      }
-
-      // 3. Get worktree path
-      const config = this.getProjectConfig(projectPath)
-      const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-      let worktreePath: string
-      if (assignment.agentId.startsWith(`${projectName}-`)) {
-        worktreePath = join(dirname(projectPath), assignment.agentId)
-      } else {
-        worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-      }
-
-      // 4. Get remote
-      const remote = await this.getRemote(worktreePath)
-      if (!remote) {
-        log.info('detectExistingPullRequest: No remote configured')
-        return null
-      }
-
-      // 5. Get the actual current branch from git (more reliable than stored value)
-      let currentBranch: string
-      try {
-        const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: worktreePath })
-        currentBranch = branchOutput.trim()
-        if (!currentBranch) {
-          log.info('detectExistingPullRequest: Could not determine current branch')
-          return null
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: Error getting current branch:', error.message)
-        return null
-      }
-
-      // 6. Check if branch exists on remote
-      try {
-        const { stdout: remoteRefs } = await execAsync(`git ls-remote --heads ${remote} ${currentBranch}`, { cwd: worktreePath })
-        if (!remoteRefs.trim()) {
-          log.info('detectExistingPullRequest: Branch not on remote:', currentBranch)
-          return { found: false }
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: Error checking remote refs:', error.message)
-        return null
-      }
-
-      // 7. Run gh pr list to find existing PR
-      let prData: { url: string; state: string; createdAt: string } | null = null
-      try {
-        const { stdout } = await execAsync(
-          `gh pr list --head ${currentBranch} --json number,url,state,createdAt --jq '.[0]'`,
-          { cwd: projectPath }
-        )
-
-        if (stdout.trim() && stdout.trim() !== 'null') {
-          prData = JSON.parse(stdout.trim())
-        }
-      } catch (error: any) {
-        log.warn('detectExistingPullRequest: GitHub CLI error:', error.message)
-        return null
-      }
-
-      if (!prData) {
-        // No PR found
-        log.info('detectExistingPullRequest: No existing PR found')
-        return { found: false }
-      }
-
-      // 8. PR found, update .agent-info
-      log.info('detectExistingPullRequest: Found existing PR:', prData.url)
-      const agentInfoPath = join(worktreePath, '.agent-info')
-      if (existsSync(agentInfoPath)) {
-        const updates: Partial<AgentInfo> = {
-          prUrl: prData.url,
-          prStatus: prData.state // OPEN, MERGED, CLOSED
-        }
-
-        if (prData.state === 'OPEN') {
-          updates.status = 'pr_open'
-        } else if (prData.state === 'MERGED') {
-          updates.status = 'merged'
-        } else if (prData.state === 'CLOSED') {
-          updates.status = 'closed'
-        }
-
-        this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
-      }
-
-      return {
-        found: true,
-        prUrl: prData.url,
-        prStatus: prData.state,
-        createdAt: prData.createdAt
-      }
-    } catch (error: any) {
-      log.error('detectExistingPullRequest: Unexpected error:', error.message)
-      return null
-    }
+    return this.prTrackingService.detectExistingPullRequest(projectPath, assignmentId, _options)
   }
+
+  // --- Delegated to AgentMigrationService ---
 
   async migrateAssignments(projectPath: string): Promise<void> {
-    log.info('Starting assignment migration for:', projectPath)
-
-    try {
-      const config = this.getProjectConfig(projectPath)
-      const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-      // Get all worktrees
-      const { stdout } = await execAsync('git worktree list --porcelain', { cwd: projectPath })
-      const worktrees = this.parseWorktrees(stdout, projectName)
-
-      let migratedCount = 0
-
-      for (const worktree of worktrees) {
-        const agentInfoPath = join(worktree.path, '.agent-info')
-
-        if (existsSync(agentInfoPath)) {
-          const content = readFileSync(agentInfoPath, 'utf-8')
-
-          // Check if it's already JSON format
-          try {
-            JSON.parse(content)
-            continue // Already migrated
-          } catch {
-            // Old format - needs migration
-            log.info('Migrating .agent-info for:', worktree.path)
-
-            const oldInfo = this.parseAgentInfo(agentInfoPath)
-            const agentId = oldInfo.AGENT_ID
-
-            // Find matching assignment in config.json
-            const assignment = config.assignments?.find(a => a.agentId === agentId)
-
-            // Create new AgentInfo
-            const newInfo: AgentInfo = {
-              id: assignment?.id || `${agentId}-${Date.now()}`,
-              agentId: agentId,
-              branch: oldInfo.BRANCH || '',
-              project: oldInfo.PROJECT || projectName,
-              feature: assignment?.feature || '',
-              status: (assignment?.status as any) || 'active',
-              tool: assignment?.tool || 'claude',
-              model: assignment?.model,
-              mode: (assignment?.mode as any) || 'auto',
-              prompt: (assignment as any)?.prompt,
-              specFile: (assignment as any)?.specFile,
-              prUrl: assignment?.prUrl,
-              prStatus: assignment?.prStatus,
-              createdAt: new Date().toISOString(),
-              lastActivity: assignment?.lastActivity || new Date().toISOString(),
-              hasUnread: assignment?.hasUnread
-            }
-
-            // Write new format
-            this.writeAgentInfo(worktree.path, newInfo)
-            migratedCount++
-          }
-        }
-      }
-
-      // Clear assignments from config.json after migration
-      if (migratedCount > 0 && config.assignments && config.assignments.length > 0) {
-        log.info(`Migrated ${migratedCount} agents, clearing config.json assignments`)
-        config.assignments = []
-        this.saveProjectConfig(projectPath, config)
-      }
-
-      log.info(`Migration complete: ${migratedCount} agents migrated`)
-    } catch (error) {
-      log.error('Migration failed:', error)
-    }
+    return this.agentMigrationService.migrateAssignments(projectPath)
   }
+
+  // --- Delegated to PRTrackingService ---
 
   async checkPullRequestStatus(
     projectPath: string,
     assignmentId: string,
     options?: { silent?: boolean }
   ): Promise<{ status: string; mergedAt?: string; createdAt?: string; error?: string }> {
-    const { assignments } = await this.getAssignments(projectPath)
-    const assignment = assignments.find(a => a.id === assignmentId)
-
-    if (!assignment || !assignment.prUrl) {
-      const error = 'Assignment or PR URL not found'
-      if (!options?.silent) {
-        log.error('', error)
-      }
-      return { status: 'ERROR', error }
-    }
-
-    // Calculate worktree path
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    let worktreePath: string
-    if (assignment.agentId.startsWith(`${projectName}-`)) {
-      worktreePath = join(dirname(projectPath), assignment.agentId)
-    } else {
-      worktreePath = join(dirname(projectPath), `${projectName}-${assignment.agentId}`)
-    }
-
-    try {
-      // Extract PR number from URL
-      const prNumberMatch = assignment.prUrl.match(/\/pull\/(\d+)/)
-      if (!prNumberMatch) {
-        const error = 'Could not extract PR number from URL'
-        if (!options?.silent) {
-          log.error('', error)
-        }
-        return { status: 'ERROR', error }
-      }
-      const prNumber = prNumberMatch[1]
-
-      // Check PR status using gh CLI
-      const { stdout } = await execFileAsync(
-        'gh',
-        ['pr', 'view', prNumber, '--json', 'state,mergedAt,createdAt'],
-        { cwd: projectPath }
-      )
-
-      const prData = JSON.parse(stdout)
-      const status = prData.state // OPEN, MERGED, CLOSED
-
-      // Update .agent-info with PR status
-      const updates: Partial<AgentInfo> = { prStatus: status }
-
-      if (status === 'MERGED') {
-        updates.status = 'merged'
-      } else if (status === 'CLOSED') {
-        updates.status = 'closed'
-      }
-
-      this.updateAgentInfo(worktreePath, updates, assignment.agentId, projectPath)
-
-      return {
-        status,
-        mergedAt: prData.mergedAt,
-        createdAt: prData.createdAt
-      }
-    } catch (error: any) {
-      if (!options?.silent) {
-        log.error('Failed to check PR status:', error)
-      }
-      return { status: 'ERROR', error: error.message }
-    }
+    return this.prTrackingService.checkPullRequestStatus(projectPath, assignmentId, options)
   }
+
+  // --- Base branch agent methods (stay in AgentService) ---
 
   async ensureBaseBranchAgent(projectPath: string): Promise<AgentInfo> {
     const config = this.getProjectConfig(projectPath)
@@ -2230,19 +1581,10 @@ Parent agent was working on: ${sourceFeature}
     }
   }
 
+  // --- Delegated to ProjectConfigHelper ---
+
   getAgentPath(projectPath: string, agentInfo: AgentInfo): string {
-    if (agentInfo.isBaseBranchAgent) {
-      return projectPath
-    }
-
-    const config = this.getProjectConfig(projectPath)
-    const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
-
-    if (agentInfo.agentId.startsWith(`${projectName}-`)) {
-      return join(dirname(projectPath), agentInfo.agentId)
-    } else {
-      return join(dirname(projectPath), `${projectName}-${agentInfo.agentId}`)
-    }
+    return this.projectConfigHelper.getAgentPath(projectPath, agentInfo)
   }
 
   // Helper method to track if base agent was just created (for auto-start logic)
@@ -2270,194 +1612,21 @@ Parent agent was working on: ${sourceFeature}
     }
   }
 
-  // Archive helper methods
-
-  /**
-   * Resolve the main repository path from a potential worktree path.
-   * Git worktrees have a .git file (not directory) pointing to the main repo.
-   */
-  private resolveMainProjectPath(projectPath: string): string {
-    const gitPath = join(projectPath, '.git')
-    try {
-      if (existsSync(gitPath) && statSync(gitPath).isFile()) {
-        // This is a worktree - read the main repo path
-        const gitContent = readFileSync(gitPath, 'utf-8').trim()
-        // Format: "gitdir: /path/to/repo/.git/worktrees/name"
-        const match = gitContent.match(/gitdir:\s*(.+)/)
-        if (match) {
-          const gitDir = match[1]
-          // Extract main repo path from gitdir
-          const mainGitMatch = gitDir.match(/(.+)\/\.git\/worktrees\//)
-          if (mainGitMatch) {
-            log.info(`Resolved worktree ${projectPath} to main repo ${mainGitMatch[1]}`)
-            return mainGitMatch[1]
-          }
-        }
-      }
-    } catch (error) {
-      log.warn(`Failed to resolve main project path for ${projectPath}:`, error)
-    }
-    return projectPath
-  }
-
-  private getArchiveDirectory(projectPath: string): string {
-    log.info(`[DEBUG] getArchiveDirectory called with: ${projectPath}`)
-    const mainPath = this.resolveMainProjectPath(projectPath)
-    log.info(`[DEBUG] resolveMainProjectPath returned: ${mainPath}`)
-    const archiveDir = join(mainPath, '.minions', 'archive')
-    log.info(`[DEBUG] Final archive directory: ${archiveDir}`)
-    return archiveDir
-  }
-
-  private ensureArchiveDirectory(projectPath: string): string {
-    const archiveDir = this.getArchiveDirectory(projectPath)
-    if (!existsSync(archiveDir)) {
-      mkdirSync(archiveDir, { recursive: true })
-    }
-    return archiveDir
-  }
+  // --- Delegated to AgentArchiveService ---
 
   async archiveAgent(projectPath: string, agentId: string): Promise<ArchivedAgent> {
-    // 1. Find agent's worktree path
-    const agents = await this.listAgents(projectPath)
-    const agent = agents.find(a => a.id === agentId)
-
-    if (!agent) {
-      throw new Error(`Agent ${agentId} not found for archiving`)
-    }
-
-    // 2. Read agent info
-    const agentInfo = this.readAgentInfo(agent.worktreePath)
-    if (!agentInfo) {
-      throw new Error(`Could not read agent info for ${agentId}`)
-    }
-
-    // 3. Create archive record
-    const timestamp = Date.now()
-    const archiveId = `${agentId}-${timestamp}`
-
-    const archived: ArchivedAgent = {
-      archiveId,
-      archivedAt: new Date().toISOString(),
-      archiveVersion: 1,
-
-      agentId: agentInfo.agentId,
-      assignmentId: agentInfo.id,
-
-      branch: agentInfo.branch,
-      feature: agentInfo.feature,
-      prompt: agentInfo.prompt,
-
-      tool: agentInfo.tool,
-      model: agentInfo.model,
-      mode: agentInfo.mode,
-
-      createdAt: agentInfo.createdAt,
-      completedAt: new Date().toISOString(),
-
-      finalStatus: agentInfo.status,
-
-      prUrl: agentInfo.prUrl,
-      prStatus: agentInfo.prStatus,
-
-      totalCostUsd: agentInfo.totalCostUsd,
-      tokenUsage: agentInfo.tokenUsage,
-
-      parentAgentId: agentInfo.parentAgentId,
-      isSuperMinion: (agentInfo as any).isSuperMinion
-    }
-
-    // 4. Ensure archive directory exists and write archive file
-    const archiveDir = this.ensureArchiveDirectory(projectPath)
-    const archivePath = join(archiveDir, `${archiveId}.json`)
-    writeFileSync(archivePath, JSON.stringify(archived, null, 2))
-
-    log.info(`Archived agent ${agentId} to ${archivePath}`)
-
-    return archived
+    return this.agentArchiveService.archiveAgent(projectPath, agentId)
   }
 
   async listArchivedAgents(projectPath: string): Promise<ArchivedAgent[]> {
-    log.info(`[DEBUG] listArchivedAgents called with projectPath: ${projectPath}`)
-    const archiveDir = this.getArchiveDirectory(projectPath)
-    log.info(`[DEBUG] getArchiveDirectory returned: ${archiveDir}`)
-    log.info(`[DEBUG] archiveDir exists: ${existsSync(archiveDir)}`)
-
-    if (!existsSync(archiveDir)) {
-      log.info(`[DEBUG] Archive directory does not exist, returning empty array`)
-      return []
-    }
-
-    try {
-      const files = readdirSync(archiveDir).filter(f => f.endsWith('.json'))
-      const archives: ArchivedAgent[] = []
-
-      for (const file of files) {
-        try {
-          const content = readFileSync(join(archiveDir, file), 'utf-8')
-          archives.push(JSON.parse(content))
-        } catch (error) {
-          log.warn(`Failed to read archive file ${file}:`, error)
-        }
-      }
-
-      // Sort by archivedAt descending (most recent first)
-      return archives.sort((a, b) =>
-        new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime()
-      )
-    } catch (error) {
-      log.warn('Failed to list archived agents:', error)
-      return []
-    }
+    return this.agentArchiveService.listArchivedAgents(projectPath)
   }
 
   async getArchivedAgent(projectPath: string, archiveId: string): Promise<ArchivedAgent | null> {
-    const archivePath = join(this.getArchiveDirectory(projectPath), `${archiveId}.json`)
-
-    if (!existsSync(archivePath)) {
-      return null
-    }
-
-    try {
-      const content = readFileSync(archivePath, 'utf-8')
-      return JSON.parse(content)
-    } catch (error) {
-      log.error(`Failed to read archive ${archiveId}:`, error)
-      return null
-    }
+    return this.agentArchiveService.getArchivedAgent(projectPath, archiveId)
   }
 
-  /**
-   * Restore an archived agent by creating a new agent with the same configuration
-   * @param projectPath - Path to the project
-   * @param archiveId - ID of the archived agent to restore
-   * @returns Newly created agent
-   */
   async restoreArchivedAgent(projectPath: string, archiveId: string): Promise<AgentInfo> {
-    // Load archived agent metadata
-    const archived = await this.getArchivedAgent(projectPath, archiveId)
-    if (!archived) {
-      throw new Error(`Archive not found: ${archiveId}`)
-    }
-
-    // Generate new branch name with -restored suffix to avoid conflicts
-    const timestamp = Date.now()
-    const originalBranch = archived.branch.replace(/^feature\//, '')
-    const newBranch = `${originalBranch}-restored-${timestamp}`
-
-    // Create new assignment with archived agent's configuration
-    const assignment = await this.createAssignment(projectPath, {
-      feature: archived.feature,
-      branch: newBranch,
-      prompt: archived.prompt || `Restored from archive: ${archived.feature}`,
-      tool: archived.tool,
-      model: archived.model,
-      mode: archived.mode as 'auto' | 'manual' | 'interactive' | 'planning' | 'dev' | 'idle'
-    })
-
-    log.info(`Restored agent from archive ${archiveId} as ${assignment.agentId}`)
-
-    return assignment
+    return this.agentArchiveService.restoreArchivedAgent(projectPath, archiveId)
   }
-
 }
