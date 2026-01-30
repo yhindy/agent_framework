@@ -1215,7 +1215,7 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
   let mockAgentService: any
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     vi.useFakeTimers()
 
     const windowMocks = createMockMainWindow()
@@ -1240,7 +1240,7 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
   })
 
   afterEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     vi.useRealTimers()
   })
 
@@ -1251,14 +1251,22 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
 
     // Mock: tmux is available AND session exists (orphaned/empty)
     vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
-      if (cmd.includes('has-session')) return Buffer.from('') // Session exists
-      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n' // Not attached
+      if (typeof cmd === 'string' && cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (typeof cmd === 'string' && cmd.includes('has-session')) return Buffer.from('')
+      if (typeof cmd === 'string' && cmd.includes('list-sessions')) return Buffer.from('minion-myproject-base:0\n')
       return Buffer.from('')
     })
-    // Mock has-session check using execFileSync to indicate session EXISTS
-    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
-      // Session exists - don't throw
+    // Mock execFileSync: differentiate tmux subcommands and return correct types
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[], _options?: any) => {
+      if (cmd === 'tmux') {
+        const argsArray = args ? Array.from(args) : []
+        if (argsArray[0] === 'has-session') {
+          return Buffer.from('') // Session exists (no throw = exists)
+        }
+        if (argsArray[0] === 'list-panes') {
+          return '' // Return string (code uses encoding: 'utf8'), empty = no panes running Claude
+        }
+      }
       return Buffer.from('')
     })
 
@@ -1301,12 +1309,21 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
     // Similar scenario but verifying Claude command is actually sent to the session
 
     vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
-      if (cmd.includes('has-session')) return Buffer.from('')
-      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      if (typeof cmd === 'string' && cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (typeof cmd === 'string' && cmd.includes('has-session')) return Buffer.from('')
+      if (typeof cmd === 'string' && cmd.includes('list-sessions')) return Buffer.from('minion-myproject-base:0\n')
       return Buffer.from('')
     })
-    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[], _options?: any) => {
+      if (cmd === 'tmux') {
+        const argsArray = args ? Array.from(args) : []
+        if (argsArray[0] === 'has-session') {
+          return Buffer.from('')
+        }
+        if (argsArray[0] === 'list-panes') {
+          return ''
+        }
+      }
       return Buffer.from('')
     })
 
@@ -1344,12 +1361,21 @@ describe('BUG: Base agent terminal with orphaned tmux session', () => {
     // the tmux session is still there. On restart, Claude should still be spawned.
 
     vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
-      if (cmd.includes('has-session')) return Buffer.from('') // Orphaned session still exists
-      if (cmd.includes('list-sessions')) return 'minion-myproject-base:0\n'
+      if (typeof cmd === 'string' && cmd.includes('which tmux')) return Buffer.from('/usr/bin/tmux')
+      if (typeof cmd === 'string' && cmd.includes('has-session')) return Buffer.from('')
+      if (typeof cmd === 'string' && cmd.includes('list-sessions')) return Buffer.from('minion-myproject-base:0\n')
       return Buffer.from('')
     })
-    vi.mocked(execFileSync).mockImplementation((_cmd: string, _args?: readonly string[]) => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args?: readonly string[], _options?: any) => {
+      if (cmd === 'tmux') {
+        const argsArray = args ? Array.from(args) : []
+        if (argsArray[0] === 'has-session') {
+          return Buffer.from('')
+        }
+        if (argsArray[0] === 'list-panes') {
+          return ''
+        }
+      }
       return Buffer.from('')
     })
 
