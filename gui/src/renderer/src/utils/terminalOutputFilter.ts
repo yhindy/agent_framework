@@ -11,6 +11,13 @@
  * - OSC 10/11/12 Color Responses: ESC ] 1x ; rgb:xxxx/xxxx/xxxx ST
  */
 
+/**
+ * Matches DA1/DA2 response sequences from xterm.js onData.
+ * When sent back to the PTY, the shell echoes them as visible garbage like [?1;2c.
+ * Used in terminal onData handlers to block these from being sent to the PTY.
+ */
+export const DA_RESPONSE_INPUT = /^\x1b\[\??[\d;]*c$/
+
 // DA1 Response: ESC [ ? Ps ; Ps ; ... c
 const DA1_RESPONSE = /\x1b\[\?[\d;]*c/g
 
