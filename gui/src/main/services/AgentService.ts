@@ -660,25 +660,22 @@ export class AgentService {
   }
 
   private getProjectConfig(projectPath: string): ProjectConfig {
+    const fallback: ProjectConfig = {
+      project: { name: 'unknown', defaultBaseBranch: '' },
+      setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+      assignments: [],
+      testEnvironments: []
+    }
+
     const configPath = this.getProjectConfigPath(projectPath)
     if (!existsSync(configPath)) {
-      return {
-        project: { name: 'unknown', defaultBaseBranch: 'main' },
-        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
-        assignments: [],
-        testEnvironments: []
-      }
+      return fallback
     }
     try {
       return JSON.parse(readFileSync(configPath, 'utf-8'))
     } catch (e) {
       log.error('Error parsing config.json', e)
-      return {
-        project: { name: 'unknown', defaultBaseBranch: 'main' },
-        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
-        assignments: [],
-        testEnvironments: []
-      }
+      return fallback
     }
   }
 
@@ -935,13 +932,17 @@ export class AgentService {
    * Generate context to prepend to the new agent's prompt.
    * Provides 2-3 lines of context about the parent feature.
    */
-  private generateHandoffContext(sourceAgentInfo: AgentInfo, branchMode: 'inherit' | 'fresh'): string {
+  private async generateHandoffContext(sourceAgentInfo: AgentInfo, branchMode: 'inherit' | 'fresh', projectPath: string): Promise<string> {
     const sourceBranch = sourceAgentInfo.branch
     const sourceFeature = this.truncateFeatureDescription(sourceAgentInfo)
 
-    const modeDescription = branchMode === 'inherit'
-      ? `You are continuing work from branch \`${sourceBranch}\`.`
-      : `You are starting fresh from main, related to prior work on \`${sourceBranch}\`.`
+    let modeDescription: string
+    if (branchMode === 'inherit') {
+      modeDescription = `You are continuing work from branch \`${sourceBranch}\`.`
+    } else {
+      const defaultBranch = await this.getDefaultBranch(projectPath, projectPath)
+      modeDescription = `You are starting fresh from ${defaultBranch}, related to prior work on \`${sourceBranch}\`.`
+    }
 
     return `## Handoff Context
 
@@ -1043,12 +1044,11 @@ Parent agent was working on: ${sourceFeature}
 
       const branch = `feature/${agentId}/${branchSuffix}`
 
-      // Determine base branch for worktree creation
-      // In 'inherit' mode, we branch from the source agent's branch
-      // In 'fresh' mode, we branch from main/master
+      // In 'inherit' mode, branch from the source agent's branch
+      // In 'fresh' mode, branch from main/master
       const baseBranch = request.branchMode === 'inherit'
         ? sourceAgentInfo.branch
-        : config.project.defaultBaseBranch || 'main'
+        : await this.getDefaultBranch(projectPath, sourceSession.worktreePath)
 
       // Create handoff source metadata
       const handoffSource: HandoffSource = {
@@ -1062,7 +1062,7 @@ Parent agent was working on: ${sourceFeature}
       const worktreePath = join(dirname(projectPath), agentId)
 
       // Generate handoff context to prepend to the prompt
-      const handoffContext = this.generateHandoffContext(sourceAgentInfo, request.branchMode)
+      const handoffContext = await this.generateHandoffContext(sourceAgentInfo, request.branchMode, projectPath)
       const promptWithContext = handoffContext + request.prompt
 
       // Create AgentInfo for the new agent
@@ -1158,7 +1158,7 @@ Parent agent was working on: ${sourceFeature}
       // Get project config
       const config = this.getProjectConfig(projectPath)
       const projectName = config.project.name || projectPath.split('/').pop() || 'project'
-      const baseBranch = config.project.defaultBaseBranch || 'main'
+      const baseBranch = await this.getDefaultBranch(projectPath, projectPath)
 
       // Inherit yolo mode from source agent
       // Try active session first, then fall back to worktree path on disk
@@ -1674,7 +1674,6 @@ Parent agent was working on: ${sourceFeature}
     }
   }
   private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {
-    // 1. Try to get from project config first
     const config = this.getProjectConfig(projectPath)
     if (config.project?.defaultBaseBranch) {
       log.debug(`Using default branch from config: ${config.project.defaultBaseBranch}`)
@@ -1682,25 +1681,24 @@ Parent agent was working on: ${sourceFeature}
     }
 
     try {
-      // 2. Try to get default branch from gh CLI
       const { stdout } = await execAsync('gh repo view --json defaultBranchRef --jq .defaultBranchRef.name', { cwd: worktreePath })
-      if (stdout.trim()) {
-        return stdout.trim()
+      const branch = stdout.trim()
+      if (branch) {
+        return branch
       }
-    } catch (error) {
-      log.info('Could not get default branch from gh, trying git...')
+    } catch {
+      log.info('Could not get default branch from gh CLI, falling back to git')
     }
 
     try {
-      // 3. Fallback: check if 'main' or 'master' exists locally
       const { stdout: branches } = await execAsync('git branch -a', { cwd: worktreePath })
       if (branches.includes('remotes/origin/main') || branches.includes(' main\n')) {
         return 'main'
       }
-    } catch (error) {
-      // Ignore
+    } catch {
+      // git branch failed, fall through to default
     }
-    
+
     return 'master'
   }
 
@@ -2183,7 +2181,16 @@ Parent agent was working on: ${sourceFeature}
         const content = readFileSync(baseInfoPath, 'utf-8')
         const info = JSON.parse(content) as AgentInfo
         if (info.isBaseBranchAgent && info.agentId === baseAgentId) {
-          log.debug(`Base agent already exists: ${baseAgentId}`)
+          // Check if the stored branch is stale and needs updating
+          if (info.branch !== baseBranch) {
+            log.info(`Base agent branch changed from ${info.branch} to ${baseBranch}, updating`)
+            info.branch = baseBranch
+            info.feature = `Base Branch (${baseBranch})`
+            info.prompt = `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the ${baseBranch} branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`
+            writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+          } else {
+            log.debug(`Base agent already exists: ${baseAgentId}`)
+          }
           return info
         }
       } catch (error) {
@@ -2201,7 +2208,7 @@ Parent agent was working on: ${sourceFeature}
       status: 'active',
       tool: 'claude',
       mode: 'dev',
-      prompt: `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the main branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`,
+      prompt: `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the ${baseBranch} branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`,
       model: 'opus',
       chrome: true,
       createdAt: new Date().toISOString(),
