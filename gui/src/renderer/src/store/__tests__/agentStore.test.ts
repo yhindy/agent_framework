@@ -10,9 +10,9 @@ const mockElectronAPI = {
   getActiveProjects: vi.fn(),
   listAgentsForProject: vi.fn(),
   getAssignmentsForProject: vi.fn(),
-  onAgentListUpdate: vi.fn(() => mockUnsubscribeAgentList),
-  onAssignmentsUpdate: vi.fn(() => mockUnsubscribeAssignments),
-  onAgentStateChanged: vi.fn(() => mockUnsubscribeStateChanged),
+  onAgentListUpdate: vi.fn((_cb: () => void) => mockUnsubscribeAgentList),
+  onAssignmentsUpdate: vi.fn((_cb: () => void) => mockUnsubscribeAssignments),
+  onAgentStateChanged: vi.fn((_cb: (agentId: string, state: string) => void) => mockUnsubscribeStateChanged),
 }
 
 Object.defineProperty(window, 'electronAPI', {

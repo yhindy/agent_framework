@@ -941,6 +941,8 @@ describe('Sidebar task data persistence', () => {
   const mockSuperMinionAgent = {
     id: 'super-1',
     agentId: 'super-1',
+    assignmentId: null,
+    worktreePath: '/tmp/worktree',
     isSuperMinion: true,
     terminalPid: 123,
     hasUnread: false,

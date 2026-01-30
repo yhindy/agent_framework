@@ -159,8 +159,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   refreshAll: async () => {
     try {
       await get().fetchActiveProjects()
-      await get().fetchAgentsForAllProjects()
-      await get().fetchAssignments()
+      await Promise.all([
+        get().fetchAgentsForAllProjects(),
+        get().fetchAssignments()
+      ])
     } catch (error) {
       console.error('[agentStore] Failed to refresh all:', error)
     }

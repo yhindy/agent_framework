@@ -78,6 +78,80 @@ function addToSet<T>(set: Set<T>, item: T): Set<T> {
   return next
 }
 
+/**
+ * Derive UI-specific state (waitingAgents, tasksByAgent, collapse state) from store data.
+ * Extracted outside the component to avoid re-creation on every render.
+ */
+async function deriveAgentUIState(
+  activeProjects: Project[],
+  collapsedSuperMinionsRef: React.MutableRefObject<Set<string>>,
+  hasInitializedSuperMinionCollapse: React.MutableRefObject<boolean>,
+  setTasksByAgent: React.Dispatch<React.SetStateAction<TasksByAgent>>,
+  setWaitingAgents: React.Dispatch<React.SetStateAction<Set<string>>>,
+  setCollapsedSuperMinions: React.Dispatch<React.SetStateAction<Set<string>>>
+): Promise<void> {
+  const currentAgentsByProject = useAgentStore.getState().agentsByProject
+  const currentWaitingAgents = new Set<string>()
+  const superMinionIds: string[] = []
+  const expandedSuperMinions: string[] = []
+  const currentCollapsed = collapsedSuperMinionsRef.current
+  const currentAgentStates = useAgentStore.getState().agentStates
+
+  for (const project of activeProjects) {
+    const agents = currentAgentsByProject[project.path] || []
+    for (const agent of agents) {
+      // Check store's agentStates first (most up-to-date), fallback to agent's currentState
+      const storeState = currentAgentStates[agent.id]
+      const effectiveState = storeState || agent.currentState
+      if (effectiveState === 'waiting') {
+        currentWaitingAgents.add(agent.id)
+      }
+      if (agent.isSuperMinion) {
+        superMinionIds.push(agent.id)
+        if (!currentCollapsed.has(agent.id)) {
+          expandedSuperMinions.push(agent.id)
+        }
+      }
+    }
+  }
+
+  // Fetch fresh task data for expanded super minions in parallel
+  const expandedTaskResults = await Promise.all(
+    expandedSuperMinions.map(async (agentId) => {
+      try {
+        const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
+        return { agentId, tasks: superDetails?.taskInvocations || [] }
+      } catch (err) {
+        console.error(`Failed to fetch task invocations for ${agentId}:`, err)
+        return { agentId, tasks: [] }
+      }
+    })
+  )
+
+  // Update task data: preserve collapsed super minion tasks, update expanded ones
+  setTasksByAgent(prevTasks => {
+    const newTasks: TasksByAgent = {}
+    for (const id of superMinionIds) {
+      if (currentCollapsed.has(id) && prevTasks[id]) {
+        newTasks[id] = prevTasks[id]
+      }
+    }
+    for (const { agentId, tasks } of expandedTaskResults) {
+      newTasks[agentId] = tasks
+    }
+    return newTasks
+  })
+
+  setWaitingAgents(currentWaitingAgents)
+
+  // Initialize collapse state for new super minions on first load
+  if (!hasInitializedSuperMinionCollapse.current) {
+    setCollapsedSuperMinions(new Set(superMinionIds))
+    localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
+    hasInitializedSuperMinionCollapse.current = true
+  }
+}
+
 function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, isCollapsed, onToggleCollapse, onAgentListChange }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -137,72 +211,6 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
     return undefined
   }, [openSubmenuProject])
 
-  // Derive waiting agents, task data, and collapse state from store's agentsByProject.
-  // This does NOT fetch agents — the store handles that via subscribeToEvents() in App.tsx.
-  // The initial fetch is done in the mount effect below.
-  const deriveAgentUIState = async (): Promise<void> => {
-    const currentAgentsByProject = useAgentStore.getState().agentsByProject
-    const currentWaitingAgents = new Set<string>()
-    const superMinionIds: string[] = []
-    const expandedSuperMinions: string[] = []
-    const currentCollapsed = collapsedSuperMinionsRef.current
-    const currentAgentStates = useAgentStore.getState().agentStates
-
-    for (const project of activeProjects) {
-      const agents = currentAgentsByProject[project.path] || []
-      for (const agent of agents) {
-        // Check store's agentStates first (most up-to-date), fallback to agent's currentState
-        const storeState = currentAgentStates[agent.id]
-        const effectiveState = storeState || agent.currentState
-        if (effectiveState === 'waiting') {
-          currentWaitingAgents.add(agent.id)
-        }
-        if (agent.isSuperMinion) {
-          superMinionIds.push(agent.id)
-          if (!currentCollapsed.has(agent.id)) {
-            expandedSuperMinions.push(agent.id)
-          }
-        }
-      }
-    }
-
-    // Fetch fresh task data for expanded super minions in parallel
-    const expandedTaskResults = await Promise.all(
-      expandedSuperMinions.map(async (agentId) => {
-        try {
-          const superDetails = await window.electronAPI.getSuperAgentDetails(agentId)
-          return { agentId, tasks: superDetails?.taskInvocations || [] }
-        } catch (err) {
-          console.error(`Failed to fetch task invocations for ${agentId}:`, err)
-          return { agentId, tasks: [] }
-        }
-      })
-    )
-
-    // Update task data: preserve collapsed super minion tasks, update expanded ones
-    setTasksByAgent(prevTasks => {
-      const newTasks: TasksByAgent = {}
-      for (const id of superMinionIds) {
-        if (currentCollapsed.has(id) && prevTasks[id]) {
-          newTasks[id] = prevTasks[id]
-        }
-      }
-      for (const { agentId, tasks } of expandedTaskResults) {
-        newTasks[agentId] = tasks
-      }
-      return newTasks
-    })
-
-    setWaitingAgents(currentWaitingAgents)
-
-    // Initialize collapse state for new super minions on first load
-    if (!hasInitializedSuperMinionCollapse.current) {
-      setCollapsedSuperMinions(new Set(superMinionIds))
-      localStorage.setItem('collapsedSuperMinions', JSON.stringify(superMinionIds))
-      hasInitializedSuperMinionCollapse.current = true
-    }
-  }
-
   // Initial fetch on mount and when activeProjects change
   useEffect(() => {
     const shouldShowIndicator = isInitialLoadRef.current
@@ -227,7 +235,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
       await Promise.all(activeProjects.map(p => store.fetchAgentsForProject(p.path)))
 
       // Now derive UI state from the store
-      await deriveAgentUIState()
+      await deriveAgentUIState(activeProjects, collapsedSuperMinionsRef, hasInitializedSuperMinionCollapse, setTasksByAgent, setWaitingAgents, setCollapsedSuperMinions)
 
       hasCompletedInitialFetchRef.current = true
 
@@ -245,7 +253,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
   useEffect(() => {
     // Skip during initial mount (handled by the effect above)
     if (!hasCompletedInitialFetchRef.current) return
-    deriveAgentUIState()
+    deriveAgentUIState(activeProjects, collapsedSuperMinionsRef, hasInitializedSuperMinionCollapse, setTasksByAgent, setWaitingAgents, setCollapsedSuperMinions)
   }, [agentsByProject, agentStates])
 
   // React to agentStates changes from the store to manage acknowledgedWaitingAgents
