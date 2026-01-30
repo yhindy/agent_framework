@@ -28,6 +28,8 @@ vi.mock('child_process', () => ({
   execFile: vi.fn(),
 }))
 
+import { exec } from 'child_process'
+
 describe('AgentService Worktree Parsing', () => {
   let agentService: AgentService
 
@@ -843,6 +845,191 @@ describe('AgentService Reserved Branch Name Validation', () => {
           mode: 'dev'
         })
       ).rejects.toThrow('Reserved names: base, main, master, origin, head')
+    })
+  })
+})
+
+describe('AgentService Write Error Handling', () => {
+  let agentService: AgentService
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    agentService = new AgentService()
+  })
+
+  describe('writeAgentInfo', () => {
+    it('throws a contextual error when write fails', () => {
+      const worktreePath = '/path/to/myrepo-abc123'
+      const agentInfo: AgentInfo = {
+        id: 'test-1',
+        agentId: 'myrepo-abc123',
+        branch: 'feature/test',
+        project: 'myrepo',
+        feature: 'Test feature',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // No minions.json (legacy project)
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        throw new Error('ENOSPC: no space left on device')
+      })
+
+      expect(() => agentService.writeAgentInfo(worktreePath, agentInfo)).toThrow(
+        /Failed to write agent info for myrepo-abc123 at \/path\/to\/myrepo-abc123/
+      )
+    })
+  })
+
+  describe('writeBaseAgentInfo', () => {
+    it('throws a contextual error when write fails', () => {
+      const projectPath = '/path/to/project'
+      const baseAgentInfo: AgentInfo = {
+        id: 'myrepo-base-123',
+        agentId: 'myrepo-base',
+        branch: 'main',
+        project: 'myrepo',
+        feature: 'Base Branch (main)',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        isBaseBranchAgent: true,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+
+      // No minions.json (legacy project)
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        throw new Error('EACCES: permission denied')
+      })
+
+      expect(() => agentService.writeBaseAgentInfo(projectPath, baseAgentInfo)).toThrow(
+        /Failed to write base agent info at \/path\/to\/project/
+      )
+    })
+  })
+
+  describe('saveProjectConfig', () => {
+    it('throws a contextual error when write fails', () => {
+      const projectPath = '/path/to/project'
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      // minions.json exists
+      vi.mocked(fs.existsSync).mockImplementation((path) => path === newConfigPath)
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+        project: { name: 'myrepo', defaultBaseBranch: 'main' },
+        setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+        assignments: [],
+        testEnvironments: []
+      }))
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        throw new Error('EIO: i/o error')
+      })
+
+      // Access private method via reflection
+      expect(() => (agentService as any).saveProjectConfig(projectPath, {
+        project: { name: 'myrepo' },
+        assignments: []
+      })).toThrow(/Failed to save project config/)
+    })
+  })
+
+  describe('migrateAssignments', () => {
+    const projectPath = '/path/to/project'
+    const configContent = JSON.stringify({
+      project: { name: 'myrepo', defaultBaseBranch: 'main' },
+      setup: { filesToCopy: [], postSetupCommands: [], requiredFiles: [], preflightCommands: [] },
+      assignments: [
+        { id: 'a1', agentId: 'myrepo-agent1', feature: 'feat1', tool: 'claude', mode: 'dev' },
+        { id: 'a2', agentId: 'myrepo-agent2', feature: 'feat2', tool: 'claude', mode: 'dev' }
+      ],
+      testEnvironments: []
+    })
+
+    it('continues when one agent migration fails', async () => {
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === newConfigPath
+      })
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        if (path === newConfigPath) return configContent
+        // Return old-format (non-JSON) agent-info content to trigger migration
+        return 'AGENT_ID=myrepo-agent1\nBRANCH=feature/test\nPROJECT=myrepo'
+      })
+
+      // Mock git worktree list to return two worktrees
+      vi.mocked(exec).mockImplementation((_cmd: string, _opts: any, callback: any) => {
+        if (callback) {
+          callback(null, {
+            stdout: `worktree /path/to/myrepo-agent1\nHEAD 123456\nbranch refs/heads/feature/test\n\nworktree /path/to/myrepo-agent2\nHEAD 789012\nbranch refs/heads/feature/test2\n\nworktree /path/to/project\nHEAD 111111\nbranch refs/heads/main\n`
+          })
+        }
+        return {} as any
+      })
+
+      // Make first write succeed and second fail
+      let callCount = 0
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        callCount++
+        if (callCount === 1) {
+          throw new Error('ENOSPC: no space left on device')
+        }
+        // Second call succeeds
+      })
+
+      // Should not throw - migration continues despite individual failure
+      await agentService.migrateAssignments(projectPath)
+
+      // writeFileSync should have been called (via writeAgentInfo)
+      // The migration should have attempted both agents
+    })
+
+    it('does not clear config when a migration fails', async () => {
+      const newConfigPath = join(projectPath, 'minions.json')
+
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === newConfigPath
+      })
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        if (path === newConfigPath) return configContent
+        return 'AGENT_ID=myrepo-agent1\nBRANCH=feature/test\nPROJECT=myrepo'
+      })
+
+      // Mock git worktree list to return one worktree
+      vi.mocked(exec).mockImplementation((_cmd: string, _opts: any, callback: any) => {
+        if (callback) {
+          callback(null, {
+            stdout: `worktree /path/to/myrepo-agent1\nHEAD 123456\nbranch refs/heads/feature/test\n\nworktree /path/to/project\nHEAD 111111\nbranch refs/heads/main\n`
+          })
+        }
+        return {} as any
+      })
+
+      // Make the write fail
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        throw new Error('ENOSPC: no space left on device')
+      })
+
+      await agentService.migrateAssignments(projectPath)
+
+      // saveProjectConfig should NOT have been called since migration failed
+      // The only calls to writeFileSync should be from the failed writeAgentInfo
+      // (saveProjectConfig would also call writeFileSync, but should not be reached)
+      // We can verify by checking the call count - only the failed migration attempt(s)
+      const calls = vi.mocked(fs.writeFileSync).mock.calls
+      // All calls should be from writeAgentInfo (agent file writes), not config writes
+      for (const call of calls) {
+        const filePath = call[0] as string
+        expect(filePath).not.toContain('minions.json')
+        expect(filePath).not.toContain('config.json')
+      }
     })
   })
 })
