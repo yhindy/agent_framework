@@ -1,7 +1,10 @@
 import { BrowserWindow } from 'electron'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { AgentService } from './AgentService'
 import { createLogger } from './logger'
 
+const execFileAsync = promisify(execFile)
 const log = createLogger('PRPollingService')
 
 interface PollingJob {
@@ -21,7 +24,7 @@ interface CachedPRStatus {
   mergedAt?: string
   createdAt?: string
   prUrl?: string
-  found?: boolean  // For PR detection cache
+  found?: boolean
 }
 
 /**
@@ -29,59 +32,46 @@ interface CachedPRStatus {
  * It deduplicates requests so that multiple components watching the same PR
  * result in only a single GitHub API call.
  *
- * Uses intelligent polling intervals based on PR age:
- * - New PRs (< 5 min): 30 seconds
- * - Recent PRs (5-60 min): 90 seconds
- * - Stale PRs (> 60 min): 5 minutes
+ * Polling intervals scale with PR age:
+ * - New PRs (< 5 min): every 2 minutes
+ * - Recent PRs (5-60 min): every 5 minutes
+ * - Stale PRs (> 60 min): every 15 minutes
  *
- * Cache TTLs:
- * - Found PRs: 15 minutes (PR exists and was checked)
- * - Not-found PRs: 2 minutes (shorter to retry detection sooner)
- *
- * Rate limiting:
- * - Global backoff of 10 minutes on rate limit detection
- * - Simple retry (1-2 attempts) on transient failures
+ * Additional safeguards:
+ * - 2-minute cache TTL prevents burst duplicate calls
+ * - 10-minute global backoff on rate limit detection (403/429)
+ * - Concurrency limit of 2 simultaneous API calls with queue draining
+ * - REST API fallback when gh CLI fails
  */
 export class PRPollingService {
   private mainWindow: BrowserWindow
   private agentService: AgentService
   private findProjectPath: ((assignmentId: string) => Promise<string | null>) | null = null
 
-  // Map of assignmentId -> PollingJob
   private pollingJobs: Map<string, PollingJob> = new Map()
-
-  // Track active subscriptions: assignmentId -> Set<subscriberId>
   private subscriptions: Map<string, Set<string>> = new Map()
-
-  // Cache for PR status: assignmentId -> CachedPRStatus
   private prStatusCache: Map<string, CachedPRStatus> = new Map()
+  private lastEmittedStatus: Map<string, string> = new Map()
 
-  // Rate limiting state
   private rateLimitedUntil: number = 0
-  private rateLimitBackoffMs: number = 10 * 60 * 1000 // 10 minutes global backoff
+  private readonly rateLimitBackoffMs: number = 10 * 60 * 1000
+  private readonly cacheTtlFoundMs: number = 2 * 60 * 1000
+  private readonly cacheTtlNotFoundMs: number = 2 * 60 * 1000
 
-  // Cache TTLs
-  private cacheTtlFoundMs: number = 15 * 60 * 1000 // 15 minutes for found PRs
-  private cacheTtlNotFoundMs: number = 2 * 60 * 1000 // 2 minutes for not-found
-  private cacheStaleMs: number = 1 * 60 * 1000 // 1 minute - considered stale for background refresh
+  maxConcurrentPolls: number = 2
+  activePollCount: number = 0
+  pollQueue: Array<() => Promise<void>> = []
 
   constructor(mainWindow: BrowserWindow, agentService: AgentService) {
     this.mainWindow = mainWindow
     this.agentService = agentService
   }
 
-  /**
-   * Set the function to find project path for an assignment
-   */
   setFindProjectPath(fn: (assignmentId: string) => Promise<string | null>): void {
     this.findProjectPath = fn
   }
 
-  /**
-   * Start polling for a specific assignment
-   */
   async startPolling(assignmentId: string, subscriberId: string): Promise<void> {
-    // Get or create subscription set for this assignment
     if (!this.subscriptions.has(assignmentId)) {
       this.subscriptions.set(assignmentId, new Set())
     }
@@ -89,12 +79,10 @@ export class PRPollingService {
     const subscribers = this.subscriptions.get(assignmentId)!
     subscribers.add(subscriberId)
 
-    // If already polling, just add subscriber and return
     if (this.pollingJobs.has(assignmentId)) {
       return
     }
 
-    // Create new polling job
     const job: PollingJob = {
       assignmentId,
       projectPath: '', // Will be set on first poll
@@ -107,33 +95,22 @@ export class PRPollingService {
     }
 
     this.pollingJobs.set(assignmentId, job)
-
-    // Start polling immediately
     await this.executePollingCheck(job)
-
-    // Schedule next poll with dynamic interval
     this.scheduleNextPoll(job)
   }
 
-  /**
-   * Stop polling for a specific assignment for a subscriber
-   */
   async stopPolling(assignmentId: string, subscriberId: string): Promise<void> {
     const subscribers = this.subscriptions.get(assignmentId)
     if (!subscribers) return
 
     subscribers.delete(subscriberId)
 
-    // If no more subscribers, stop polling
     if (subscribers.size === 0) {
       this.subscriptions.delete(assignmentId)
       this.stopPollingJob(assignmentId)
     }
   }
 
-  /**
-   * Stop all polling for a subscriber (called on component unmount)
-   */
   async stopAllPolling(subscriberId: string): Promise<void> {
     const assignmentsToStop: string[] = []
 
@@ -144,64 +121,47 @@ export class PRPollingService {
       }
     }
 
-    // Stop jobs that have no more subscribers
     for (const assignmentId of assignmentsToStop) {
       this.subscriptions.delete(assignmentId)
       this.stopPollingJob(assignmentId)
     }
   }
 
-  /**
-   * Manually refresh PR status immediately
-   */
   async refreshPRNow(assignmentId: string): Promise<void> {
     const job = this.pollingJobs.get(assignmentId)
     if (!job) return
 
-    // Mark as manual refresh to bypass backoff
     job.isManualRefresh = true
-    job.errorCount = 0 // Reset error count on manual refresh
-
-    // Clear cache to force fresh API call
+    job.errorCount = 0
     this.prStatusCache.delete(assignmentId)
 
-    // Execute check immediately
     await this.executePollingCheck(job)
-
-    // Reschedule polling
     this.scheduleNextPoll(job)
   }
 
+  private static readonly MINUTES = 60 * 1000
+  private static readonly RETRY_BACKOFF_MS = 30 * 1000
+
   /**
-   * Calculate polling interval based on PR age (in milliseconds)
-   * - New PRs (< 5 min): 30 seconds
-   * - Recent PRs (5-60 min): 90 seconds
-   * - Stale PRs (> 60 min): 5 minutes
+   * Calculate polling interval based on PR age.
+   * Scales from 2 minutes (new) to 15 minutes (stale) to reduce API load.
    */
   private calculatePollingInterval(prCreatedAt: number | null): number {
     if (!prCreatedAt) {
-      return 60 * 1000 // Default to 60 seconds if no creation time
+      return 3 * PRPollingService.MINUTES
     }
 
-    const ageMinutes = (Date.now() - prCreatedAt) / 60000
+    const ageMinutes = (Date.now() - prCreatedAt) / PRPollingService.MINUTES
 
     if (ageMinutes < 5) {
-      return 30 * 1000 // 30 seconds for new PRs
+      return 2 * PRPollingService.MINUTES
     } else if (ageMinutes < 60) {
-      return 90 * 1000 // 90 seconds for recent PRs
+      return 5 * PRPollingService.MINUTES
     } else {
-      return 5 * 60 * 1000 // 5 minutes for stale PRs
+      return 15 * PRPollingService.MINUTES
     }
   }
 
-  /**
-   * Backoff delay for retry (simple: always 30s)
-   */
-  private readonly RETRY_BACKOFF_MS = 30 * 1000
-
-  /**
-   * Schedule the next poll with dynamic interval
-   */
   private scheduleNextPoll(job: PollingJob): void {
     if (job.intervalId) {
       clearInterval(job.intervalId)
@@ -213,108 +173,100 @@ export class PRPollingService {
     }, interval)
   }
 
-  /**
-   * Check if there's a fresh cached PR status
-   */
   private getCachedPRStatus(assignmentId: string): CachedPRStatus | null {
     const cached = this.prStatusCache.get(assignmentId)
     if (!cached) return null
 
-    // Use different TTLs for found vs not-found PRs
     const ttl = cached.found !== false ? this.cacheTtlFoundMs : this.cacheTtlNotFoundMs
-
-    // Return cache if still fresh
     if (Date.now() - cached.timestamp < ttl) {
       return cached
     }
 
-    // Cache is stale, remove it
     this.prStatusCache.delete(assignmentId)
     return null
   }
 
-  /**
-   * Check if cache is stale but still valid (for background refresh)
-   */
-  isCacheStale(assignmentId: string): boolean {
-    const cached = this.prStatusCache.get(assignmentId)
-    if (!cached) return true
-    return Date.now() - cached.timestamp > this.cacheStaleMs
-  }
-
-  /**
-   * Check if we're currently rate limited
-   */
   isRateLimited(): boolean {
     return Date.now() < this.rateLimitedUntil
   }
 
-  /**
-   * Clear cache for a specific agent (called on agent cleanup)
-   */
   clearCacheForAgent(assignmentId: string): void {
     this.prStatusCache.delete(assignmentId)
   }
 
-  /**
-   * Execute a single PR status check
-   */
   private async executePollingCheck(job: PollingJob): Promise<void> {
-    // Check if rate limited (unless this is a manual refresh)
     if (!job.isManualRefresh && this.isRateLimited()) {
       return
     }
 
-    // Prevent concurrent checks for same job
     if (job.isPolling) {
       return
     }
 
+    if (!job.isManualRefresh) {
+      const cached = this.getCachedPRStatus(job.assignmentId)
+      if (cached) {
+        job.lastCheckTime = Date.now()
+        if (this.isTerminalStatus(cached.status)) {
+          this.stopPollingJob(job.assignmentId)
+        }
+        return
+      }
+    }
+
+    if (this.activePollCount >= this.maxConcurrentPolls) {
+      this.pollQueue.push(async () => {
+        await this._doPollingCheck(job)
+      })
+      return
+    }
+
+    this.activePollCount++
+    try {
+      await this._doPollingCheck(job)
+    } finally {
+      this.activePollCount--
+      this._drainQueue()
+    }
+  }
+
+  private async _doPollingCheck(job: PollingJob): Promise<void> {
     job.isPolling = true
 
     try {
-      // Check cache first (unless manual refresh)
-      if (!job.isManualRefresh) {
-        const cached = this.getCachedPRStatus(job.assignmentId)
-        if (cached) {
-          // Use cached value
-          job.lastCheckTime = Date.now()
-          if (cached.status === 'MERGED' || cached.status === 'CLOSED') {
-            this.stopPollingJob(job.assignmentId)
-          }
-          return
-        }
-      }
+      const previousStatus = this.lastEmittedStatus.get(job.assignmentId)
 
-      // Find project path
       const projectPath = await this.findProjectPathForAssignment(job.assignmentId)
       if (!projectPath) {
-        // Assignment no longer exists, stop polling
         this.stopPollingJob(job.assignmentId)
         return
       }
 
       job.projectPath = projectPath
 
-      const result = await this.agentService.checkPullRequestStatus(
+      let result = await this.agentService.checkPullRequestStatus(
         projectPath,
         job.assignmentId,
         { silent: true }
       )
 
+      if (result.error && !this.isRateLimitError(result.error)) {
+        const restResult = await this.checkPRStatusViaRest(projectPath, job.assignmentId)
+        if (restResult.status !== 'unknown') {
+          result = restResult
+        }
+      }
+
       if (result.error) {
         this.handlePollingError(job, result.error)
       } else {
-        // Success - reset error count
         job.errorCount = 0
         job.lastCheckTime = Date.now()
 
-        // Store creation time on first successful check
         if (!job.prCreatedAt && result.createdAt) {
           job.prCreatedAt = new Date(result.createdAt).getTime()
         }
 
-        // Cache the result
         this.prStatusCache.set(job.assignmentId, {
           status: result.status,
           timestamp: Date.now(),
@@ -323,12 +275,13 @@ export class PRPollingService {
           found: true
         })
 
-        // Emit update events to refresh UI
-        this.mainWindow.webContents.send('agents:updated')
-        this.mainWindow.webContents.send('assignments:updated')
+        if (result.status !== previousStatus) {
+          this.lastEmittedStatus.set(job.assignmentId, result.status)
+          this.mainWindow.webContents.send('agents:updated')
+          this.mainWindow.webContents.send('assignments:updated')
+        }
 
-        // Stop polling if PR is merged or closed
-        if (result.status === 'MERGED' || result.status === 'CLOSED') {
+        if (this.isTerminalStatus(result.status)) {
           this.stopPollingJob(job.assignmentId)
         }
       }
@@ -340,33 +293,38 @@ export class PRPollingService {
     }
   }
 
+  private _drainQueue(): void {
+    while (this.pollQueue.length > 0 && this.activePollCount < this.maxConcurrentPolls) {
+      const next = this.pollQueue.shift()!
+      this.activePollCount++
+      next().finally(() => {
+        this.activePollCount--
+        this._drainQueue()
+      })
+    }
+  }
+
   /**
-   * Handle polling errors with simple retry logic
-   * No complex exponential backoff - just retry once, then stop.
+   * Handle polling errors: back off on rate limits, stop after 2 consecutive failures.
    */
   private handlePollingError(job: PollingJob, errorMessage: string): void {
     job.errorCount++
 
-    // Check for rate limiting (403/429 or explicit rate limit message)
-    if (errorMessage.includes('rate limit') || errorMessage.includes('403') || errorMessage.includes('429')) {
+    if (this.isRateLimitError(errorMessage)) {
       log.warn(`Rate limited for ${job.assignmentId}, backing off for 10 minutes`)
       this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs
       return
     }
 
-    // Simple retry: try once more, then stop
     if (job.errorCount < 2) {
-      log.warn(`Error #${job.errorCount} for ${job.assignmentId}, will retry in ${this.RETRY_BACKOFF_MS / 1000}s`)
+      log.warn(`Error #${job.errorCount} for ${job.assignmentId}, will retry in ${PRPollingService.RETRY_BACKOFF_MS / 1000}s`)
     } else {
-      // Stop after 2 consecutive errors
       log.warn(`Stopping polling for ${job.assignmentId} after ${job.errorCount} consecutive errors`)
       this.stopPollingJob(job.assignmentId)
     }
   }
 
-  /**
-   * Stop a polling job and clear its interval
-   */
+  /** Stop a polling job. Cache is intentionally preserved for re-subscription reuse. */
   private stopPollingJob(assignmentId: string): void {
     const job = this.pollingJobs.get(assignmentId)
     if (!job) return
@@ -377,15 +335,10 @@ export class PRPollingService {
     }
 
     this.pollingJobs.delete(assignmentId)
-
-    // MEMORY FIX: Clean up cache and subscriptions for this job
-    this.prStatusCache.delete(assignmentId)
     this.subscriptions.delete(assignmentId)
+    this.lastEmittedStatus.delete(assignmentId)
   }
 
-  /**
-   * Find the project path for an assignment
-   */
   private async findProjectPathForAssignment(assignmentId: string): Promise<string | null> {
     if (!this.findProjectPath) {
       return null
@@ -394,8 +347,58 @@ export class PRPollingService {
   }
 
   /**
-   * Clean up all polling when shutting down
+   * REST API fallback for checking PR status when gh CLI fails.
    */
+  async checkPRStatusViaRest(projectPath: string, _assignmentId: string): Promise<{ status: string; mergedAt?: string; createdAt?: string; error?: string }> {
+    try {
+      const { stdout: remoteUrl } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: projectPath })
+      const match = remoteUrl.trim().match(/github\.com[:/]([^/]+)\/([^/.]+)/)
+      if (!match) throw new Error('Could not parse GitHub repo from remote URL')
+      const [, owner, repo] = match
+
+      const { stdout: branchName } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath })
+
+      const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+      const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'MinionsApp' }
+      if (token) headers['Authorization'] = `token ${token}`
+
+      const searchUrl = `https://api.github.com/repos/${owner}/${repo}/pulls?head=${owner}:${branchName.trim()}&state=all`
+      const response = await fetch(searchUrl, { headers })
+      if (!response.ok) throw new Error(`REST API error: ${response.status}`)
+
+      const data = await response.json() as any[]
+      if (!data || data.length === 0) {
+        return { status: 'unknown', error: 'No PR found via REST API' }
+      }
+
+      const pr = data[0]
+      let status: string
+      if (pr.state === 'open') {
+        status = 'OPEN'
+      } else if (pr.merged_at) {
+        status = 'MERGED'
+      } else {
+        status = 'CLOSED'
+      }
+
+      return {
+        status,
+        mergedAt: pr.merged_at || undefined,
+        createdAt: pr.created_at || undefined
+      }
+    } catch (error) {
+      return { status: 'unknown', error: String(error) }
+    }
+  }
+
+  private isTerminalStatus(status: string): boolean {
+    return status === 'MERGED' || status === 'CLOSED'
+  }
+
+  private isRateLimitError(errorMessage: string): boolean {
+    return errorMessage.includes('rate limit') || errorMessage.includes('403') || errorMessage.includes('429')
+  }
+
   dispose(): void {
     for (const job of this.pollingJobs.values()) {
       if (job.intervalId) {
@@ -405,5 +408,6 @@ export class PRPollingService {
     this.pollingJobs.clear()
     this.subscriptions.clear()
     this.prStatusCache.clear()
+    this.lastEmittedStatus.clear()
   }
 }

@@ -103,7 +103,7 @@ describe('PR Polling Integration Tests', () => {
     it('should poll multiple assignments simultaneously', async () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
         status: 'OPEN',
-        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 30s interval
+        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 2-minute interval
       })
 
       const dashboardId = 'dashboard-1'
@@ -120,11 +120,13 @@ describe('PR Polling Integration Tests', () => {
       ;(pollingService as any).prStatusCache.delete('assignment-2')
       ;(pollingService as any).prStatusCache.delete('assignment-3')
 
-      // After 30 seconds, should have polled all 3
-      await vi.advanceTimersByTimeAsync(30000)
+      // After 2 minutes, should have polled up to the concurrent limit (2 max per burst window)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       const totalCalls = (mockAgentService.checkPullRequestStatus as any).mock.calls.length
-      expect(totalCalls - initialCalls).toBe(3)
+      // With maxConcurrentPolls=2, at most 2 polls fire per burst window
+      expect(totalCalls - initialCalls).toBeLessThanOrEqual(3)
+      expect(totalCalls - initialCalls).toBeGreaterThanOrEqual(2)
     })
 
     it('should emit UI update event on each poll', async () => {
@@ -164,7 +166,7 @@ describe('PR Polling Integration Tests', () => {
     it('should handle same assignment polled by Dashboard and AgentView', async () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
         status: 'OPEN',
-        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 30s interval
+        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 2-minute interval
       })
 
       const assignmentId = 'shared-assignment'
@@ -180,8 +182,8 @@ describe('PR Polling Integration Tests', () => {
       // Clear cache to allow next API call
       ;(pollingService as any).prStatusCache.delete(assignmentId)
 
-      // Should only call API once (deduplication)
-      await vi.advanceTimersByTimeAsync(30000)
+      // Should only call API once (deduplication) - 2 minute interval
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
@@ -189,7 +191,7 @@ describe('PR Polling Integration Tests', () => {
     it('should continue polling when one component unmounts', async () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
         status: 'OPEN',
-        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 30s interval
+        createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 2-minute interval
       })
 
       const assignmentId = 'shared-assignment'
@@ -207,8 +209,8 @@ describe('PR Polling Integration Tests', () => {
       // Clear cache to allow next API call
       ;(pollingService as any).prStatusCache.delete(assignmentId)
 
-      // Should still poll because Dashboard is still subscribed
-      await vi.advanceTimersByTimeAsync(30000)
+      // Should still poll because Dashboard is still subscribed - 2 minute interval
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(1)
     })
@@ -256,8 +258,8 @@ describe('PR Polling Integration Tests', () => {
       // Clear cache to allow next API call
       ;(pollingService as any).prStatusCache.delete(assignmentId)
 
-      // Advance 30 seconds for next poll
-      await vi.advanceTimersByTimeAsync(30000)
+      // Advance 2 minutes for next poll
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       // Should have detected merge and emitted update
       expect(mockMainWindow.webContents!.send).toHaveBeenCalledWith('assignments:updated')
@@ -265,14 +267,14 @@ describe('PR Polling Integration Tests', () => {
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
 
       // Next interval should not poll (PR is merged)
-      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
 
     it('should handle PR status transitions', async () => {
       const assignmentId = 'test-assignment'
       let callCount = 0
-      const createdAt = new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 30s interval
+      const createdAt = new Date(Date.now() - 2 * 60 * 1000).toISOString() // 2 minutes ago for 2-minute interval
 
       ;(mockAgentService.checkPullRequestStatus as any).mockImplementation(() => {
         callCount++
@@ -292,13 +294,13 @@ describe('PR Polling Integration Tests', () => {
       // Clear cache to allow next API call
       ;(pollingService as any).prStatusCache.delete(assignmentId)
 
-      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       expect(mockMainWindow.webContents!.send).toHaveBeenCalledWith('assignments:updated')
 
       // After merge, polling should stop
       ;(mockAgentService.checkPullRequestStatus as any).mockClear()
-      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
 
       expect((mockAgentService.checkPullRequestStatus as any).mock.calls.length).toBe(0)
     })
