@@ -3,7 +3,7 @@ import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
-import { createStatefulFilter, StatefulFilter } from '../utils/terminalOutputFilter'
+import { createStatefulFilter, DA_RESPONSE_INPUT, StatefulFilter } from '../utils/terminalOutputFilter'
 import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface TerminalProps {
@@ -71,7 +71,7 @@ export function initGlobalOutputListener() {
       agentFilters.set(id, filter)
     }
 
-    // Filter PTY query responses before caching (they appear as garbage on replay)
+    // Filter PTY query responses (DA1, DA2, OSC color) that appear as garbage
     const filteredData = filter.process(data)
 
     // Cache filtered output for every agent
@@ -89,9 +89,9 @@ export function initGlobalOutputListener() {
       consolidateCache(id)
     }
 
-    // Write original data to active terminal (xterm.js processes query responses live)
-    if (activeTerminal && activeTerminal.agentId === id) {
-      activeTerminal.terminal.write(data)
+    // If this terminal is currently active, write filtered data to it
+    if (activeTerminal && activeTerminal.agentId === id && filteredData) {
+      activeTerminal.terminal.write(filteredData)
     }
   })
 }
@@ -251,9 +251,10 @@ function Terminal({ agentId, autoFocus, onMount }: TerminalProps) {
 
       onMount?.()
 
-      // Filter out focus reporting sequences that confuse vim and claude code
+      // Filter out focus reporting and DA responses that confuse the PTY
       terminal.onData((data) => {
         if (data === '\x1b[I' || data === '\x1b[O') return
+        if (DA_RESPONSE_INPUT.test(data)) return
         window.electronAPI.sendTerminalInput(agentId, data)
       })
 

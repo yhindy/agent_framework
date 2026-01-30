@@ -3,7 +3,7 @@ import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import './Terminal.css'
-import { filterTerminalQueryResponses } from '../utils/terminalOutputFilter'
+import { createStatefulFilter, DA_RESPONSE_INPUT, StatefulFilter } from '../utils/terminalOutputFilter'
 import { setupShiftEnterHandler, getDroppedFilePaths } from '../utils/terminalUtils'
 
 interface TestEnvTerminalProps {
@@ -21,6 +21,9 @@ const REPLAY_BATCH_SIZE = 100 // Number of chunks to batch together during repla
 
 // Cache terminal OUTPUT per agent+command
 const outputCache = new Map<string, string[]>()
+
+// Per-terminal stateful filters to handle escape sequences split across chunks
+const terminalFilters = new Map<string, StatefulFilter>()
 
 // Track active terminals for live output
 const activeTerminals = new Map<string, XTerm>()
@@ -55,33 +58,35 @@ function initGlobalOutputListener() {
   window.electronAPI.onTestEnvOutput((agentId, commandId, data) => {
     const key = `${agentId}:${commandId}`
 
-    // Filter terminal query responses before caching to prevent garbage on replay.
-    // These are PTY responses (DA1, DA2, OSC color) that xterm.js processes live
-    // but appear as visible text when replayed from cache.
-    const filteredData = filterTerminalQueryResponses(data)
+    // Get or create stateful filter for this terminal
+    let filter = terminalFilters.get(key)
+    if (!filter) {
+      filter = createStatefulFilter()
+      terminalFilters.set(key, filter)
+    }
 
-    // Always cache filtered output
-    if (!outputCache.has(key)) {
-      outputCache.set(key, [])
+    // Filter PTY query responses (DA1, DA2, OSC color) that appear as garbage
+    const filteredData = filter.process(data)
+
+    // Cache filtered output
+    let cache = outputCache.get(key)
+    if (!cache) {
+      cache = []
+      outputCache.set(key, cache)
     }
     if (filteredData) {
-      outputCache.get(key)!.push(filteredData)
+      cache.push(filteredData)
     }
 
-    // Trim cache if it exceeds limits
     trimCache(key)
-
-    // Periodically consolidate chunks to prevent array fragmentation
-    const cache = outputCache.get(key)!
     if (cache.length >= CONSOLIDATION_THRESHOLD) {
       consolidateCache(key)
     }
 
-    // If this terminal is currently active, write to it immediately
-    // Use original data for live display so xterm.js can process query responses
+    // If this terminal is currently active, write filtered data to it
     const terminal = activeTerminals.get(key)
-    if (terminal) {
-      terminal.write(data)
+    if (terminal && filteredData) {
+      terminal.write(filteredData)
     }
   })
 }
@@ -239,14 +244,10 @@ function TestEnvTerminal({ agentId, commandId, autoFocus, onMount }: TestEnvTerm
         onMount()
       }
 
-      // Handle terminal input (must be after open)
+      // Filter out focus reporting and DA responses that confuse the PTY
       terminal.onData((data) => {
-        // Filter out focus reporting sequences that xterm.js sends but shouldn't go to PTY
-        // \x1b[I = Focus In, \x1b[O = Focus Out (CSI I and CSI O)
-        if (data === '\x1b[I' || data === '\x1b[O') {
-          return // Don't send focus sequences to PTY
-        }
-        
+        if (data === '\x1b[I' || data === '\x1b[O') return
+        if (DA_RESPONSE_INPUT.test(data)) return
         window.electronAPI.sendTestEnvInput(agentId, commandId, data)
       })
       

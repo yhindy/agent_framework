@@ -615,8 +615,8 @@ branch refs/heads/main
   })
 
   describe('generateHandoffContext', () => {
-    it('should generate context for inherit mode', () => {
-      const result = (agentService as any).generateHandoffContext(sourceAgentInfo, 'inherit')
+    it('should generate context for inherit mode', async () => {
+      const result = await (agentService as any).generateHandoffContext(sourceAgentInfo, 'inherit', '/test/project')
 
       expect(result).toContain('## Handoff Context')
       expect(result).toContain('continuing work from branch')
@@ -625,8 +625,8 @@ branch refs/heads/main
       expect(result).toContain(sourceAgentInfo.feature)
     })
 
-    it('should generate context for fresh mode', () => {
-      const result = (agentService as any).generateHandoffContext(sourceAgentInfo, 'fresh')
+    it('should generate context for fresh mode', async () => {
+      const result = await (agentService as any).generateHandoffContext(sourceAgentInfo, 'fresh', '/test/project')
 
       expect(result).toContain('## Handoff Context')
       expect(result).toContain('starting fresh from main')
@@ -634,25 +634,25 @@ branch refs/heads/main
       expect(result).toContain('Parent agent was working on')
     })
 
-    it('should use prompt when feature is not available', () => {
+    it('should use prompt when feature is not available', async () => {
       const agentWithoutFeature = {
         ...sourceAgentInfo,
         feature: '',
         prompt: 'Work on authentication system'
       }
 
-      const result = (agentService as any).generateHandoffContext(agentWithoutFeature, 'inherit')
+      const result = await (agentService as any).generateHandoffContext(agentWithoutFeature, 'inherit', '/test/project')
 
       expect(result).toContain('Work on authentication system')
     })
 
-    it('should truncate long feature descriptions', () => {
+    it('should truncate long feature descriptions', async () => {
       const agentWithLongFeature = {
         ...sourceAgentInfo,
         feature: 'A'.repeat(300)
       }
 
-      const result = (agentService as any).generateHandoffContext(agentWithLongFeature, 'inherit')
+      const result = await (agentService as any).generateHandoffContext(agentWithLongFeature, 'inherit', '/test/project')
 
       // The feature should be truncated to 200 chars
       expect(result.length).toBeLessThan(500)
