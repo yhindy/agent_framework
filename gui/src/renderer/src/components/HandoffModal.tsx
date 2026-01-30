@@ -7,6 +7,7 @@ interface HandoffModalProps {
   sourceAgentName?: string
   initialPrompt?: string
   initialBranchMode?: 'inherit' | 'fresh'
+  defaultBranch?: string
   onConfirm: (request: {
     prompt: string
     branchMode: 'inherit' | 'fresh'
@@ -23,6 +24,7 @@ function HandoffModal({
   sourceAgentName,
   initialPrompt = '',
   initialBranchMode = 'inherit',
+  defaultBranch = 'main',
   onConfirm,
   onCancel,
   isLoading = false
@@ -102,7 +104,7 @@ function HandoffModal({
                   />
                   <div className="handoff-radio-content">
                     <span className="handoff-radio-title">Fresh Branch</span>
-                    <span className="handoff-radio-desc">New agent starts from main branch</span>
+                    <span className="handoff-radio-desc">New agent starts from {defaultBranch} branch</span>
                   </div>
                 </label>
               </div>
