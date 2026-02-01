@@ -1,6 +1,8 @@
-# Quick Start Guide
+# Quick Start Guide (GUI Development)
 
-Get the Minion Orchestrator GUI up and running in 5 minutes. 🍌
+Get the Minion Orchestrator GUI running for local development. 🍌
+
+> **End user?** See [GETTING_STARTED.md](../GETTING_STARTED.md) instead for setup and usage instructions.
 
 ## Step 1: Prerequisites
 
@@ -90,7 +92,7 @@ The app window will open automatically.
 Make sure you're selecting the actual project root, not a subdirectory.
 
 ### "Not a valid minion framework project"
-Your project needs either `minions.json` (new format) or a `minions/` directory (legacy format). Use the setup wizard to configure a new project.
+Your project needs a `minions/` directory. Use the setup wizard to configure a new project.
 
 ### Terminal shows nothing
 - Verify `claude` or `cursor` is installed: `which claude` / `which cursor`
