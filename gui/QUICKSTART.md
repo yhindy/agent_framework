@@ -83,7 +83,6 @@ The app window will open automatically.
 
 - Read [`TESTING.md`](TESTING.md) for comprehensive test scenarios
 - Read [`README.md`](README.md) for full documentation
-- Check out the signal protocol in `../minions/rules/orchestrator_signals.md`
 
 ## Troubleshooting
 

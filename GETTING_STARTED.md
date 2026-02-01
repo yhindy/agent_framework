@@ -140,8 +140,7 @@ your-project/
 │   ├── bin/             # CLI tools (setup, teardown, etc.)
 │   ├── rules/           # Agent behavior guidelines
 │   └── templates/       # Mission templates
-└── .cursor/rules/       # Cursor IDE integration
-    └── agent-rules.mdc
+└── config.json          # Project configuration
 ```
 
 **Note:** Legacy projects can be migrated to the new format via the GUI.

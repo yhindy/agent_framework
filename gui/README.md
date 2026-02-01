@@ -48,7 +48,7 @@ gui/
 ├── src/
 │   ├── main/              # Electron main process
 │   │   ├── index.ts       # Main entry point, IPC handlers
-│   │   └── services/      # Backend services (16 total)
+│   │   └── services/      # Backend services
 │   │       ├── AgentService.ts
 │   │       ├── TerminalService.ts
 │   │       ├── ProjectService.ts
@@ -64,8 +64,9 @@ gui/
 │       ├── index.html
 │       └── src/
 │           ├── App.tsx
-│           ├── store/     # Zustand state management
-│           └── components/ # React components (23+)
+│           ├── contexts/  # React contexts (state management)
+│           ├── hooks/     # Custom hooks
+│           └── components/ # React components
 ├── e2e/                   # E2E tests (Playwright)
 ├── vitest.config.ts       # Unit test configuration
 ├── playwright.config.ts   # E2E test configuration
@@ -154,8 +155,14 @@ State includes:
 
 ## Keyboard Shortcuts
 
-- **Cmd/Ctrl + 1-5**: Switch between agents
-- **Cmd/Ctrl + H**: Go to home dashboard
+- **Cmd/Ctrl + N**: New Minion
+- **Cmd/Ctrl + Shift + N**: New Super Minion
+- **Cmd/Ctrl + O**: Open Project
+- **Cmd/Ctrl + T**: Teleport from Cloud
+- **Cmd/Ctrl + Up**: Previous Minion
+- **Cmd/Ctrl + Down**: Next Minion
+- **Cmd/Ctrl + /**: Show Shortcuts Help
+- **Escape**: Close Dialog
 
 ## Troubleshooting
 
@@ -165,8 +172,7 @@ This means native modules need to be rebuilt for Electron:
 
 ```bash
 cd gui
-npm install --save-dev @electron/rebuild
-npx @electron/rebuild
+npm run rebuild
 npm run dev
 ```
 

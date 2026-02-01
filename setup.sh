@@ -32,8 +32,8 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-  echo "❌ ERROR: Node.js 18+ required (you have $(node -v))"
+if [ "$NODE_VERSION" -lt 20 ]; then
+  echo "❌ ERROR: Node.js 20+ required (you have $(node -v))"
   echo "   Please upgrade from https://nodejs.org"
   exit 1
 fi

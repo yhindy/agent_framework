@@ -110,7 +110,7 @@ Configuration depends on which format your project uses:
 
 **New Format (v2.0)**: Edit `minions.json` at the project root. Configuration is done via the GUI setup wizard.
 
-**Legacy Format (v1)**: Edit `minions/config.json` or `minions/bin/config.sh` to customize:
+**Legacy Format (v1)**: Edit `minions/config.json` to customize:
 - Project name (used for worktree folder names)
 - Base branch (defaults to main)
 - Files to copy to worktrees (env files, secrets, etc.)
