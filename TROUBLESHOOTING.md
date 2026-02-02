@@ -254,7 +254,7 @@ The framework respects your `~/.tmux.conf` configuration. If your settings aren'
 
 ### Tmux Keybindings Reference
 
-See [Terminal Mode (Tmux Integration)](CLAUDE.md#terminal-mode-tmux-integration) in CLAUDE.md for a complete list of tmux keybindings.
+See [CLAUDE.md](CLAUDE.md) for additional terminal architecture details.
 
 ---
 
@@ -268,7 +268,7 @@ If the GUI build fails with "Cannot find module 'electron/package.json'":
 2. Check installation: `ls node_modules/electron/package.json`
 3. Reinstall dependencies: `npm ci`
 
-See [Dependency Management](CLAUDE.md#dependency-management) for the convention on where to place dependencies.
+Check that `electron` is listed in the root `package.json` devDependencies.
 
 ### Tests Fail in CI but Pass Locally
 

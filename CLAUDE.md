@@ -98,12 +98,13 @@ agent_framework/
 ### User Project Structure
 ```
 your-project/
-├── minions.json              # Config file (version controlled)
-├── .minions/                 # Runtime state (gitignored)
-│   ├── agents/               # Per-agent state files
-│   │   └── {agent-id}.json   # Individual agent state
-│   └── archive/              # Archived agent metadata
-└── CLAUDE.md                 # Optional project-specific instructions
+├── minions/                  # Framework folder
+│   ├── bin/                 # Management scripts
+│   ├── rules/               # Agent behavior rules
+│   ├── templates/           # Spec templates
+│   └── config.json          # Project configuration
+├── .agent-info              # Runtime state (gitignored)
+└── CLAUDE.md                # Optional project-specific instructions
 ```
 
 ## Development Commands
@@ -139,7 +140,7 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 | `ProjectService` | Multi-project workspace management |
 | `ClaudeSessionInfoService` | Parse Claude JSONL for state |
 | `ClaudeConfigService` | Import Claude Code settings and plugins |
-| `MinionsConfigService` | Read/write minions.json config |
+| `MinionsConfigService` | Read/write minions config |
 | `SetupWizardService` | One-click project setup |
 | `HandoffApiService` | HTTP API for agent handoff (port 19234) |
 | `TeleportService` | Teleport session parsing |
@@ -203,7 +204,7 @@ Main Process (Node.js)
     ├── ClaudeConfigService # Import plugins from ~/.claude/
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
-    ├── MinionsConfigService  # Read/write minions.json config
+    ├── MinionsConfigService  # Read/write minions config
     ├── SetupWizardService    # One-click setup wizard agent
     └── HandoffApiService     # HTTP API for /handoff and /spawn-super (port 19234)
          │
@@ -222,21 +223,11 @@ Renderer Process (React)
 
 ### Configuration Management
 
-The framework supports two configuration formats:
-
-| Format | Config File | Agent State | Detection |
-|--------|------------|-------------|-----------|
-| **New (v2.0)** | `minions.json` | `.minions/agents/*.json` | Preferred |
-| **Legacy (v1)** | `minions/config.json` | `.agent-info` | Fallback |
-
-**MinionsConfigService** handles reading/writing configuration with automatic format detection:
-- Checks `minions.json` first, falls back to `minions/config.json`
-- Provides migration utilities for legacy projects
+**MinionsConfigService** handles reading/writing `minions/config.json`.
 
 **SetupWizardService** manages the one-click setup experience:
-- Detects if a project needs setup or migration
+- Detects if a project needs setup
 - Spawns a Claude agent to analyze the project and generate configuration
-- Parses wizard output to create `minions.json`
 - Optionally generates a project-specific CLAUDE.md
 
 ### Agent Lifecycle
@@ -603,7 +594,7 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
-| `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
+| `gui/src/main/services/MinionsConfigService.ts` | Read/write minions config |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
 | `gui/src/main/services/SkillsLibraryService.ts` | Scan global and project-local commands/agents |
