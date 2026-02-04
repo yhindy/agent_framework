@@ -121,6 +121,7 @@ export class MinionsConfigService {
           postSetupCommands: legacyConfig.setup.postSetupCommands || [],
           preflightCommands: legacyConfig.setup.preflightCommands,
           requiredFiles: legacyConfig.setup.requiredFiles,
+          testEnvironments: legacyConfig.testEnvironments as MinionsConfig['setup']['testEnvironments'],
         },
       }
 
