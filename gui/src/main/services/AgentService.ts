@@ -248,26 +248,18 @@ export class AgentService {
     const agents: AgentSession[] = []
 
     try {
-      // Get base agent if it exists
-      const baseInfoPath = join(projectPath, '.minions-base-info')
-      if (existsSync(baseInfoPath)) {
-        try {
-          const content = readFileSync(baseInfoPath, 'utf-8')
-          const baseAgentInfo = JSON.parse(content) as AgentInfo
-          if (baseAgentInfo.isBaseBranchAgent) {
-            let session = this.sessions.get(baseAgentInfo.agentId)
-            if (!session) {
-              session = this.createSessionFromInfo(baseAgentInfo, projectPath, true)
-              this.sessions.set(baseAgentInfo.agentId, session)
-            } else {
-              this.updateSessionFromInfo(session, baseAgentInfo)
-              session.isBaseBranchAgent = true
-            }
-            agents.push(session)
-          }
-        } catch (error) {
-          log.error('Error reading base agent info', error)
+      // Get base agent if it exists (checks both new and legacy locations)
+      const baseAgentInfo = this.readBaseAgentInfo(projectPath)
+      if (baseAgentInfo && baseAgentInfo.isBaseBranchAgent) {
+        let session = this.sessions.get(baseAgentInfo.agentId)
+        if (!session) {
+          session = this.createSessionFromInfo(baseAgentInfo, projectPath, true)
+          this.sessions.set(baseAgentInfo.agentId, session)
+        } else {
+          this.updateSessionFromInfo(session, baseAgentInfo)
+          session.isBaseBranchAgent = true
         }
+        agents.push(session)
       }
 
       // Get worktrees from git
@@ -440,8 +432,8 @@ export class AgentService {
   writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
     // Base agents are handled separately via writeBaseAgentInfo
     if (info.isBaseBranchAgent) {
-      const baseInfoPath = join(worktreePath, '.minions-base-info')
-      writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
+      // worktreePath for base agents is the project root
+      this.writeBaseAgentInfo(worktreePath, info)
       return
     }
 
@@ -1542,18 +1534,10 @@ Parent agent was working on: ${sourceFeature}
     const assignments: AgentInfo[] = []
 
     try {
-      // Add base branch agent if it exists
-      const baseInfoPath = join(projectPath, '.minions-base-info')
-      if (existsSync(baseInfoPath)) {
-        try {
-          const content = readFileSync(baseInfoPath, 'utf-8')
-          const baseAgentInfo = JSON.parse(content) as AgentInfo
-          if (baseAgentInfo.isBaseBranchAgent) {
-            assignments.push(baseAgentInfo)
-          }
-        } catch (error) {
-          log.error('Error reading base agent info', error)
-        }
+      // Add base branch agent if it exists (checks both new and legacy locations)
+      const baseAgentInfo = this.readBaseAgentInfo(projectPath)
+      if (baseAgentInfo && baseAgentInfo.isBaseBranchAgent) {
+        assignments.push(baseAgentInfo)
       }
 
       // Get worktrees from git
@@ -1648,12 +1632,21 @@ Parent agent was working on: ${sourceFeature}
     }
 
     // Verify the agent info file exists before attempting update
+    // For base agents, check both new (.minions/base-agent.json) and legacy (.minions-base-info) locations
+    // For regular agents, check .agent-info in worktree or .minions/agents/{id}.json in project
     const agentInfoPath = join(agent.worktreePath, '.agent-info')
-    const baseInfoPath = join(agent.worktreePath, '.minions-base-info')
+    const legacyBaseInfoPath = join(agent.worktreePath, '.minions-base-info')
+    const newBaseInfoPath = join(projectPath, '.minions', 'base-agent.json')
+    const newAgentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
 
-    if (!existsSync(agentInfoPath) && !existsSync(baseInfoPath)) {
+    const hasAgentInfo = existsSync(agentInfoPath) ||
+                         existsSync(legacyBaseInfoPath) ||
+                         existsSync(newBaseInfoPath) ||
+                         existsSync(newAgentInfoPath)
+
+    if (!hasAgentInfo) {
       log.warn(
-        `Agent ${agentId} found in worktree list but .agent-info file missing at ${agent.worktreePath}. ` +
+        `Agent ${agentId} found in worktree list but agent info file missing at ${agent.worktreePath}. ` +
         'Skipping UI state save - agent may have been deleted.'
       )
       // Gracefully skip the file update, but still update in-memory session
@@ -2173,29 +2166,20 @@ Parent agent was working on: ${sourceFeature}
     const baseBranch = await this.getDefaultBranch(projectPath, projectPath)
     const baseAgentId = `${projectName}-base`
 
-    const baseInfoPath = join(projectPath, '.minions-base-info')
-
-    // Check if base agent already exists
-    if (existsSync(baseInfoPath)) {
-      try {
-        const content = readFileSync(baseInfoPath, 'utf-8')
-        const info = JSON.parse(content) as AgentInfo
-        if (info.isBaseBranchAgent && info.agentId === baseAgentId) {
-          // Check if the stored branch is stale and needs updating
-          if (info.branch !== baseBranch) {
-            log.info(`Base agent branch changed from ${info.branch} to ${baseBranch}, updating`)
-            info.branch = baseBranch
-            info.feature = `Base Branch (${baseBranch})`
-            info.prompt = `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the ${baseBranch} branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`
-            writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
-          } else {
-            log.debug(`Base agent already exists: ${baseAgentId}`)
-          }
-          return info
-        }
-      } catch (error) {
-        log.warn(`Corrupted base agent info, recreating: ${error}`)
+    // Check if base agent already exists (checks both new and legacy locations)
+    const existingInfo = this.readBaseAgentInfo(projectPath)
+    if (existingInfo && existingInfo.isBaseBranchAgent && existingInfo.agentId === baseAgentId) {
+      // Check if the stored branch is stale and needs updating
+      if (existingInfo.branch !== baseBranch) {
+        log.info(`Base agent branch changed from ${existingInfo.branch} to ${baseBranch}, updating`)
+        existingInfo.branch = baseBranch
+        existingInfo.feature = `Base Branch (${baseBranch})`
+        existingInfo.prompt = `You are helping maintain the ${baseBranch} branch of ${projectName}. Keep the ${baseBranch} branch healthy, review code, run tests, and help with any issues on the base branch. Use your best judgment to help maintain code quality and fix any issues that arise.`
+        this.writeBaseAgentInfo(projectPath, existingInfo)
+      } else {
+        log.debug(`Base agent already exists: ${baseAgentId}`)
       }
+      return existingInfo
     }
 
     // Create new base agent info
@@ -2216,25 +2200,16 @@ Parent agent was working on: ${sourceFeature}
       isBaseBranchAgent: true
     }
 
-    writeFileSync(baseInfoPath, JSON.stringify(agentInfo, null, 2))
+    this.writeBaseAgentInfo(projectPath, agentInfo)
     log.info(`Created base branch agent: ${baseAgentId}`)
 
     return agentInfo
   }
 
   isBaseBranchAgentMissing(projectPath: string): boolean {
-    const baseInfoPath = join(projectPath, '.minions-base-info')
-    if (!existsSync(baseInfoPath)) {
-      return true
-    }
-
-    try {
-      const content = readFileSync(baseInfoPath, 'utf-8')
-      const info = JSON.parse(content) as AgentInfo
-      return !info.isBaseBranchAgent
-    } catch {
-      return true
-    }
+    // Use readBaseAgentInfo which checks both new and legacy locations
+    const info = this.readBaseAgentInfo(projectPath)
+    return !info || !info.isBaseBranchAgent
   }
 
   getAgentPath(projectPath: string, agentInfo: AgentInfo): string {
@@ -2262,8 +2237,9 @@ Parent agent was working on: ${sourceFeature}
   }
 
   async ensureBaseBranchAgentWithStartup(projectPath: string): Promise<{ agentInfo: AgentInfo, shouldStartClaude: boolean }> {
-    const baseInfoPath = join(projectPath, '.minions-base-info')
-    const isNewAgent = !existsSync(baseInfoPath)
+    // Use readBaseAgentInfo which checks both new and legacy locations
+    const existingAgent = this.readBaseAgentInfo(projectPath)
+    const isNewAgent = !existingAgent
 
     const agentInfo = await this.ensureBaseBranchAgent(projectPath)
 

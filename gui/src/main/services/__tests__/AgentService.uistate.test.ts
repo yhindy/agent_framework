@@ -356,7 +356,7 @@ describe('AgentService - UI State Persistence', () => {
       )
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '[WARN ] [AgentService]',
-        expect.stringContaining('.agent-info file missing')
+        expect.stringContaining('agent info file missing')
       )
 
       consoleWarnSpy.mockRestore()
