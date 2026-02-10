@@ -382,12 +382,24 @@ export class SetupWizardService {
    */
   generateWizardPrompt(projectPath: string): string {
     const projectName = this.getProjectName(projectPath)
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+
+    const branchLine = isGitRepo ? `\n    "defaultBaseBranch": "main",` : ''
+    const branchTask = isGitRepo ? '   - Project name and default branch' : '   - Project name'
+    const copyTask = isGitRepo
+      ? '   - Files to copy to worktrees'
+      : '   - Files to copy for agent setup'
+    const copyQuestion = isGitRepo
+      ? '   - "Are there any environment files that should be copied to worktrees?"'
+      : '   - "Are there any environment files agents should know about?"'
+    const gitInfo = isGitRepo ? '- Project type: Git repository' : '- Project type: Non-git folder'
 
     return `You are the Minions Setup Wizard. Your job is to analyze this project and create a configuration file.
 
 ## Project Information
 - Project path: ${projectPath}
 - Project name: ${projectName}
+${gitInfo}
 
 ## Your Tasks
 
@@ -401,12 +413,12 @@ export class SetupWizardService {
    - "I see this is a [detected] project. Is that correct?"
    - "What command runs your tests?" (suggest detected command)
    - "What command builds the project?" (suggest detected command)
-   - "Are there any environment files that should be copied to worktrees?"
+${copyQuestion}
 
 3. GENERATE the minions.json configuration file with:
-   - Project name and default branch
+${branchTask}
    - Build, test, and lint commands
-   - Files to copy to worktrees
+${copyTask}
    - Post-setup commands if needed
 
 4. OFFER to create a CLAUDE.md file:
@@ -421,8 +433,7 @@ When you have gathered all information, output the configuration in this EXACT f
 {
   "version": "2.0",
   "project": {
-    "name": "${projectName}",
-    "defaultBaseBranch": "main",
+    "name": "${projectName}",${branchLine}
     "description": "Brief project description"
   },
   "setup": {

@@ -94,7 +94,7 @@ function AgentCleanupDropdown({
       <ConfirmModal
         isOpen={showCleanupModal}
         title="Remove Minion?"
-        message={`This will teardown the worktree for ${displayName}. Any uncommitted changes will be lost. This action cannot be undone.`}
+        message={`This will remove ${displayName} and clean up its workspace. Any unsaved work may be lost. This action cannot be undone.`}
         confirmText="Remove"
         confirmVariant="danger"
         onConfirm={handleConfirmCleanup}

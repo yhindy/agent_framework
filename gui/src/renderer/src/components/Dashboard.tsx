@@ -44,7 +44,7 @@ const LOADING_MESSAGES = [
   'Teaching minion language basics...',
   'Installing safety goggles...',
   'Calibrating evil-o-meter...',
-  'Cloning the Git worktree...',
+  'Preparing the workspace...',
   'Requesting backup from Kevin, Stuart, and Bob...',
   'Polishing the shrinking ray...',
   'Preparing the fart gun...',
@@ -65,7 +65,7 @@ const TELEPORT_MESSAGES = [
   'Beaming session from the cloud...',
   'Establishing quantum link...',
   'Downloading minion consciousness...',
-  'Materializing in worktree...',
+  'Materializing in workspace...',
   'Syncing bananas from cloud storage...',
   'Calibrating teleporter coordinates...',
   'Reassembling molecular structure...'
@@ -437,7 +437,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       }
       setShowTypeSelection(true)
 
-      // Wait a moment for worktree creation then refresh
+      // Wait a moment for agent setup then refresh
       setTimeout(() => {
         loadAssignments()
         onRefresh()  // Refresh parent state too
