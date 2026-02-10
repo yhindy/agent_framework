@@ -34,7 +34,7 @@ export interface TaskInvocation {
 export interface SuperAgentInfo {
   id?: string
   agentId: string
-  branch: string
+  branch?: string
   project?: string
   feature: string
   status?: string
@@ -56,7 +56,7 @@ export interface SuperAgentInfo {
 export interface AgentInfo {
   id?: string
   agentId: string
-  branch: string
+  branch?: string
   project?: string
   feature: string
   status?: string

@@ -553,6 +553,20 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       return resolve(projectPath)
     }
 
+    // Check if the agent has a workingDirectory set (non-git agents).
+    // If so, use it directly instead of computing a git worktree path.
+    if (this.agentService) {
+      const agentInfo = this.agentService.readAgentInfo(projectPath, agentId, projectPath)
+      if (agentInfo?.workingDirectory) {
+        log.debug('getWorktreePath: using workingDirectory from agent info', {
+          projectPath,
+          agentId,
+          workingDirectory: agentInfo.workingDirectory
+        })
+        return resolve(agentInfo.workingDirectory)
+      }
+    }
+
     // Regular agents use worktrees
     // IMPORTANT: Must use project name from config to match AgentService
     const projectName = this.agentService?.getProjectName(projectPath) || projectPath.split('/').pop() || 'project'

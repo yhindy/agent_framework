@@ -181,17 +181,21 @@ export class SetupWizardService {
    * Quick setup for a project - creates minimal config without starting Claude.
    *
    * Use this when user wants to skip auto-setup and configure manually.
+   * Works for both git and non-git projects.
    *
    * @param projectPath - Path to the project root
-   * @throws Error if project is not a git repository
    */
   async quickSetup(projectPath: string): Promise<void> {
-    // Validate git repo first
-    try {
-      await this.agentService.ensureBaseBranchAgent(projectPath)
-    } catch (error: any) {
-      console.error('[SetupWizardService] Failed to validate project for quick setup:', error.message)
-      throw error
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+
+    // For git repos, ensure base branch agent exists
+    if (isGitRepo) {
+      try {
+        await this.agentService.ensureBaseBranchAgent(projectPath)
+      } catch (error: any) {
+        console.error('[SetupWizardService] Failed to validate project for quick setup:', error.message)
+        throw error
+      }
     }
 
     // Create minimal config
@@ -199,7 +203,7 @@ export class SetupWizardService {
     this.minionsConfigService.initializeMinionsFolder(projectPath)
     this.minionsConfigService.writeConfig(projectPath, minimalConfig)
     this.minionsConfigService.updateGitignore(projectPath)
-    console.log('[SetupWizardService] Created minimal config via quick setup')
+    console.log(`[SetupWizardService] Created minimal config via quick setup (isGitRepo: ${isGitRepo})`)
   }
 
   /**
@@ -219,17 +223,20 @@ export class SetupWizardService {
 
     // Generate session ID and agent ID
     const sessionId = `wizard-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-    // Use base agent pattern so it shows up in the base terminal
+    // Use base agent pattern so it shows up in the base terminal (only for git repos)
     const projectName = this.getProjectName(projectPath)
-    const agentId = `${projectName}-base`
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+    const agentId = isGitRepo ? `${projectName}-base` : `${projectName}-wizard-${Date.now()}`
 
-    // Validate git repo FIRST before creating any files
+    // For git repos, validate and ensure base branch agent FIRST before creating any files
     // This prevents leaving orphaned minions.json on failure
-    try {
-      await this.agentService.ensureBaseBranchAgent(projectPath)
-    } catch (error: any) {
-      console.error('[SetupWizardService] Failed to validate project:', error.message)
-      throw error
+    if (isGitRepo) {
+      try {
+        await this.agentService.ensureBaseBranchAgent(projectPath)
+      } catch (error: any) {
+        console.error('[SetupWizardService] Failed to validate project:', error.message)
+        throw error
+      }
     }
 
     // Create a minimal config so the project can be selected

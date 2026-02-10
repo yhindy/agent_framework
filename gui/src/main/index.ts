@@ -384,7 +384,18 @@ function initializeServices(): void {
     for (const project of activeProjects) {
       if (project.needsInstall) continue
 
-      // Ensure base branch agent exists
+      // Ensure base branch agent exists (only for git repos)
+      if (!project.isGitRepo) {
+        // Non-git projects don't have base branch agents, skip
+        const agents = agentsByProject.get(project.path) || []
+        const resumePromises = agents
+          .filter(agent => agent.claudeSessionId && agent.tool === 'claude')
+          .map(agent => resumeAgentSession(project.path, agent))
+        Promise.all(resumePromises)
+          .catch(err => log.error(`Failed to auto-resume agents for ${project.path}`, err))
+        continue
+      }
+
       services!.agent.ensureBaseBranchAgentWithStartup(project.path)
         .then(result => {
           // Auto-start Claude for newly created base agents
@@ -558,23 +569,25 @@ function setupIPC(): void {
     services!.project.switchProject(projectPath)
     const current = services!.project.getCurrentProject()
     if (current && !current.needsInstall) {
-      // Ensure base agent exists
-      try {
-        const result = await services!.agent.ensureBaseBranchAgentWithStartup(current.path)
-        // Auto-start Claude for newly created base agents
-        if (result.shouldStartClaude && result.agentInfo.prompt) {
-          scheduleAgentAutoStart({
-            projectPath: current.path,
-            agentId: result.agentInfo.agentId,
-            tool: result.agentInfo.tool || 'claude',
-            mode: result.agentInfo.mode || 'dev',
-            prompt: result.agentInfo.prompt,
-            model: result.agentInfo.model,
-            chrome: result.agentInfo.chrome !== false
-          })
+      // Ensure base agent exists (only for git repos)
+      if (current.isGitRepo !== false) {
+        try {
+          const result = await services!.agent.ensureBaseBranchAgentWithStartup(current.path)
+          // Auto-start Claude for newly created base agents
+          if (result.shouldStartClaude && result.agentInfo.prompt) {
+            scheduleAgentAutoStart({
+              projectPath: current.path,
+              agentId: result.agentInfo.agentId,
+              tool: result.agentInfo.tool || 'claude',
+              mode: result.agentInfo.mode || 'dev',
+              prompt: result.agentInfo.prompt,
+              model: result.agentInfo.model,
+              chrome: result.agentInfo.chrome !== false
+            })
+          }
+        } catch (error) {
+          log.error('Error ensuring base branch agent on project switch', error)
         }
-      } catch (error) {
-        log.error('Error ensuring base branch agent on project switch', error)
       }
       services!.fileWatcher.watchProject(current.path)
     }

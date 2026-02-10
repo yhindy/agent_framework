@@ -15,6 +15,7 @@ export interface ProjectState {
   name: string
   lastOpened: string
   needsInstall?: boolean
+  isGitRepo?: boolean
 }
 
 interface StoreSchema {
@@ -75,10 +76,19 @@ export class ProjectService {
   private validateActiveProjects() {
     const active = this.store.get('activeProjects', [])
     const validProjects = active.filter(p => existsSync(p.path))
-    
-    if (validProjects.length !== active.length) {
+
+    // Backfill isGitRepo for projects that don't have it set
+    let needsUpdate = validProjects.length !== active.length
+    for (const project of validProjects) {
+      if (project.isGitRepo === undefined) {
+        project.isGitRepo = existsSync(join(project.path, '.git'))
+        needsUpdate = true
+      }
+    }
+
+    if (needsUpdate) {
       this.store.set('activeProjects', validProjects)
-      
+
       // If current project was invalid, switch to another or clear
       const current = this.store.get('currentProjectPath')
       if (current && !validProjects.find(p => p.path === current)) {
@@ -117,11 +127,14 @@ export class ProjectService {
       log.info('Project format:', projectFormat)
       log.info('Project needs install:', needsInstall)
 
+      const isGitRepo = existsSync(join(projectPath, '.git'))
+
       const project: ProjectState = {
         path: projectPath,
         name: basename(projectPath),
         lastOpened: new Date().toISOString(),
-        needsInstall
+        needsInstall,
+        isGitRepo
       }
 
       // Add to active projects if not present
@@ -132,21 +145,11 @@ export class ProjectService {
         const newActive = [...active, project]
         this.store.set('activeProjects', newActive)
         log.info('Added project to active list')
-
-        // If this is the first project, make it current
-        if (active.length === 0) {
-          this.store.set('currentProjectPath', projectPath)
-          log.info('Set as first project (current)')
-        } else {
-          // Auto-switch to newly added project
-          this.store.set('currentProjectPath', projectPath)
-          log.info('Switched to newly added project')
-        }
-      } else {
-        // If already active, just switch to it
-        this.store.set('currentProjectPath', projectPath)
-        log.info('Project already active, switched to it')
       }
+
+      // Always switch to the selected/added project
+      this.store.set('currentProjectPath', projectPath)
+      log.info(isNewProject ? 'Switched to newly added project' : 'Switched to existing project')
 
       // Update recent projects
       const recent = this.store.get('recentProjects', [])
@@ -154,8 +157,8 @@ export class ProjectService {
       this.store.set('recentProjects', [project, ...filtered].slice(0, 10))
       log.info('Updated recent projects list')
 
-      // Ensure base branch agent exists (if not needing install)
-      if (this.agentService && !needsInstall) {
+      // Ensure base branch agent exists (if not needing install, and is a git repo)
+      if (this.agentService && !needsInstall && isGitRepo) {
         try {
           await this.agentService.ensureBaseBranchAgent(projectPath)
           log.info('Base branch agent ensured for project')
@@ -224,6 +227,7 @@ export class ProjectService {
    */
   async installFramework(projectPath: string): Promise<void> {
     log.info('Installing framework (minimal structure) for:', projectPath)
+    const isGitRepo = existsSync(join(projectPath, '.git'))
 
     try {
       // Get default config with auto-detected project info
@@ -238,12 +242,14 @@ export class ProjectService {
       this.minionsConfigService.initializeMinionsFolder(projectPath)
       log.info('Initialized .minions/ folder')
 
-      // Update .gitignore to include .minions/
-      this.minionsConfigService.updateGitignore(projectPath)
-      log.info('Updated .gitignore')
+      // Update .gitignore to include .minions/ (only for git repos)
+      if (isGitRepo) {
+        this.minionsConfigService.updateGitignore(projectPath)
+        log.info('Updated .gitignore')
+      }
 
-      // Ensure base branch agent exists after framework installation
-      if (this.agentService) {
+      // Ensure base branch agent exists after framework installation (only for git repos)
+      if (this.agentService && isGitRepo) {
         try {
           await this.agentService.ensureBaseBranchAgent(projectPath)
           log.info('Base branch agent ensured after installation')
@@ -269,6 +275,7 @@ export class ProjectService {
    */
   async installFrameworkLegacy(projectPath: string): Promise<void> {
     log.info('Installing framework (legacy) for:', projectPath)
+    const isGitRepo = existsSync(join(projectPath, '.git'))
 
     const minionsSrc = this.getMinionsSourcePath()
     const minionsDest = join(projectPath, 'minions')
@@ -352,8 +359,8 @@ export class ProjectService {
         log.info('Created .gitignore with agent files')
       }
 
-      // Ensure base branch agent exists after framework installation
-      if (this.agentService) {
+      // Ensure base branch agent exists after framework installation (only for git repos)
+      if (this.agentService && isGitRepo) {
         try {
           await this.agentService.ensureBaseBranchAgent(projectPath)
           log.info('Base branch agent ensured after installation')

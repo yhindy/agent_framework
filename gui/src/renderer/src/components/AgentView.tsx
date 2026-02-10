@@ -12,6 +12,7 @@ import { useLoadingSnackbar } from '../hooks/useLoadingSnackbar'
 import { useSessionInfo } from '../hooks/useSessionInfo'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
+import { isProjectGitRepo } from '../utils/projectUtils'
 import './AgentView.css'
 
 interface AgentViewProps {
@@ -21,7 +22,7 @@ interface AgentViewProps {
 interface Assignment {
   id: string
   agentId: string
-  branch: string
+  branch?: string
   feature: string
   status: string
   specFile: string
@@ -66,6 +67,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
   const [testEnvStatuses, setTestEnvStatuses] = useState<any[]>([])
   const [plainTerminals, setPlainTerminals] = useState<string[]>(['terminal-1'])
   const [terminalCounter, setTerminalCounter] = useState(1)
+  const [agentProjectPath, setAgentProjectPath] = useState<string | null>(null)
   const [teleportFailure, setTeleportFailure] = useState<{ reason: string; canRetry: boolean } | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
   const [isRefreshingPR, setIsRefreshingPR] = useState(false)
@@ -195,13 +197,16 @@ function AgentView({ activeProjects }: AgentViewProps) {
     let agentData: AgentSession | null = null
     let assignmentData: Assignment | null = null
 
+    let foundProjectPath: string | null = null
+
     for (const project of activeProjects) {
       try {
         const agents = await window.electronAPI.listAgentsForProject(project.path)
         const found = agents.find((a: AgentSession) => a.id === agentId)
         if (found) {
           agentData = found
-          
+          foundProjectPath = project.path
+
           // Also load assignment from this project
           const assignments = await window.electronAPI.getAssignmentsForProject(project.path)
           assignmentData = assignments.assignments.find((a: Assignment) => a.agentId === agentId) || null
@@ -214,6 +219,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
     setAgent(agentData)
     setAssignment(assignmentData)
+    setAgentProjectPath(foundProjectPath)
 
     // Auto-detect PR if assignment exists but no prUrl
     if (assignmentData && !assignmentData.prUrl && !assignmentData.isBaseBranchAgent) {
@@ -426,6 +432,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
 
   const isRunning = agent.terminalPid !== null
 
+  // Determine if this agent's project is a git repo
+  const isGitRepo = isProjectGitRepo(activeProjects, agentProjectPath)
+
   // Build badges array for the header - consistent across Minion and Super Minion
   const headerBadges: HeaderBadge[] = []
   if (assignment) {
@@ -447,45 +456,47 @@ function AgentView({ activeProjects }: AgentViewProps) {
   // Build header actions - consistent order: PR Status/Make PR, Refresh, Cursor, Cleanup
   const headerActions = (
     <>
-      {/* PR Status Badge or Make PR Button */}
-      {assignment?.prStatus && assignment.prUrl ? (
-        <div className="pr-actions-group">
-          <button
-            className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
-            onClick={() => window.open(assignment.prUrl, '_blank')}
-            title="Open PR on GitHub"
-          >
-            PR: {assignment.prStatus}
-            <span className="pr-open-icon">↗</span>
-          </button>
-          {/* Separate refresh button with better UX */}
-          {assignment.status === 'pr_open' && (
+      {/* PR Status Badge or Make PR Button - only for git repos */}
+      {isGitRepo && (
+        assignment?.prStatus && assignment.prUrl ? (
+          <div className="pr-actions-group">
             <button
-              className={`compact-button pr-refresh-standalone ${isRefreshingPR ? 'refreshing' : ''} ${refreshCooldown ? 'cooldown' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleRefreshPR()
-              }}
-              disabled={isRefreshingPR || refreshCooldown}
-              title={refreshCooldown ? 'Refresh available in a moment...' : 'Refresh PR status'}
+              className={`pr-status-badge pr-status-${assignment.prStatus.toLowerCase()}`}
+              onClick={() => window.open(assignment.prUrl, '_blank')}
+              title="Open PR on GitHub"
             >
-              {isRefreshingPR ? (
-                <span className="refresh-spinner">↻</span>
-              ) : (
-                <RefreshIcon size="sm" />
-              )}
+              PR: {assignment.prStatus}
+              <span className="pr-open-icon">↗</span>
             </button>
-          )}
-        </div>
-      ) : assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' ? (
-        <button
-          onClick={handleCreatePRClick}
-          className="compact-button success"
-          disabled={isCreatingPR}
-        >
-          {isCreatingPR ? 'Creating...' : 'Make PR'}
-        </button>
-      ) : null}
+            {/* Separate refresh button with better UX */}
+            {assignment.status === 'pr_open' && (
+              <button
+                className={`compact-button pr-refresh-standalone ${isRefreshingPR ? 'refreshing' : ''} ${refreshCooldown ? 'cooldown' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleRefreshPR()
+                }}
+                disabled={isRefreshingPR || refreshCooldown}
+                title={refreshCooldown ? 'Refresh available in a moment...' : 'Refresh PR status'}
+              >
+                {isRefreshingPR ? (
+                  <span className="refresh-spinner">↻</span>
+                ) : (
+                  <RefreshIcon size="sm" />
+                )}
+              </button>
+            )}
+          </div>
+        ) : assignment && !assignment.isBaseBranchAgent && assignment.status !== 'pr_open' && assignment.status !== 'merged' && assignment.status !== 'closed' ? (
+          <button
+            onClick={handleCreatePRClick}
+            className="compact-button success"
+            disabled={isCreatingPR}
+          >
+            {isCreatingPR ? 'Creating...' : 'Make PR'}
+          </button>
+        ) : null
+      )}
 
       {/* Open Editor Button */}
       <button onClick={handleOpenEditor} className="compact-button">
@@ -506,7 +517,7 @@ function AgentView({ activeProjects }: AgentViewProps) {
     <div className="agent-view" data-testid="agent-view">
       <AgentHeader
         icon={<BotIcon size="md" />}
-        title={extractBranchName(assignment?.branch) || agentId || 'Unknown'}
+        title={extractBranchName(assignment?.branch) || assignment?.feature || agentId || 'Unknown'}
         typeLabel="Minion"
         agentId={agentId || ''}
         badges={headerBadges}
@@ -681,7 +692,9 @@ function AgentView({ activeProjects }: AgentViewProps) {
             </p>
             <div className="merge-info">
               <div><strong>Agent:</strong> {assignment.agentId}</div>
-              <div><strong>Branch:</strong> {assignment.branch}</div>
+              {assignment.branch && (
+                <div><strong>Branch:</strong> {assignment.branch}</div>
+              )}
               <div><strong>Feature:</strong> {assignment.feature}</div>
             </div>
             <div className="form-group checkbox-group" style={{ marginTop: '16px' }}>

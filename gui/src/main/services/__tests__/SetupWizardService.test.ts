@@ -25,6 +25,7 @@ const createMockAgentService = (): AgentService => ({
   teardownAgent: vi.fn(),
   getProjectName: vi.fn().mockReturnValue('test-project'),
   isNewFormatProject: vi.fn().mockReturnValue(true),
+  isGitRepo: vi.fn().mockReturnValue(true),
   ensureBaseBranchAgent: vi.fn().mockResolvedValue(undefined),
 } as unknown as AgentService)
 

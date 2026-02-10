@@ -3,8 +3,28 @@ import { HandoffApiService, HandoffApiRequest } from '../HandoffApiService'
 import type { AgentService } from '../AgentService'
 import type { TerminalService } from '../TerminalService'
 import type { ProjectService } from '../ProjectService'
+import type { WorkflowService } from '../WorkflowService'
 import type { HandoffResult, AgentInfo } from '../types/ProjectConfig'
 import * as http from 'http'
+
+// Controllable mock for existsSync - defaults to true for backward compatibility
+let mockExistsSyncFn: ((path: string) => boolean) | null = null
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>()
+  return {
+    ...actual,
+    existsSync: (path: string) => {
+      if (mockExistsSyncFn) {
+        return mockExistsSyncFn(path)
+      }
+      return true
+    },
+    mkdirSync: actual.mkdirSync,
+    writeFileSync: actual.writeFileSync,
+    unlinkSync: actual.unlinkSync
+  }
+})
 
 // Mock the logger
 vi.mock('../logger', () => ({
@@ -89,6 +109,7 @@ describe('HandoffApiService', () => {
   afterEach(async () => {
     await service.stop()
     vi.clearAllMocks()
+    mockExistsSyncFn = null
   })
 
   describe('validateRequest', () => {
@@ -675,6 +696,123 @@ describe('HandoffApiService', () => {
         false,
         true
       )
+    })
+  })
+
+  describe('non-git project gating', () => {
+    beforeEach(() => {
+      return new Promise<void>((resolve) => {
+        service.start()
+        setTimeout(resolve, 100)
+      })
+    })
+
+    const makeRequest = (
+      method: string,
+      path: string,
+      body?: object
+    ): Promise<{ statusCode: number; body: any }> => {
+      return new Promise((resolve, reject) => {
+        const options = {
+          hostname: '127.0.0.1',
+          port: TEST_PORT,
+          path,
+          method,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+
+        const req = http.request(options, (res) => {
+          let data = ''
+          res.on('data', (chunk) => (data += chunk))
+          res.on('end', () => {
+            try {
+              resolve({
+                statusCode: res.statusCode || 500,
+                body: data ? JSON.parse(data) : null
+              })
+            } catch {
+              resolve({
+                statusCode: res.statusCode || 500,
+                body: data
+              })
+            }
+          })
+        })
+
+        req.on('error', reject)
+
+        if (body) {
+          req.write(JSON.stringify(body))
+        }
+
+        req.end()
+      })
+    }
+
+    it('should return 400 for handoff on non-git project', async () => {
+      // Make existsSync return false for .git check
+      mockExistsSyncFn = (path: string) => {
+        if (path.endsWith('.git')) return false
+        return true
+      }
+
+      const request: HandoffApiRequest = {
+        sourceAgentId: 'test-123',
+        plan: 'Implement a feature',
+        branchMode: 'inherit'
+      }
+
+      const response = await makeRequest('POST', '/api/handoff', request)
+
+      expect(response.statusCode).toBe(400)
+      expect(response.body.success).toBe(false)
+      expect(response.body.error).toContain('git repository')
+    })
+
+    it('should return 400 for spawn-super on non-git project', async () => {
+      // Set up workflow service mock
+      const mockWorkflowService = {
+        detectWorkflowFromPlan: vi.fn().mockReturnValue({ workflowId: 'default', confidence: 'medium' }),
+        getWorkflow: vi.fn().mockReturnValue({ id: 'default', name: 'Default' })
+      }
+      service.setWorkflowService(mockWorkflowService as unknown as WorkflowService)
+
+      // Make existsSync return false for .git check
+      mockExistsSyncFn = (path: string) => {
+        if (path.endsWith('.git')) return false
+        return true
+      }
+
+      const request = {
+        sourceAgentId: 'test-123',
+        spawns: [
+          { plan: 'Fix the bug' }
+        ]
+      }
+
+      const response = await makeRequest('POST', '/api/spawn-super', request)
+
+      expect(response.statusCode).toBe(400)
+      expect(response.body.success).toBe(false)
+      expect(response.body.error).toContain('git repository')
+    })
+
+    it('should allow handoff on git project', async () => {
+      // Make existsSync return true for .git check (default behavior)
+      mockExistsSyncFn = null
+
+      const request: HandoffApiRequest = {
+        sourceAgentId: 'test-123',
+        plan: 'Implement the feature',
+        branchMode: 'inherit'
+      }
+
+      const response = await makeRequest('POST', '/api/handoff', request)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body.success).toBe(true)
     })
   })
 })

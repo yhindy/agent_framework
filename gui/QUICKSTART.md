@@ -38,7 +38,7 @@ The app window will open automatically.
 ## Step 4: Select Your Project
 
 1. Click "Select Project Folder"
-2. Navigate to your project root (the one with `minions/`)
+2. Navigate to your project root (any folder -- git repository or plain directory)
 3. Click "Select"
 
 ## Step 5: Create Your First Mission

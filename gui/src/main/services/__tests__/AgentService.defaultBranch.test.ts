@@ -56,7 +56,10 @@ describe('AgentService - Default Branch Detection', () => {
 
   describe('getDefaultBranch via ensureBaseBranchAgent', () => {
     it('should detect "master" as default branch when no config exists and gh reports master', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false)
+      vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (typeof path === 'string' && path.endsWith('.git')) return true
+        return false
+      })
 
       vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
         throw new Error(`File not found: ${path}`)
@@ -87,7 +90,10 @@ describe('AgentService - Default Branch Detection', () => {
     })
 
     it('should detect "master" via git branch fallback when no config and gh CLI fails', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false)
+      vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (typeof path === 'string' && path.endsWith('.git')) return true
+        return false
+      })
 
       vi.mocked(fs.readFileSync).mockImplementation((path: any) => {
         throw new Error(`File not found: ${path}`)
@@ -144,6 +150,7 @@ describe('AgentService - Default Branch Detection', () => {
 
       // .minions-base-info exists with stale "master" branch
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (typeof path === 'string' && path.endsWith('.git')) return true
         if (String(path).endsWith('.minions-base-info')) return true
         return false
       })
@@ -208,6 +215,7 @@ describe('AgentService - Default Branch Detection', () => {
       }
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+        if (typeof path === 'string' && path.endsWith('.git')) return true
         if (String(path).endsWith('.minions-base-info')) return true
         return false
       })

@@ -173,6 +173,8 @@ test('example', async ({ testProject }) => {
 })
 ```
 
+**Note:** For testing non-git project behavior, create a temporary directory without git initialization and use it as the project path.
+
 ## Common Patterns
 
 ### Testing IPC with Error Handling

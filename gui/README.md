@@ -78,7 +78,7 @@ gui/
 
 ### 1. Select a Project
 
-When you first open the app, you'll be prompted to select a project folder. The project must be a git repository. The framework supports two formats:
+When you first open the app, you'll be prompted to select a project folder. The project can be a git repository or any directory. Git projects get full feature support (worktree isolation, branches, PRs); non-git projects support agent creation and management without git operations. The framework supports two config formats:
 
 **New Format (v2.0)**:
 - `minions.json` at project root
@@ -106,7 +106,7 @@ Click "New Assignment" to:
 
 The branch name is automatically generated from the agent ID and feature description (e.g., `feature/agent-1/user-authentication-system`).
 
-This will also run `setup.sh` to create the agent worktree.
+For git projects, this also runs `setup.sh` to create the agent worktree. For non-git projects, the agent works directly in the project directory.
 
 ### 4. Work with Agents
 

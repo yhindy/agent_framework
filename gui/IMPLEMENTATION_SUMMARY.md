@@ -81,7 +81,7 @@ gui/
 
 ### 2. Main Process Services ✅
 - **ProjectService**: Manages project selection and recent projects
-- **AgentService**: Discovers agents via git worktrees, manages missions, archiving
+- **AgentService**: Discovers agents via git worktrees (git projects) or direct directory (non-git projects), manages missions, archiving
 - **TerminalService**: Spawns node-pty sessions, tmux integration, signal detection
 - **ClaudeSessionInfoService**: Parses Claude JSONL session files
 - **MinionsConfigService**: Read/write minions.json, automatic format migration
