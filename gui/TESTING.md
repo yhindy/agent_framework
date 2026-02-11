@@ -71,7 +71,7 @@ Manual testing is useful for exploratory testing and UX verification.
 
 3. **Expected Result**:
    - App loads the project successfully
-   - If project doesn't have `minions.json`, setup wizard is offered
+   - If project doesn't have a `minions/` directory, setup wizard is offered
    - Project name appears in sidebar
 
 4. Close and reopen the app.
@@ -215,9 +215,7 @@ Manual testing is useful for exploratory testing and UX verification.
 
 1. Keep the GUI open with a project loaded.
 
-2. In a terminal, edit agent state files:
-   - For new format: Edit `.minions/agents/{id}.json`
-   - For legacy format: Edit `.agent-info` file
+2. In a terminal, edit agent state files (e.g., `.agent-info`)
 
 3. **Expected Result**:
    - Sidebar updates automatically within 1-2 seconds
@@ -316,8 +314,7 @@ Manual testing is useful for exploratory testing and UX verification.
 
 ### "Agent not found" error
 - Run `setup.sh` to create the worktree first
-- For new format: Check that `.minions/agents/{id}.json` exists
-- For legacy format: Check that `.agent-info` file exists in worktree
+- Check that `.agent-info` file exists in the worktree
 
 ### Terminal not showing output
 - Verify the tool (`claude`, `cursor`, `codex`) is installed
@@ -331,8 +328,7 @@ Manual testing is useful for exploratory testing and UX verification.
 
 ### File watcher not updating
 - Check file permissions on project directory
-- For new format: Try `touch .minions/agents/{id}.json`
-- For legacy format: Try `touch minions/config.json`
+- Try `touch minions/config.json` to trigger a refresh
 
 ### Tmux issues
 - Verify tmux is installed: `which tmux`

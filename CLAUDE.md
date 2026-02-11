@@ -100,12 +100,13 @@ agent_framework/
 ### User Project Structure
 ```
 your-project/
-├── minions.json              # Config file (version controlled)
-├── .minions/                 # Runtime state (gitignored)
-│   ├── agents/               # Per-agent state files
-│   │   └── {agent-id}.json   # Individual agent state
-│   └── archive/              # Archived agent metadata
-└── CLAUDE.md                 # Optional project-specific instructions
+├── minions/                  # Framework folder
+│   ├── bin/                 # Management scripts
+│   ├── rules/               # Agent behavior rules
+│   ├── templates/           # Spec templates
+│   └── config.json          # Project configuration
+├── .agent-info              # Runtime state (gitignored)
+└── CLAUDE.md                # Optional project-specific instructions
 ```
 
 ## Development Commands
@@ -141,7 +142,7 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 | `ProjectService` | Multi-project workspace management |
 | `ClaudeSessionInfoService` | Parse Claude JSONL for state |
 | `ClaudeConfigService` | Import Claude Code settings and plugins |
-| `MinionsConfigService` | Read/write minions.json config |
+| `MinionsConfigService` | Read/write minions config |
 | `SetupWizardService` | One-click project setup |
 | `HandoffApiService` | HTTP API for agent handoff (port 19234) |
 | `TeleportService` | Teleport session parsing |
@@ -205,7 +206,7 @@ Main Process (Node.js)
     ├── ClaudeConfigService # Import plugins from ~/.claude/
     ├── PRPollingService    # GitHub PR status polling
     ├── NotificationService # System notifications
-    ├── MinionsConfigService  # Read/write minions.json config
+    ├── MinionsConfigService  # Read/write minions config
     ├── SetupWizardService    # One-click setup wizard agent
     └── HandoffApiService     # HTTP API for /handoff and /spawn-super (port 19234)
          │
@@ -237,9 +238,8 @@ The framework supports two configuration formats:
 - `defaultBaseBranch` is optional in `MinionsConfig.project` (omitted for non-git projects)
 
 **SetupWizardService** manages the one-click setup experience:
-- Detects if a project needs setup or migration
+- Detects if a project needs setup
 - Spawns a Claude agent to analyze the project and generate configuration
-- Parses wizard output to create `minions.json`
 - Optionally generates a project-specific CLAUDE.md
 
 ### Agent Lifecycle

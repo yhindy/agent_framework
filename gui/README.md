@@ -1,77 +1,27 @@
-# Minion Orchestrator GUI 🍌
+# Minion Orchestrator GUI
 
-A desktop application for managing and orchestrating AI coding minions in your project.
+See the main [README.md](../README.md) for full documentation, including GUI features, keyboard shortcuts, project structure, and troubleshooting.
 
-## Features
-
-- **Project Management**: Select and manage multiple projects with minion frameworks
-- **Missions Dashboard**: Visual kanban-style view of all minion missions
-- **Live Terminal Integration**: Interactive terminal sessions for Claude and Cursor CLI minions
-- **Signal Detection**: Minions can send special signals (PLAN_READY, DEV_COMPLETED, etc.) to update the UI
-- **iMessage-style Sidebar**: Quick navigation between minions with unread indicators (click to mark as read)
-- **Multi-tool Support**: Works with Claude, Cursor IDE, and Cursor CLI
-
-## Prerequisites
-
-- Node.js 20.x or later
-- npm or yarn
-
-## Installation
+## Development
 
 ```bash
 cd gui
 npm install
-```
-
-## Development
-
-Run the app in development mode:
-
-```bash
 npm run dev
 ```
 
-This will start the Electron app with hot-reloading enabled.
-
 ## Building
-
-Build the app for production:
 
 ```bash
 npm run build
 ```
 
-## Project Structure
+## Testing
 
-```
-gui/
-├── src/
-│   ├── main/              # Electron main process
-│   │   ├── index.ts       # Main entry point, IPC handlers
-│   │   └── services/      # Backend services (16 total)
-│   │       ├── AgentService.ts
-│   │       ├── TerminalService.ts
-│   │       ├── ProjectService.ts
-│   │       ├── ClaudeSessionInfoService.ts
-│   │       ├── MinionsConfigService.ts
-│   │       ├── SetupWizardService.ts
-│   │       ├── NotificationService.ts
-│   │       ├── PRPollingService.ts
-│   │       └── ...
-│   ├── preload/           # Preload scripts (IPC bridge)
-│   │   └── index.ts
-│   └── renderer/          # React frontend
-│       ├── index.html
-│       └── src/
-│           ├── App.tsx
-│           ├── store/     # Zustand state management
-│           └── components/ # React components (23+)
-├── e2e/                   # E2E tests (Playwright)
-├── vitest.config.ts       # Unit test configuration
-├── playwright.config.ts   # E2E test configuration
-├── electron.vite.config.ts
-├── package.json
-└── README.md
+```bash
+npm test                    # Unit tests
+npm run test:e2e            # E2E tests
+npm run test:e2e:headed     # E2E with visible browser
 ```
 
 ## Usage
@@ -157,57 +107,26 @@ State includes:
 - **Cmd/Ctrl + 1-5**: Switch between agents
 - **Cmd/Ctrl + H**: Go to home dashboard
 
+See [TESTING.md](TESTING.md) for comprehensive test scenarios.
+
 ## Troubleshooting
 
 ### "Cannot find module pty.node" error
 
-This means native modules need to be rebuilt for Electron:
+Rebuild native modules for Electron:
 
 ```bash
-cd gui
-npm install --save-dev @electron/rebuild
-npx @electron/rebuild
+npm run rebuild
 npm run dev
-```
-
-### "require() of ES Module" error
-
-If you see ESM import errors, make sure you have the CommonJS-compatible dependencies:
-- `strip-ansi` should be v6.x (not v7+)
-
-### Terminal not showing output
-
-Make sure:
-1. The agent worktree exists
-2. The tool (claude/cursor) is installed and in PATH
-3. Check the main process logs in the Electron developer console
-
-### Agents not loading
-
-1. For new format: Verify `minions.json` exists at project root
-2. For legacy format: Verify `minions/config.json` exists
-3. Check the JSON is valid
-4. Try reloading the project
-
-### Agent worktree not found
-
-Run the setup script manually:
-```bash
-./minions/bin/setup.sh agent-1 feature/agent-1/my-feature
 ```
 
 ### Clean reinstall
 
-If all else fails:
 ```bash
-cd gui
 rm -rf node_modules package-lock.json
 npm install
-npx @electron/rebuild
+npm run rebuild
 npm run dev
 ```
 
-## License
-
-MIT
-
+For more troubleshooting, see [TROUBLESHOOTING.md](../TROUBLESHOOTING.md).
