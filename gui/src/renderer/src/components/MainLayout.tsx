@@ -183,6 +183,18 @@ function MainLayout({ activeProjects, onProjectRemove, onProjectAdd, onRefresh }
     return undefined
   }, [location.state, navigate])
 
+  // Listen for auto-created non-git agents and navigate to them
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onNonGitAutoAgent((agentId: string) => {
+      console.log('[MainLayout] Auto-created non-git agent, navigating to:', agentId)
+      // Small delay to let the agent list populate
+      setTimeout(() => {
+        navigate(`/workspace/agent/${agentId}`, { replace: true })
+      }, 500)
+    })
+    return () => unsubscribe()
+  }, [navigate])
+
   const handleNavigate = (path: string) => {
     navigate(path)
   }

@@ -516,6 +516,54 @@ function setupIPC(): void {
     }
   })
 
+  // Helper: Auto-create a Claude YOLO agent for non-git projects with zero agents.
+  // This provides an immediate terminal experience when a non-git folder is added.
+  const autoCreateNonGitAgent = async (projectPath: string, project: { isGitRepo?: boolean; needsInstall?: boolean; name: string }) => {
+    // Only for non-git projects that don't need install
+    if (project.isGitRepo || project.needsInstall) return
+
+    try {
+      const agents = await services!.agent.listAgents(projectPath)
+      if (agents.length > 0) {
+        log.debug('[autoCreateNonGitAgent] Project already has agents, skipping')
+        return
+      }
+
+      log.info('[autoCreateNonGitAgent] Creating Claude YOLO agent for non-git project:', projectPath)
+      const result = await services!.agent.createAssignment(projectPath, {
+        feature: project.name,
+        tool: 'claude',
+        mode: 'dev',
+        yolo: true,
+        chrome: true,
+        status: 'active'
+      })
+
+      log.info('[autoCreateNonGitAgent] Agent created:', result.agentId)
+
+      // Start the agent terminal (no prompt -- user will type in the terminal)
+      scheduleAgentAutoStart({
+        projectPath,
+        agentId: result.agentId,
+        tool: 'claude',
+        mode: 'dev',
+        yolo: true,
+        chrome: true,
+        delayMs: 500
+      })
+
+      // Notify renderer to navigate to the new agent
+      setTimeout(() => {
+        mainWindow?.webContents.send('agents:updated')
+        mainWindow?.webContents.send('assignments:updated')
+        mainWindow?.webContents.send('agents:nonGitAutoCreated', result.agentId)
+      }, 1000)
+    } catch (error) {
+      log.error('[autoCreateNonGitAgent] Failed to auto-create agent:', error)
+      // Non-fatal: user can still create agents manually
+    }
+  }
+
   // Project handlers
   ipcMain.handle('project:select', async (_event, projectPath: string) => {
     try {
@@ -528,6 +576,10 @@ function setupIPC(): void {
         services!.fileWatcher.watchProject(projectPath)
         log.debug('[IPC] Started watching project:', projectPath)
       }
+
+      // Auto-create Claude YOLO agent for non-git projects with no agents
+      await autoCreateNonGitAgent(projectPath, project)
+
       return project
     } catch (error: any) {
       log.error('[IPC] Error in project:select:', error.message)
@@ -549,6 +601,10 @@ function setupIPC(): void {
           log.debug('[IPC] Started watching project:', projectPath)
         }
       }
+
+      // Auto-create Claude YOLO agent for non-git projects with no agents
+      await autoCreateNonGitAgent(projectPath, project)
+
       return project
     } catch (error: any) {
       log.error('[IPC] Error in project:add:', error.message)
@@ -588,6 +644,9 @@ function setupIPC(): void {
         } catch (error) {
           log.error('Error ensuring base branch agent on project switch', error)
         }
+      } else {
+        // Auto-create Claude YOLO agent for non-git projects with no agents on switch
+        await autoCreateNonGitAgent(current.path, current)
       }
       services!.fileWatcher.watchProject(current.path)
     }
