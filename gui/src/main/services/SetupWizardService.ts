@@ -163,7 +163,13 @@ export class SetupWizardService {
       return false
     }
 
-    // Fresh project - needs wizard
+    // Non-git projects don't need a wizard -- they'll be auto-setup
+    // when added via ProjectService.addProject()
+    if (!existsSync(join(projectPath, '.git'))) {
+      return false
+    }
+
+    // Fresh git project - needs wizard
     return true
   }
 

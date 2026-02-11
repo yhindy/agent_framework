@@ -77,12 +77,25 @@ export class ProjectService {
     const active = this.store.get('activeProjects', [])
     const validProjects = active.filter(p => existsSync(p.path))
 
-    // Backfill isGitRepo for projects that don't have it set
     let needsUpdate = validProjects.length !== active.length
     for (const project of validProjects) {
+      // Backfill isGitRepo for projects that don't have it set
       if (project.isGitRepo === undefined) {
         project.isGitRepo = existsSync(join(project.path, '.git'))
         needsUpdate = true
+      }
+
+      // Recheck needsInstall on startup: a project may have been configured
+      // since it was last stored (e.g., minions.json was created externally
+      // or via quickSetup). This prevents projects from being permanently
+      // stuck in needsInstall: true state.
+      if (project.needsInstall) {
+        const projectFormat = this.getProjectFormat(project.path)
+        if (projectFormat !== 'none') {
+          project.needsInstall = false
+          needsUpdate = true
+          log.info(`Project ${project.name} now has config (${projectFormat}), clearing needsInstall`)
+        }
       }
     }
 
@@ -122,12 +135,30 @@ export class ProjectService {
       // Check if project has the agent framework installed
       // New format: minions.json exists at project root
       // Legacy format: minions/config.json exists
-      const projectFormat = this.getProjectFormat(projectPath)
-      const needsInstall = projectFormat === 'none'
+      let projectFormat = this.getProjectFormat(projectPath)
+      let needsInstall = projectFormat === 'none'
       log.info('Project format:', projectFormat)
       log.info('Project needs install:', needsInstall)
 
       const isGitRepo = existsSync(join(projectPath, '.git'))
+
+      // Auto-setup non-git projects that need install.
+      // Non-git projects don't need a wizard (no git-specific config like branches).
+      // Create a minimal minions.json so agents can be created immediately.
+      if (needsInstall && !isGitRepo) {
+        log.info('Auto-setting up non-git project:', projectPath)
+        try {
+          const minimalConfig = this.minionsConfigService.getDefaultConfig(projectPath)
+          this.minionsConfigService.initializeMinionsFolder(projectPath)
+          this.minionsConfigService.writeConfig(projectPath, minimalConfig)
+          needsInstall = false
+          projectFormat = 'new'
+          log.info('Auto-setup complete for non-git project')
+        } catch (setupError: any) {
+          log.error('Failed to auto-setup non-git project:', setupError.message)
+          // Continue with needsInstall: true -- user can still manually set up
+        }
+      }
 
       const project: ProjectState = {
         path: projectPath,
@@ -137,14 +168,22 @@ export class ProjectService {
         isGitRepo
       }
 
-      // Add to active projects if not present
+      // Always update the stored project state to keep it in sync with
+      // the filesystem (e.g., minions.json may have been created since
+      // the project was last stored).
       const active = this.store.get('activeProjects', [])
-      const isNewProject = !active.find(p => p.path === projectPath)
+      const existingIndex = active.findIndex(p => p.path === projectPath)
+      const isNewProject = existingIndex === -1
 
       if (isNewProject) {
-        const newActive = [...active, project]
-        this.store.set('activeProjects', newActive)
+        this.store.set('activeProjects', [...active, project])
         log.info('Added project to active list')
+      } else {
+        // Update existing project state (needsInstall, isGitRepo, lastOpened, etc.)
+        const updated = [...active]
+        updated[existingIndex] = project
+        this.store.set('activeProjects', updated)
+        log.info('Updated existing project in active list')
       }
 
       // Always switch to the selected/added project
