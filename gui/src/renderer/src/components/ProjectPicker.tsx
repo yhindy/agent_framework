@@ -168,11 +168,7 @@ function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
       console.error('[ProjectPicker] Setup error:', err)
       // Show error in modal instead of closing it
       setSetupStep('error')
-      // Parse the error message for user-friendly display
-      let errorMessage = err.message || 'An unexpected error occurred'
-      if (errorMessage.includes('not a git repository')) {
-        errorMessage = 'This folder is not a git repository. Please initialize git first with "git init".'
-      }
+      const errorMessage = err.message || 'An unexpected error occurred'
       setSetupError(errorMessage)
     } finally {
       setIsSettingUp(false)
@@ -201,10 +197,7 @@ function ProjectPicker({ onProjectSelect }: ProjectPickerProps) {
     } catch (err: any) {
       console.error('[ProjectPicker] Skip setup error:', err)
       setSetupStep('error')
-      let errorMessage = err.message || 'An unexpected error occurred'
-      if (errorMessage.includes('not a git repository')) {
-        errorMessage = 'This folder is not a git repository. Please initialize git first with "git init".'
-      }
+      const errorMessage = err.message || 'An unexpected error occurred'
       setSetupError(errorMessage)
     } finally {
       setIsSettingUp(false)

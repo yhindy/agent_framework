@@ -13,6 +13,7 @@ import { usePRPolling } from '../hooks/usePRPolling'
 import { useSessionInfo } from '../hooks/useSessionInfo'
 import { debounce } from '../utils/debounce'
 import { extractBranchName } from '../utils/branchUtils'
+import { isProjectGitRepo } from '../utils/projectUtils'
 import './SuperAgentView.css'
 import { SuperAgentInfo } from '../types/agent'
 
@@ -20,7 +21,7 @@ interface SuperAgentViewProps {
   activeProjects: any[]
 }
 
-function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps) {
+function SuperAgentView({ activeProjects }: SuperAgentViewProps) {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<SuperAgentInfo | null>(null)
@@ -330,6 +331,9 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
   const taskCount = agent.taskInvocations?.length || 0
   const isRunning = agent.terminalPid !== null
 
+  // Determine if this agent's project is a git repo
+  const isGitRepo = isProjectGitRepo(activeProjects, agent.project)
+
   // Build badges array for the header - consistent with Minion view
   const headerBadges: HeaderBadge[] = [
     {
@@ -364,41 +368,43 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
         <span className="workflow-chip-name">{workflowName || 'Workflow'}</span>
       </button>
 
-      {/* PR Status Badge or Make PR Button - logic matches AgentView exactly */}
-      {agent?.prStatus && agent.prUrl ? (
-        <button
-          className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
-          onClick={() => window.open(agent.prUrl, '_blank')}
-          title="Open PR on GitHub"
-        >
-          PR: {agent.prStatus}
-          <span className="pr-open-icon">↗</span>
-          {agentStatus === 'pr_open' && (
-            <button
-              className="pr-refresh-btn"
-              onClick={async (e) => {
-                e.stopPropagation()
-                try {
-                  await window.electronAPI.checkPullRequestStatus(agent.agentId)
-                } catch (err: any) {
-                  console.error('Failed to refresh PR status:', err)
-                }
-              }}
-              title="Refresh PR status"
-            >
-              ↻
-            </button>
-          )}
-        </button>
-      ) : agentStatus !== 'pr_open' && agentStatus !== 'merged' && agentStatus !== 'closed' ? (
-        <button
-          onClick={handleCreatePRClick}
-          className="compact-button success"
-          disabled={isCreatingPR}
-        >
-          {isCreatingPR ? 'Creating...' : 'Make PR'}
-        </button>
-      ) : null}
+      {/* PR Status Badge or Make PR Button - only for git repos */}
+      {isGitRepo && (
+        agent?.prStatus && agent.prUrl ? (
+          <button
+            className={`pr-status-badge pr-status-${agent.prStatus.toLowerCase()}`}
+            onClick={() => window.open(agent.prUrl, '_blank')}
+            title="Open PR on GitHub"
+          >
+            PR: {agent.prStatus}
+            <span className="pr-open-icon">↗</span>
+            {agentStatus === 'pr_open' && (
+              <button
+                className="pr-refresh-btn"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  try {
+                    await window.electronAPI.checkPullRequestStatus(agent.agentId)
+                  } catch (err: any) {
+                    console.error('Failed to refresh PR status:', err)
+                  }
+                }}
+                title="Refresh PR status"
+              >
+                ↻
+              </button>
+            )}
+          </button>
+        ) : agentStatus !== 'pr_open' && agentStatus !== 'merged' && agentStatus !== 'closed' ? (
+          <button
+            onClick={handleCreatePRClick}
+            className="compact-button success"
+            disabled={isCreatingPR}
+          >
+            {isCreatingPR ? 'Creating...' : 'Make PR'}
+          </button>
+        ) : null
+      )}
 
       {/* Open Editor Button */}
       <button onClick={handleOpenEditor} className="compact-button">
@@ -417,7 +423,7 @@ function SuperAgentView({ activeProjects: _activeProjects }: SuperAgentViewProps
     <div className="super-agent-view">
       <AgentHeader
         icon={<CrownIcon size="md" />}
-        title={extractBranchName(agent.branch) || agent.agentId}
+        title={extractBranchName(agent.branch) || agent.feature || agent.agentId}
         typeLabel="Super Minion"
         agentId={agent.agentId}
         badges={headerBadges}

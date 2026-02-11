@@ -95,7 +95,7 @@ export interface UIState {
 export interface AgentInfo {
   id: string
   agentId: string
-  branch: string
+  branch?: string
   project: string
   feature: string
   status: 'pending' | 'active' | 'in_progress' | 'review' | 'completed' | 'pr_open' | 'merged' | 'closed' | 'blocked' | 'cancelled'
@@ -116,6 +116,7 @@ export interface AgentInfo {
   displayBranchName?: string  // Custom/detected branch name for display (e.g., from teleport metadata)
   handoffSource?: HandoffSource  // Set if this agent was created via handoff from another agent
   spawnSource?: SpawnSource  // Set if this agent was created via super minion spawn
+  workingDirectory?: string  // Working directory for non-git agents (no worktree)
 
   // Session persistence fields
   claudeSessionId?: string        // UUID of the Claude session for resume functionality
@@ -194,7 +195,7 @@ export interface ArchivedAgent {
   assignmentId: string
 
   // Task information
-  branch: string
+  branch?: string
   feature: string
   prompt?: string
 

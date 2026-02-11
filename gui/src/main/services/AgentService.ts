@@ -1,7 +1,7 @@
 import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync } from 'fs'
 import { app } from 'electron'
 import { homedir } from 'os'
 import { ProjectConfig, Assignment, AgentInfo, SuperAgentInfo, ChildPlan, UIState, ArchivedAgent, HandoffRequest, HandoffResult, HandoffSource, SpawnSource, SpawnResult } from './types/ProjectConfig'
@@ -64,6 +64,15 @@ export class AgentService {
 
   constructor() {
     this.sessions = new Map()
+  }
+
+  /**
+   * Check if the given project path is a git repository.
+   * @param projectPath - Path to the project root
+   * @returns true if a .git directory exists at the project root
+   */
+  isGitRepo(projectPath: string): boolean {
+    return existsSync(join(projectPath, '.git'))
   }
 
   setClaudeSessionInfoService(service: ClaudeSessionInfoService): void {
@@ -248,6 +257,11 @@ export class AgentService {
     const agents: AgentSession[] = []
 
     try {
+      // Non-git path: scan .minions/agents/*.json directly
+      if (!this.isGitRepo(projectPath)) {
+        return this.listAgentsNonGit(projectPath)
+      }
+
       // Get base agent if it exists (checks both new and legacy locations)
       const baseAgentInfo = this.readBaseAgentInfo(projectPath)
       if (baseAgentInfo && baseAgentInfo.isBaseBranchAgent) {
@@ -297,6 +311,66 @@ export class AgentService {
     }
 
     return agents
+  }
+
+  /**
+   * Read all AgentInfo objects from .minions/agents/*.json files for non-git projects.
+   * Shared by both listAgentsNonGit and getAssignmentsNonGit.
+   */
+  private readNonGitAgentInfoFiles(projectPath: string): AgentInfo[] {
+    const agentsDir = join(projectPath, '.minions', 'agents')
+
+    if (!existsSync(agentsDir)) {
+      return []
+    }
+
+    const agents: AgentInfo[] = []
+    const files = readdirSync(agentsDir).filter(f => f.endsWith('.json'))
+
+    for (const file of files) {
+      try {
+        const content = readFileSync(join(agentsDir, file), 'utf-8')
+        const agentInfo = JSON.parse(content) as AgentInfo
+
+        if (!agentInfo.agentId || agentInfo.agentId.trim() === '') {
+          log.warn(`Skipping agent with corrupted info in ${file}: missing agentId`)
+          continue
+        }
+
+        agents.push(agentInfo)
+      } catch (error) {
+        log.error(`Error reading agent info from ${file}`, error)
+      }
+    }
+
+    return agents
+  }
+
+  /**
+   * List agents for non-git projects by scanning .minions/agents/*.json files.
+   * All agents use the project path as their working directory.
+   */
+  private listAgentsNonGit(projectPath: string): AgentSession[] {
+    try {
+      return this.readNonGitAgentInfoFiles(projectPath).map(agentInfo => {
+        const worktreePath = agentInfo.workingDirectory || projectPath
+        const isBase = agentInfo.isBaseBranchAgent || false
+
+        let session = this.sessions.get(agentInfo.agentId)
+        if (!session) {
+          session = this.createSessionFromInfo(agentInfo, worktreePath, isBase)
+          this.sessions.set(agentInfo.agentId, session)
+        } else {
+          this.updateSessionFromInfo(session, agentInfo)
+          session.isBaseBranchAgent = isBase
+        }
+
+        return session
+      })
+    } catch (error) {
+      log.error('Error listing non-git agents', error)
+      return []
+    }
   }
 
   parseWorktrees(output: string, projectName: string): Array<{ path: string; branch: string }> {
@@ -431,7 +505,8 @@ export class AgentService {
    */
   writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
     // Base agents are handled separately via writeBaseAgentInfo
-    if (info.isBaseBranchAgent) {
+    // Exception: non-git base agents (with workingDirectory) use .minions/agents/ like regular non-git agents
+    if (info.isBaseBranchAgent && !info.workingDirectory) {
       // worktreePath for base agents is the project root
       this.writeBaseAgentInfo(worktreePath, info)
       return
@@ -677,6 +752,11 @@ export class AgentService {
   }
 
   async createAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<AgentInfo> {
+    // Non-git path: create agent without worktree
+    if (!this.isGitRepo(projectPath)) {
+      return this.createNonGitAssignment(projectPath, assignment)
+    }
+
     const config = this.getProjectConfig(projectPath)
     const projectName = config.project.name || projectPath.split('/').pop() || 'project'
 
@@ -745,7 +825,7 @@ export class AgentService {
     try {
       const { stdout, stderr } = await execFileAsync(
         setupScript,
-        [agentInfo.agentId, agentInfo.branch, '--config', configPath],
+        [agentInfo.agentId, agentInfo.branch!, '--config', configPath],
         { cwd: projectPath }
       )
       log.debug('Setup script output:', stdout)
@@ -761,6 +841,46 @@ export class AgentService {
       log.error('Failed to run setup.sh', error)
       throw error
     }
+
+    return agentInfo
+  }
+
+  /**
+   * Create an assignment for a non-git project.
+   * Does not create a worktree or branch -- agents work directly in the project directory.
+   */
+  private async createNonGitAssignment(projectPath: string, assignment: Partial<Assignment>): Promise<AgentInfo> {
+    const projectName = projectPath.split('/').pop() || 'project'
+    const hash = Math.random().toString(36).substring(2, 9)
+    const agentId = assignment.agentId || `${projectName}-${hash}`
+
+    const agentInfo: AgentInfo = {
+      id: assignment.id || `${agentId}-${Date.now()}`,
+      agentId: agentId,
+      project: projectName,
+      feature: assignment.feature || '',
+      status: (assignment.status as AgentInfo['status']) || 'active',
+      tool: assignment.tool || 'claude',
+      model: assignment.model,
+      mode: (assignment.mode as AgentInfo['mode']) || 'auto',
+      yolo: assignment.yolo,
+      chrome: assignment.chrome !== false,
+      prompt: assignment.prompt,
+      workingDirectory: projectPath,
+      isBaseBranchAgent: (assignment as any).isBaseBranchAgent || false,
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
+    }
+
+    // Ensure .minions/agents/ directory exists
+    const agentsDir = join(projectPath, '.minions', 'agents')
+    mkdirSync(agentsDir, { recursive: true })
+
+    // Write agent info to .minions/agents/{agentId}.json
+    const agentInfoPath = join(agentsDir, `${agentId}.json`)
+    writeFileSync(agentInfoPath, JSON.stringify(agentInfo, null, 2))
+
+    log.info(`Created non-git agent: ${agentId} in ${projectPath}`)
 
     return agentInfo
   }
@@ -925,7 +1045,7 @@ export class AgentService {
    * Provides 2-3 lines of context about the parent feature.
    */
   private async generateHandoffContext(sourceAgentInfo: AgentInfo, branchMode: 'inherit' | 'fresh', projectPath: string): Promise<string> {
-    const sourceBranch = sourceAgentInfo.branch
+    const sourceBranch = sourceAgentInfo.branch || 'unknown'
     const sourceFeature = this.truncateFeatureDescription(sourceAgentInfo)
 
     let modeDescription: string
@@ -978,6 +1098,14 @@ Parent agent was working on: ${sourceFeature}
    * @returns HandoffResult with the new agent or error information
    */
   async handoffAgent(projectPath: string, request: HandoffRequest): Promise<HandoffResult> {
+    // Handoff requires git (worktrees and branches)
+    if (!this.isGitRepo(projectPath)) {
+      return {
+        success: false,
+        error: 'Handoff is not supported for non-git projects. Handoff requires git worktrees and branches.'
+      }
+    }
+
     // Validate the request
     if (!this.isValidHandoffPayload(request)) {
       return {
@@ -1039,14 +1167,14 @@ Parent agent was working on: ${sourceFeature}
       // In 'inherit' mode, branch from the source agent's branch
       // In 'fresh' mode, branch from main/master
       const baseBranch = request.branchMode === 'inherit'
-        ? sourceAgentInfo.branch
+        ? (sourceAgentInfo.branch || await this.getDefaultBranch(projectPath, sourceSession.worktreePath))
         : await this.getDefaultBranch(projectPath, sourceSession.worktreePath)
 
       // Create handoff source metadata
       const handoffSource: HandoffSource = {
         agentId: request.sourceAgentId,
         branchMode: request.branchMode,
-        originalBranch: sourceAgentInfo.branch,
+        originalBranch: sourceAgentInfo.branch || '',
         handoffTimestamp: new Date().toISOString()
       }
 
@@ -1085,8 +1213,8 @@ Parent agent was working on: ${sourceFeature}
         // For inherit mode, pass the base branch as 3rd positional arg (before --config)
         // setup.sh signature: <agent-id> <branch-name> [base-branch] [--config path]
         const setupArgs = request.branchMode === 'inherit'
-          ? [newAgentInfo.agentId, newAgentInfo.branch, baseBranch, '--config', configPath]
-          : [newAgentInfo.agentId, newAgentInfo.branch, '--config', configPath]
+          ? [newAgentInfo.agentId, newAgentInfo.branch!, baseBranch, '--config', configPath]
+          : [newAgentInfo.agentId, newAgentInfo.branch!, '--config', configPath]
 
         const { stdout, stderr } = await execFileAsync(
           setupScript,
@@ -1146,6 +1274,13 @@ Parent agent was working on: ${sourceFeature}
     batchId: string,
     shortName?: string
   ): Promise<SpawnResult> {
+    if (!this.isGitRepo(projectPath)) {
+      return {
+        success: false,
+        error: 'Spawning super minions is not supported for non-git projects.'
+      }
+    }
+
     try {
       // Get project config
       const config = this.getProjectConfig(projectPath)
@@ -1203,7 +1338,7 @@ Parent agent was working on: ${sourceFeature}
         const configPath = this.getProjectConfigPath(projectPath)
 
         // For spawn, always branch from base (fresh mode)
-        const setupArgs = [agentInfo.agentId, agentInfo.branch, baseBranch, '--config', configPath]
+        const setupArgs = [agentInfo.agentId, agentInfo.branch!, baseBranch, '--config', configPath]
 
         log.info('Spawning super minion', {
           batchId,
@@ -1531,6 +1666,11 @@ Parent agent was working on: ${sourceFeature}
   }
 
   async getAssignments(projectPath: string): Promise<{ assignments: AgentInfo[] }> {
+    // Non-git path: scan .minions/agents/*.json files
+    if (!this.isGitRepo(projectPath)) {
+      return this.getAssignmentsNonGit(projectPath)
+    }
+
     const assignments: AgentInfo[] = []
 
     try {
@@ -1561,7 +1701,24 @@ Parent agent was working on: ${sourceFeature}
     return { assignments }
   }
 
+  /**
+   * Get assignments for non-git projects by scanning .minions/agents/*.json files.
+   */
+  private getAssignmentsNonGit(projectPath: string): { assignments: AgentInfo[] } {
+    try {
+      return { assignments: this.readNonGitAgentInfoFiles(projectPath) }
+    } catch (error) {
+      log.error('Error getting non-git assignments', error)
+      return { assignments: [] }
+    }
+  }
+
   async teardownAgent(projectPath: string, agentId: string, force: boolean = false): Promise<void> {
+    // Non-git path: clean up agent file without teardown.sh
+    if (!this.isGitRepo(projectPath)) {
+      return this.teardownNonGitAgent(projectPath, agentId)
+    }
+
     const teardownScript = join(this.getMinionsPath(), 'bin', 'teardown.sh')
     const configPath = this.getProjectConfigPath(projectPath)
 
@@ -1598,6 +1755,36 @@ Parent agent was working on: ${sourceFeature}
 
       throw new Error(`Failed to teardown agent: ${error.message}`)
     }
+  }
+
+  /**
+   * Teardown an agent in a non-git project.
+   * Archives the agent and removes the .minions/agents/{agentId}.json file.
+   */
+  private async teardownNonGitAgent(projectPath: string, agentId: string): Promise<void> {
+    // Archive agent metadata before teardown (fail gracefully)
+    try {
+      await this.archiveAgent(projectPath, agentId)
+    } catch (archiveError) {
+      log.warn(`Failed to archive non-git agent ${agentId}:`, archiveError)
+    }
+
+    // Remove the agent JSON file
+    const agentInfoPath = join(projectPath, '.minions', 'agents', `${agentId}.json`)
+    if (existsSync(agentInfoPath)) {
+      try {
+        unlinkSync(agentInfoPath)
+        log.info(`Removed agent file: ${agentInfoPath}`)
+      } catch (error: any) {
+        log.error(`Failed to remove agent file ${agentInfoPath}:`, error.message)
+      }
+    }
+
+    // Remove from sessions and project lookup cache
+    this.sessions.delete(agentId)
+    this.projectLookupCache.delete(agentId)
+
+    log.info(`Non-git agent ${agentId} torn down`)
   }
 
   async unassignAgent(projectPath: string, agentId: string): Promise<void> {
@@ -1667,6 +1854,10 @@ Parent agent was working on: ${sourceFeature}
     }
   }
   private async getDefaultBranch(projectPath: string, worktreePath: string): Promise<string> {
+    if (!this.isGitRepo(projectPath)) {
+      return ''
+    }
+
     const config = this.getProjectConfig(projectPath)
     if (config.project?.defaultBaseBranch) {
       log.debug(`Using default branch from config: ${config.project.defaultBaseBranch}`)
@@ -1708,6 +1899,10 @@ Parent agent was working on: ${sourceFeature}
   }
 
   async createPullRequest(projectPath: string, assignmentId: string, autoCommit: boolean = false): Promise<{ url: string }> {
+    if (!this.isGitRepo(projectPath)) {
+      throw new Error('Pull requests are not supported for non-git projects.')
+    }
+
     const { assignments } = await this.getAssignments(projectPath)
     const assignment = assignments.find(a => a.id === assignmentId)
 
@@ -1718,6 +1913,10 @@ Parent agent was working on: ${sourceFeature}
     // Allow PR creation from in_progress, review, or completed states
     if (['pending', 'blocked', 'closed'].includes(assignment.status)) {
       throw new Error(`Cannot create PR for assignment in '${assignment.status}' status`)
+    }
+
+    if (!assignment.branch) {
+      throw new Error('Cannot create PR: assignment has no branch')
     }
 
     // Calculate worktree path
@@ -1871,6 +2070,10 @@ Parent agent was working on: ${sourceFeature}
     prStatus?: string
     createdAt?: string
   } | null> {
+    if (!this.isGitRepo(projectPath)) {
+      return null
+    }
+
     // NOTE: Caching is now handled by PRPollingService
     // This method just performs the actual detection
 
@@ -2092,6 +2295,10 @@ Parent agent was working on: ${sourceFeature}
     assignmentId: string,
     options?: { silent?: boolean }
   ): Promise<{ status: string; mergedAt?: string; createdAt?: string; error?: string }> {
+    if (!this.isGitRepo(projectPath)) {
+      return { status: 'ERROR', error: 'PR status checks are not supported for non-git projects.' }
+    }
+
     const { assignments } = await this.getAssignments(projectPath)
     const assignment = assignments.find(a => a.id === assignmentId)
 
@@ -2161,6 +2368,21 @@ Parent agent was working on: ${sourceFeature}
   }
 
   async ensureBaseBranchAgent(projectPath: string): Promise<AgentInfo> {
+    // Base branch agents only make sense for git repos
+    if (!this.isGitRepo(projectPath)) {
+      return {
+        id: '',
+        agentId: '',
+        project: projectPath.split('/').pop() || 'project',
+        feature: '',
+        status: 'active',
+        tool: 'claude',
+        mode: 'dev',
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+      }
+    }
+
     const config = this.getProjectConfig(projectPath)
     const projectName = config.project?.name || projectPath.split('/').pop() || 'project'
     const baseBranch = await this.getDefaultBranch(projectPath, projectPath)
@@ -2213,6 +2435,11 @@ Parent agent was working on: ${sourceFeature}
   }
 
   getAgentPath(projectPath: string, agentInfo: AgentInfo): string {
+    // Non-git agents use workingDirectory directly
+    if (agentInfo.workingDirectory) {
+      return agentInfo.workingDirectory
+    }
+
     if (agentInfo.isBaseBranchAgent) {
       return projectPath
     }
@@ -2425,13 +2652,13 @@ Parent agent was working on: ${sourceFeature}
 
     // Generate new branch name with -restored suffix to avoid conflicts
     const timestamp = Date.now()
-    const originalBranch = archived.branch.replace(/^feature\//, '')
+    const originalBranch = archived.branch ? archived.branch.replace(/^feature\//, '') : archived.agentId
     const newBranch = `${originalBranch}-restored-${timestamp}`
 
     // Create new assignment with archived agent's configuration
     const assignment = await this.createAssignment(projectPath, {
       feature: archived.feature,
-      branch: newBranch,
+      branch: archived.branch ? newBranch : undefined,
       prompt: archived.prompt || `Restored from archive: ${archived.feature}`,
       tool: archived.tool,
       model: archived.model,

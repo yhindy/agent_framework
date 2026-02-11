@@ -552,7 +552,9 @@ describe('TerminalService Cloud Session ID Detection', () => {
       expect.any(String),
       expect.objectContaining({
         cloudSessionId: 'session_CloudSession123'
-      })
+      }),
+      'agent-1',
+      '/path/to/project'
     )
   })
 
@@ -985,7 +987,9 @@ describe('Teleport Session Retry Mechanism', () => {
       expect.objectContaining({
         resumeAttempts: 1,
         lastResumeAttempt: expect.any(String)
-      })
+      }),
+      undefined,
+      undefined
     )
   }, 10000)
 

@@ -162,12 +162,16 @@ export class MinionsConfigService {
     const defaultBranch = this.detectDefaultBranch(projectPath)
     const detected = this.detectProjectType(projectPath)
 
+    const project: import('./types/MinionsConfig').MinionsConfigProject = {
+      name: projectName,
+    }
+    if (defaultBranch !== undefined) {
+      project.defaultBaseBranch = defaultBranch
+    }
+
     const config: MinionsConfig = {
       version: '2.0',
-      project: {
-        name: projectName,
-        defaultBaseBranch: defaultBranch,
-      },
+      project,
       setup: {
         filesToCopy: [],
         postSetupCommands: [],
@@ -210,6 +214,11 @@ export class MinionsConfigService {
    * @param projectPath - Path to the project root
    */
   updateGitignore(projectPath: string): void {
+    // Skip for non-git projects
+    if (!existsSync(join(projectPath, '.git'))) {
+      return
+    }
+
     const gitignorePath = join(projectPath, '.gitignore')
     const minionsEntry = '.minions/'
     const sectionComment = '# Minions (AI Agent Framework)'
@@ -315,7 +324,12 @@ export class MinionsConfigService {
   /**
    * Detect the default git branch (main or master)
    */
-  private detectDefaultBranch(projectPath: string): string {
+  private detectDefaultBranch(projectPath: string): string | undefined {
+    // Non-git projects don't have a default branch
+    if (!existsSync(join(projectPath, '.git'))) {
+      return undefined
+    }
+
     try {
       const result = execSync('git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed "s@^refs/remotes/origin/@@"', {
         cwd: projectPath,

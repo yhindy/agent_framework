@@ -6,7 +6,8 @@ Welcome! This guide will help you set up and start using the Agent Framework to 
 
 The **Agent Framework** (aka Minion Framework) lets you:
 - Run multiple AI coding agents at the same time on different features
-- Keep agents isolated using git worktrees (no conflicts!)
+- Keep agents isolated using git worktrees (no conflicts!) for git projects
+- Work on any folder, including non-git directories
 - Manage everything through a friendly desktop GUI
 - Give agents specific missions and monitor their progress
 
@@ -20,7 +21,7 @@ Before you start, make sure you have:
 
 ### Required
 - **Node.js 20.x** - [Download from nodejs.org](https://nodejs.org)
-- **Git** - [Download from git-scm.com](https://git-scm.com) (or use your package manager)
+- **Git** - [Download from git-scm.com](https://git-scm.com) (required for worktree isolation; optional for non-git projects)
 - **Python 3** - Usually pre-installed on Mac/Linux. Windows users: [python.org](https://python.org)
 
 ### At Least One AI Agent Tool (Required)
@@ -114,11 +115,11 @@ The GUI will open in a new window. You should see:
 ## Step 3: Add Your First Project 📁
 
 1. **Click "Select Project Folder"** in the GUI
-2. **Navigate to a git repository** you want to work on
+2. **Navigate to any folder** you want to work on (git repository or plain directory)
 3. The framework will detect if it's already installed in that project
 4. If not installed, click **"Install Framework"** when prompted
 
-**Important:** The project MUST be a git repository. The framework uses git worktrees to isolate agent work.
+**Note:** Git repositories get full feature support (worktree isolation, branches, PRs, handoff). Non-git folders are also supported -- agents will work directly in the project directory.
 
 ### What Gets Installed?
 
@@ -144,7 +145,7 @@ your-project/
    - **👑 Super Mission** - For complex features that need multiple sub-agents
 
 3. **Fill in the form**:
-   - **Branch name**: Like `user-auth` (auto-prefixed with `feature/`)
+   - **Branch name** (git projects) or **Label** (non-git projects): Like `user-auth`
    - **Task description**: Tell the agent what to build
      ```
      Add a dark mode toggle to the settings page.
@@ -160,10 +161,12 @@ your-project/
 
 That's it! The agent is created with your task description embedded. No separate files to create.
 
-Behind the scenes, this:
+Behind the scenes, for git projects this:
 - Creates a git worktree at `../yourproject-agent-user-auth/`
 - Stores your task description with the agent
 - Opens a terminal ready for the AI tool
+
+For non-git projects, the agent state file is created in `.minions/agents/` and the agent works directly in the project directory.
 
 ---
 

@@ -25,6 +25,7 @@ const createMockAgentService = (): AgentService => ({
   teardownAgent: vi.fn(),
   getProjectName: vi.fn().mockReturnValue('test-project'),
   isNewFormatProject: vi.fn().mockReturnValue(true),
+  isGitRepo: vi.fn().mockReturnValue(true),
   ensureBaseBranchAgent: vi.fn().mockResolvedValue(undefined),
 } as unknown as AgentService)
 
@@ -74,11 +75,12 @@ describe('SetupWizardService', () => {
   })
 
   describe('needsWizard', () => {
-    it('should return true for fresh project with no config', () => {
+    it('should return true for fresh git project with no config', () => {
       vi.mocked(fs.existsSync).mockImplementation((path) => {
         if (typeof path === 'string') {
           if (path.includes('minions.json')) return false
           if (path.includes('minions/config.json')) return false
+          if (path.endsWith('.git')) return true // git repo
         }
         return false
       })
@@ -86,6 +88,21 @@ describe('SetupWizardService', () => {
       const result = service.needsWizard('/path/to/project')
 
       expect(result).toBe(true)
+    })
+
+    it('should return false for non-git project (auto-setup instead)', () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        if (typeof path === 'string') {
+          if (path.includes('minions.json')) return false
+          if (path.includes('minions/config.json')) return false
+          if (path.endsWith('.git')) return false // not a git repo
+        }
+        return false
+      })
+
+      const result = service.needsWizard('/path/to/project')
+
+      expect(result).toBe(false)
     })
 
     it('should return false when minions.json exists', () => {
@@ -113,6 +130,31 @@ describe('SetupWizardService', () => {
       const result = service.needsWizard('/path/to/project')
 
       expect(result).toBe(false)
+    })
+  })
+
+  describe('quickSetup', () => {
+    it('should create minimal config for non-git projects without calling ensureBaseBranchAgent', async () => {
+      vi.mocked(mockAgentService.isGitRepo as any).mockReturnValue(false)
+
+      await service.quickSetup('/path/to/project')
+
+      expect(mockAgentService.ensureBaseBranchAgent).not.toHaveBeenCalled()
+      expect(mockMinionsConfigService.getDefaultConfig).toHaveBeenCalledWith('/path/to/project')
+      expect(mockMinionsConfigService.initializeMinionsFolder).toHaveBeenCalledWith('/path/to/project')
+      expect(mockMinionsConfigService.writeConfig).toHaveBeenCalledWith('/path/to/project', expect.objectContaining({
+        version: '2.0'
+      }))
+      expect(mockMinionsConfigService.updateGitignore).toHaveBeenCalledWith('/path/to/project')
+    })
+
+    it('should call ensureBaseBranchAgent for git projects', async () => {
+      vi.mocked(mockAgentService.isGitRepo as any).mockReturnValue(true)
+
+      await service.quickSetup('/path/to/project')
+
+      expect(mockAgentService.ensureBaseBranchAgent).toHaveBeenCalledWith('/path/to/project')
+      expect(mockMinionsConfigService.writeConfig).toHaveBeenCalled()
     })
   })
 

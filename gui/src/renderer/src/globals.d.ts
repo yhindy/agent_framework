@@ -84,6 +84,7 @@ declare global {
       // Event listeners
       onAgentListUpdate: (callback: () => void) => () => void
       onAssignmentsUpdate: (callback: () => void) => () => void
+      onNonGitAutoAgent: (callback: (agentId: string) => void) => () => void
 
       // Agent State APIs
       getAgentState: (agentId: string) => Promise<'working' | 'waiting' | 'unknown'>

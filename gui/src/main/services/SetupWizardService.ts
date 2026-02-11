@@ -163,7 +163,13 @@ export class SetupWizardService {
       return false
     }
 
-    // Fresh project - needs wizard
+    // Non-git projects don't need a wizard -- they'll be auto-setup
+    // when added via ProjectService.addProject()
+    if (!existsSync(join(projectPath, '.git'))) {
+      return false
+    }
+
+    // Fresh git project - needs wizard
     return true
   }
 
@@ -181,17 +187,21 @@ export class SetupWizardService {
    * Quick setup for a project - creates minimal config without starting Claude.
    *
    * Use this when user wants to skip auto-setup and configure manually.
+   * Works for both git and non-git projects.
    *
    * @param projectPath - Path to the project root
-   * @throws Error if project is not a git repository
    */
   async quickSetup(projectPath: string): Promise<void> {
-    // Validate git repo first
-    try {
-      await this.agentService.ensureBaseBranchAgent(projectPath)
-    } catch (error: any) {
-      console.error('[SetupWizardService] Failed to validate project for quick setup:', error.message)
-      throw error
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+
+    // For git repos, ensure base branch agent exists
+    if (isGitRepo) {
+      try {
+        await this.agentService.ensureBaseBranchAgent(projectPath)
+      } catch (error: any) {
+        console.error('[SetupWizardService] Failed to validate project for quick setup:', error.message)
+        throw error
+      }
     }
 
     // Create minimal config
@@ -199,7 +209,7 @@ export class SetupWizardService {
     this.minionsConfigService.initializeMinionsFolder(projectPath)
     this.minionsConfigService.writeConfig(projectPath, minimalConfig)
     this.minionsConfigService.updateGitignore(projectPath)
-    console.log('[SetupWizardService] Created minimal config via quick setup')
+    console.log(`[SetupWizardService] Created minimal config via quick setup (isGitRepo: ${isGitRepo})`)
   }
 
   /**
@@ -219,17 +229,20 @@ export class SetupWizardService {
 
     // Generate session ID and agent ID
     const sessionId = `wizard-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-    // Use base agent pattern so it shows up in the base terminal
+    // Use base agent pattern so it shows up in the base terminal (only for git repos)
     const projectName = this.getProjectName(projectPath)
-    const agentId = `${projectName}-base`
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+    const agentId = isGitRepo ? `${projectName}-base` : `${projectName}-wizard-${Date.now()}`
 
-    // Validate git repo FIRST before creating any files
+    // For git repos, validate and ensure base branch agent FIRST before creating any files
     // This prevents leaving orphaned minions.json on failure
-    try {
-      await this.agentService.ensureBaseBranchAgent(projectPath)
-    } catch (error: any) {
-      console.error('[SetupWizardService] Failed to validate project:', error.message)
-      throw error
+    if (isGitRepo) {
+      try {
+        await this.agentService.ensureBaseBranchAgent(projectPath)
+      } catch (error: any) {
+        console.error('[SetupWizardService] Failed to validate project:', error.message)
+        throw error
+      }
     }
 
     // Create a minimal config so the project can be selected
@@ -375,12 +388,24 @@ export class SetupWizardService {
    */
   generateWizardPrompt(projectPath: string): string {
     const projectName = this.getProjectName(projectPath)
+    const isGitRepo = this.agentService.isGitRepo(projectPath)
+
+    const branchLine = isGitRepo ? `\n    "defaultBaseBranch": "main",` : ''
+    const branchTask = isGitRepo ? '   - Project name and default branch' : '   - Project name'
+    const copyTask = isGitRepo
+      ? '   - Files to copy to worktrees'
+      : '   - Files to copy for agent setup'
+    const copyQuestion = isGitRepo
+      ? '   - "Are there any environment files that should be copied to worktrees?"'
+      : '   - "Are there any environment files agents should know about?"'
+    const gitInfo = isGitRepo ? '- Project type: Git repository' : '- Project type: Non-git folder'
 
     return `You are the Minions Setup Wizard. Your job is to analyze this project and create a configuration file.
 
 ## Project Information
 - Project path: ${projectPath}
 - Project name: ${projectName}
+${gitInfo}
 
 ## Your Tasks
 
@@ -394,12 +419,12 @@ export class SetupWizardService {
    - "I see this is a [detected] project. Is that correct?"
    - "What command runs your tests?" (suggest detected command)
    - "What command builds the project?" (suggest detected command)
-   - "Are there any environment files that should be copied to worktrees?"
+${copyQuestion}
 
 3. GENERATE the minions.json configuration file with:
-   - Project name and default branch
+${branchTask}
    - Build, test, and lint commands
-   - Files to copy to worktrees
+${copyTask}
    - Post-setup commands if needed
 
 4. OFFER to create a CLAUDE.md file:
@@ -414,8 +439,7 @@ When you have gathered all information, output the configuration in this EXACT f
 {
   "version": "2.0",
   "project": {
-    "name": "${projectName}",
-    "defaultBaseBranch": "main",
+    "name": "${projectName}",${branchLine}
     "description": "Brief project description"
   },
   "setup": {

@@ -3,7 +3,7 @@
 [![CI](https://github.com/yhindy/agent_framework/workflows/CI/badge.svg)](https://github.com/yhindy/agent_framework/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yhindy/agent_framework/branch/main/graph/badge.svg)](https://codecov.io/gh/yhindy/agent_framework)
 
-A lightweight framework for running multiple AI coding minions in parallel on any codebase.
+A lightweight framework for running multiple AI coding agents in parallel on any folder -- git repositories or plain directories.
 
 ---
 
@@ -171,12 +171,14 @@ The GUI stores its state in:
 
 ## How It Works
 
-The framework uses **git worktrees** to give each minion an isolated copy of your codebase:
+**Git projects:** The framework uses **git worktrees** to give each minion an isolated copy of your codebase:
 
 - Each minion works in its own folder (`../yourproject-agent-1`, etc.)
 - Minions share git history but have independent working directories
 - No conflicts between minions working on different features
 - Easy cleanup when done
+
+**Non-git projects:** Agents work directly in the project directory. No worktree or branch is created. This mode is useful for projects that are not version-controlled or for quick ad-hoc agent tasks on any folder.
 
 ## Best Practices
 

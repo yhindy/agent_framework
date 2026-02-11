@@ -51,6 +51,7 @@ ensureAgentRunning: (agentId: string, projectPath?: string) => Promise<{ started
     checkDependencies: () => Promise<any>;
     onAgentListUpdate: (callback: () => void) => () => Electron.IpcRenderer;
     onAssignmentsUpdate: (callback: () => void) => () => Electron.IpcRenderer;
+    onNonGitAutoAgent: (callback: (agentId: string) => void) => () => Electron.IpcRenderer;
     getAgentState: (agentId: string) => Promise<any>;
     onAgentStateChanged: (callback: (agentId: string, state: "working" | "waiting" | "unknown") => void) => () => Electron.IpcRenderer;
     onAgentWaitingForInput: (callback: (agentId: string, promptText: string) => void) => () => Electron.IpcRenderer;

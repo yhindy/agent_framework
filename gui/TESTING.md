@@ -67,7 +67,7 @@ Manual testing is useful for exploratory testing and UX verification.
 
 1. You should see the Project Picker screen on first launch.
 
-2. Click "Select Project Folder" and navigate to a git repository.
+2. Click "Select Project Folder" and navigate to a project folder (git repository or any directory).
 
 3. **Expected Result**:
    - App loads the project successfully
@@ -111,8 +111,9 @@ Manual testing is useful for exploratory testing and UX verification.
 4. **Expected Result**:
    - Modal closes
    - New agent appears in sidebar
-   - Agent state updated
-   - Git worktree created
+   - `minions.json` file updated (if using new format)
+   - `.minions/agents/{id}.json` created (if using new format)
+   - Git worktree created (git projects only; non-git agents work in the project directory)
 
 **✅ Pass Criteria**: Agents display correctly, new agents can be created.
 
