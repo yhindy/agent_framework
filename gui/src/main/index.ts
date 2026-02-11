@@ -536,8 +536,9 @@ function setupIPC(): void {
         mode: 'dev',
         yolo: true,
         chrome: true,
-        status: 'active'
-      })
+        status: 'active',
+        isBaseBranchAgent: true
+      } as any)
 
       log.info('[autoCreateNonGitAgent] Agent created:', result.agentId)
 

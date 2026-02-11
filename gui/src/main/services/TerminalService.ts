@@ -596,14 +596,14 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
     return this.agentService.readAgentInfo(worktreePath)
   }
 
-  private async updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>): Promise<void> {
+  private async updateAgentInfo(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string, projectPath?: string): Promise<void> {
     if (!this.agentService) {
       log.warn('AgentService not set, cannot persist state')
       return
     }
 
     try {
-      this.agentService.updateAgentInfo(worktreePath, updates)
+      this.agentService.updateAgentInfo(worktreePath, updates, agentId, projectPath)
     } catch (error) {
       log.error('Failed to update agent info', error)
       throw error
@@ -672,9 +672,9 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
    * @param updates - Partial agent info updates
    * @param agentId - Optional agent ID for throttling (if not provided, broadcasts immediately)
    */
-  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string): Promise<void> {
+  private async updateAgentInfoAndNotify(worktreePath: string, updates: Partial<AgentInfo>, agentId?: string, projectPath?: string): Promise<void> {
     try {
-      await this.updateAgentInfo(worktreePath, updates)
+      await this.updateAgentInfo(worktreePath, updates, agentId, projectPath)
       if (agentId) {
         this.throttledBroadcastUpdate(agentId)
       } else {
@@ -827,7 +827,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
           attachToOrphanedTmux = true
           // Don't kill the session - attach to it so user can see what happened
           // Update agent state to reflect Claude is not running
-          await this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
+          await this.updateAgentInfo(worktreePath, { claudeSessionActive: false }, agentId, projectPath)
         }
       }
     } else {
@@ -1043,7 +1043,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
               const branchSuffix = detectedBranch.split('/').pop() || detectedBranch
               displayName = `${projectName}: ${branchSuffix}`
 
-              this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId)
+              this.updateAgentInfoAndNotify(worktreePath, { displayBranchName: detectedBranch }, agentId, projectPath)
             } catch (err) {
               // Silently ignore errors - branch detection is optional
             }
@@ -1071,7 +1071,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             claudeState: 'waiting',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: new Date().toISOString()
-          }, agentId)
+          }, agentId, projectPath)
         } else {
           log.debug(`${agentId} is working`)
           if (previousState === 'waiting') {
@@ -1083,7 +1083,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
             claudeState: 'working',
             claudeLastSeen: new Date().toISOString(),
             waitingSince: undefined
-          }, agentId)
+          }, agentId, projectPath)
         }
       }
 
@@ -1189,12 +1189,12 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
               body: `${displayName} is waiting for your input`,
               agentId
             })
-            this.updateAgentInfo(worktreePath, { isWaitingForInput: true })
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: true }, agentId, projectPath)
               .catch(err => log.error('Failed to update agent info', err))
           },
           onResumedWork: () => {
             this.safeSendIPC('agent:resumedWork', agentId)
-            this.updateAgentInfo(worktreePath, { isWaitingForInput: false })
+            this.updateAgentInfo(worktreePath, { isWaitingForInput: false }, agentId, projectPath)
               .catch(err => log.error('Failed to update agent info', err))
           }
         }
@@ -1283,7 +1283,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
         agentInfoUpdate.cloudSessionId = teleportSessionId
       }
 
-      await this.updateAgentInfo(worktreePath, agentInfoUpdate)
+      await this.updateAgentInfo(worktreePath, agentInfoUpdate, agentId, projectPath)
 
       // JSONL watcher for super minions
       if (agentInfo && isSuperMinion(agentInfo) && this.claudeSessionInfoService) {
@@ -1304,7 +1304,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       this.cleanupTerminalSession(agentId, session, tool, effectiveSessionId, false)
 
       if (tool === 'claude') {
-        this.updateAgentInfo(worktreePath, { claudeSessionActive: false })
+        this.updateAgentInfo(worktreePath, { claudeSessionActive: false }, agentId, projectPath)
           .catch(err => log.error('Failed to mark session inactive', err))
       }
 
@@ -1462,7 +1462,7 @@ Follow the detailed workflow phases defined in your system prompt. Use the Task 
       this.updateAgentInfo(session.worktreePath, {
         claudeSessionActive: false,
         claudeSessionId: undefined
-      }).catch(err => log.error('Failed to clear session', err))
+      }, agentId, session.projectPath).catch(err => log.error('Failed to clear session', err))
     }
 
     // Clean up all resources but preserve tmux session (killTmux=false).

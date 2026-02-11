@@ -362,13 +362,15 @@ export class AgentService {
     try {
       return this.readNonGitAgentInfoFiles(projectPath).map(agentInfo => {
         const worktreePath = agentInfo.workingDirectory || projectPath
+        const isBase = agentInfo.isBaseBranchAgent || false
 
         let session = this.sessions.get(agentInfo.agentId)
         if (!session) {
-          session = this.createSessionFromInfo(agentInfo, worktreePath, false)
+          session = this.createSessionFromInfo(agentInfo, worktreePath, isBase)
           this.sessions.set(agentInfo.agentId, session)
         } else {
           this.updateSessionFromInfo(session, agentInfo)
+          session.isBaseBranchAgent = isBase
         }
 
         return session
@@ -511,7 +513,8 @@ export class AgentService {
    */
   writeAgentInfo(worktreePath: string, info: AgentInfo, projectPath?: string): void {
     // Base agents are handled separately via writeBaseAgentInfo
-    if (info.isBaseBranchAgent) {
+    // Exception: non-git base agents (with workingDirectory) use .minions/agents/ like regular non-git agents
+    if (info.isBaseBranchAgent && !info.workingDirectory) {
       const baseInfoPath = join(worktreePath, '.minions-base-info')
       writeFileSync(baseInfoPath, JSON.stringify(info, null, 2))
       return
@@ -872,6 +875,7 @@ export class AgentService {
       chrome: assignment.chrome !== false,
       prompt: assignment.prompt,
       workingDirectory: projectPath,
+      isBaseBranchAgent: (assignment as any).isBaseBranchAgent || false,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString()
     }
