@@ -114,7 +114,6 @@ const setupStandardFileMocks = (agentInfoOverrides: Record<string, unknown> = {}
 
   mockExistsSync.mockImplementation((path: unknown) => {
     const pathStr = String(path)
-    if (pathStr.endsWith('.git')) return true
     if (pathStr.includes('.agent-info')) return true
     if (pathStr.includes('config.json')) return true
     return false
@@ -646,7 +645,6 @@ describe('AgentService - detectExistingPullRequest', () => {
 
       mockExistsSync.mockImplementation((path: unknown) => {
         const pathStr = String(path)
-        if (pathStr.endsWith('.git')) return true
         if (pathStr.includes('config.json')) return true
         if (pathStr.includes('.agent-info')) {
           // First check (for reading) returns true, subsequent checks (for writing) return false

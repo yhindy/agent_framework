@@ -317,9 +317,7 @@ After running E2E tests:
 
 ---
 
-## Git Worktree Issues (Git Projects Only)
-
-> These issues only apply to git-based projects that use worktree isolation. Non-git projects do not create worktrees.
+## Git Worktree Issues
 
 ### Worktree Creation Fails
 

@@ -170,9 +170,7 @@ export function ArchivePage(): JSX.Element {
               <div className="archive-item-main">
                 <div className="archive-item-header">
                   <span className="archive-item-project">{archive.projectName}</span>
-                  {archive.branch && (
-                    <span className="archive-item-branch">{archive.branch}</span>
-                  )}
+                  <span className="archive-item-branch">{archive.branch}</span>
                   <span
                     className="archive-status-badge"
                     style={{ color: getStatusColor(archive.finalStatus) }}

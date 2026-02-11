@@ -80,10 +80,9 @@ branch refs/heads/main
     vi.clearAllMocks()
     agentService = new AgentService()
 
-    // Default mock for getProjectConfig (must include .git for git-based tests)
+    // Default mock for getProjectConfig
     vi.mocked(fs.existsSync).mockImplementation((path: any) => {
       if (path === `${projectPath}/minions/config.json`) return true
-      if (path === `${projectPath}/.git`) return true
       if (path === `${worktreePath}/.agent-info`) return true
       if (path === `${worktreePath}/.minions-base-info`) return false
       if (path === `${projectPath}/.minions-base-info`) return false

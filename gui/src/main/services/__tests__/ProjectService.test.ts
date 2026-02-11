@@ -381,112 +381,13 @@ describe('ProjectService Project Format Detection', () => {
       expect(project.needsInstall).toBe(false)
     })
 
-    it('sets needsInstall to true when neither config exists (git repo)', async () => {
+    it('sets needsInstall to true when neither config exists', async () => {
       mockMinionsConfigService.hasConfig.mockReturnValue(false)
       mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
-      // Default existsSync returns true for all paths, including .git
 
       const project = await projectService.addProject('/path/to/project')
 
       expect(project.needsInstall).toBe(true)
-    })
-
-    it('auto-sets up non-git projects that need install', async () => {
-      mockMinionsConfigService.hasConfig.mockReturnValue(false)
-      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
-      mockMinionsConfigService.getDefaultConfig.mockReturnValue({
-        version: '2.0',
-        project: { name: 'project' },
-        setup: { filesToCopy: [], postSetupCommands: [] }
-      })
-
-      // .git does NOT exist (non-git project), but the project path itself does
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (typeof path === 'string' && path.endsWith('.git')) return false
-        return true
-      })
-
-      const project = await projectService.addProject('/path/to/project')
-
-      // Should auto-setup: create config and mark needsInstall as false
-      expect(project.needsInstall).toBe(false)
-      expect(project.isGitRepo).toBe(false)
-      expect(mockMinionsConfigService.getDefaultConfig).toHaveBeenCalledWith('/path/to/project')
-      expect(mockMinionsConfigService.initializeMinionsFolder).toHaveBeenCalledWith('/path/to/project')
-      expect(mockMinionsConfigService.writeConfig).toHaveBeenCalledWith('/path/to/project', expect.objectContaining({
-        version: '2.0',
-        project: { name: 'project' }
-      }))
-    })
-
-    it('handles auto-setup failure gracefully for non-git projects', async () => {
-      mockMinionsConfigService.hasConfig.mockReturnValue(false)
-      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
-      mockMinionsConfigService.getDefaultConfig.mockImplementation(() => {
-        throw new Error('Config generation failed')
-      })
-
-      // Non-git project
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (typeof path === 'string' && path.endsWith('.git')) return false
-        return true
-      })
-
-      const project = await projectService.addProject('/path/to/project')
-
-      // Should still return the project, but with needsInstall: true
-      expect(project.needsInstall).toBe(true)
-      expect(project.isGitRepo).toBe(false)
-    })
-  })
-
-  describe('addProject updates existing projects', () => {
-    it('updates stored state when re-adding an existing project', async () => {
-      mockMinionsConfigService.hasConfig.mockReturnValue(false)
-      mockMinionsConfigService.hasLegacyConfig.mockReturnValue(false)
-
-      // First add: needsInstall = true (git repo, no config)
-      const project1 = await projectService.addProject('/path/to/project')
-      expect(project1.needsInstall).toBe(true)
-
-      // Simulate config being created externally
-      mockMinionsConfigService.hasConfig.mockReturnValue(true)
-
-      // Second add: should update the stored state
-      const project2 = await projectService.addProject('/path/to/project')
-      expect(project2.needsInstall).toBe(false)
-
-      // Verify the store was updated (not just the returned object)
-      const active = projectService.getActiveProjects()
-      expect(active).toHaveLength(1)
-      expect(active[0].needsInstall).toBe(false)
-    })
-  })
-
-  describe('validateActiveProjects rechecks needsInstall', () => {
-    it('clears needsInstall when config now exists on startup', () => {
-      // Pre-populate store with a project that was stored as needsInstall: true
-      const localState: any = {
-        activeProjects: [
-          { path: '/path/to/project', name: 'project', lastOpened: '2024-01-01', needsInstall: true, isGitRepo: true }
-        ]
-      }
-
-      mockStore.get.mockImplementation((key: string, defaultValue: any) => localState[key] ?? defaultValue)
-      mockStore.set.mockImplementation((key: string, value: any) => { localState[key] = value })
-
-      // Project path exists
-      vi.mocked(fs.existsSync).mockReturnValue(true)
-
-      // Config now exists
-      mockMinionsConfigService.hasConfig.mockReturnValue(true)
-
-      // Re-initialize service (triggers validateActiveProjects)
-      projectService = new ProjectService()
-
-      const active = projectService.getActiveProjects()
-      expect(active).toHaveLength(1)
-      expect(active[0].needsInstall).toBe(false)
     })
   })
 

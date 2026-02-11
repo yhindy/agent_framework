@@ -39,14 +39,13 @@ When cleaning up PTY/terminal resources:
 
 ## Project Overview
 
-**Minion Framework** is a general-purpose agent CLI orchestrator for running multiple AI coding agents in parallel on any folder. For git repositories, agents are isolated via git worktrees; non-git projects are also fully supported with agents working directly in the project directory.
+**Minion Framework** is a system for running multiple AI coding agents in parallel on any codebase using git worktree isolation.
 
 ### Core Features
 - **GUI**: Electron desktop app for managing agents visually
 - **Multi-tool support**: Claude Code, Cursor CLI, Codex CLI
-- **Git worktree isolation**: Parallel work without conflicts (git projects)
-- **Non-git project support**: Run agents on any folder without requiring git
-- **Handoff Protocol**: Agents can hand off work to orchestrator or other agents (git projects only)
+- **Git worktree isolation**: Parallel work without conflicts
+- **Handoff Protocol**: Agents can hand off work to orchestrator or other agents
 
 ## Tech Stack
 
@@ -59,8 +58,7 @@ When cleaning up PTY/terminal resources:
 | Language | TypeScript (strict mode) |
 
 ### Runtime Requirements
-- Node.js 20.x, npm
-- Git (required for worktree-based isolation; optional for non-git projects)
+- Node.js 20.x, npm, Git
 - At least one: Claude Code (`claude`), Cursor CLI (`cursor-cli`), or Codex CLI (`codex`)
 
 ### Agent Tool Setup
@@ -137,7 +135,7 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 
 | Service | Purpose |
 |---------|---------|
-| `AgentService` | Agent lifecycle, worktrees (git) or direct (non-git), PRs, archiving, handoff |
+| `AgentService` | Agent lifecycle, worktrees, PRs, archiving, handoff |
 | `TerminalService` | PTY management, tmux integration |
 | `ProjectService` | Multi-project workspace management |
 | `ClaudeSessionInfoService` | Parse Claude JSONL for state |
@@ -151,7 +149,7 @@ cd gui && npm run rebuild     # Rebuild native modules (node-pty)
 | `SkillsLibraryService` | Scan commands/agents directories |
 | `UnifiedSkillsService` | Combine all skill sources |
 | `NotificationService` | System notifications |
-| `PRPollingService` | GitHub PR status polling (git projects only) |
+| `PRPollingService` | GitHub PR status polling |
 | `SettingsService` | App settings persistence |
 | `TestEnvService` | Test environment terminals |
 | `FileWatcherService` | File change monitoring |
@@ -199,7 +197,7 @@ describe('ServiceName', () => {
 ### Electron Process Model
 ```
 Main Process (Node.js)
-    ├── AgentService        # Agent lifecycle, worktrees (git) / direct (non-git), PRs
+    ├── AgentService        # Agent lifecycle, worktrees, PRs
     ├── TerminalService     # PTY management, Claude sessions
     ├── ProjectService      # Multi-project workspace management
     ├── ClaudeSessionInfoService  # Parse Claude JSONL files
@@ -225,17 +223,7 @@ Renderer Process (React)
 
 ### Configuration Management
 
-The framework supports two configuration formats:
-
-| Format | Config File | Agent State | Detection |
-|--------|------------|-------------|-----------|
-| **New (v2.0)** | `minions.json` | `.minions/agents/*.json` | Preferred |
-| **Legacy (v1)** | `minions/config.json` | `.agent-info` | Fallback |
-
-**MinionsConfigService** handles reading/writing configuration with automatic format detection:
-- Checks `minions.json` first, falls back to `minions/config.json`
-- Provides migration utilities for legacy projects
-- `defaultBaseBranch` is optional in `MinionsConfig.project` (omitted for non-git projects)
+**MinionsConfigService** handles reading/writing `minions/config.json`.
 
 **SetupWizardService** manages the one-click setup experience:
 - Detects if a project needs setup
@@ -243,41 +231,13 @@ The framework supports two configuration formats:
 - Optionally generates a project-specific CLAUDE.md
 
 ### Agent Lifecycle
-
-**Git projects:**
-1. **Create Assignment** - User provides prompt, tool, model, branch name
-2. **Setup Worktree** - `setup.sh` creates git worktree for isolation
+1. **Create Assignment** - User provides prompt, tool, model
+2. **Setup Worktree** - `setup.sh` creates git worktree
 3. **Start Agent** - TerminalService spawns PTY with tool
 4. **Monitor** - JSONL parsing for state (Claude), pattern matching (others)
 5. **Teardown** - Clean up worktree when done
 
-**Non-git projects:**
-1. **Create Assignment** - User provides prompt, tool, model, label (no branch)
-2. **Create Agent State** - Agent JSON written to `.minions/agents/`; no worktree or branch is created
-3. **Start Agent** - TerminalService spawns PTY with tool in the project directory (`workingDirectory`)
-4. **Monitor** - Same as git projects
-5. **Teardown** - Archive agent and remove state file (no git cleanup needed)
-
-The `ProjectState.isGitRepo` flag (detected at project-add time) controls which path is used. `AgentInfo.branch` is optional (absent for non-git agents), and `AgentInfo.workingDirectory` stores the working directory for non-git agents.
-
-### Git Feature Gating
-
-Several features are only available for git projects and are gated behind the `isGitRepo` check:
-
-| Feature | Git Projects | Non-Git Projects |
-|---------|-------------|-----------------|
-| Agent creation | Worktree-based isolation | Direct, agents share project directory |
-| Branch assignment | Required (`AgentInfo.branch`) | Not used (label-only via `feature` field) |
-| PR creation | Supported | Not available |
-| Handoff (`/api/handoff`) | Supported | Not available |
-| Spawn super (`/api/spawn-super`) | Supported | Not available |
-| PR polling | Supported | Not available |
-| Base branch agent | Created automatically | Not created |
-| Agent teardown | Runs `teardown.sh`, removes worktree | Archives agent, removes state file |
-
-The UI adapts to these differences: non-git projects show a label input instead of a branch input when creating agents, and PR-related buttons are hidden.
-
-### Branch Modes (Git Projects Only)
+### Terminal Modes
 
 | Mode | Description |
 |------|-------------|
@@ -303,9 +263,9 @@ Parent work description: {parentPrompt}
 
 This helps the new agent understand the broader context of the work.
 
-**Handoff API Service (Git Projects Only):**
+**Handoff API Service:**
 
-The `HandoffApiService` provides a local HTTP server for programmatic agent creation. Handoff and spawn-super endpoints require a git project (`isGitRepo: true`) since they rely on git worktrees and branches:
+The `HandoffApiService` provides a local HTTP server for programmatic agent creation:
 
 - **Port**: `19234` (localhost only, bound to `127.0.0.1`)
 - **Endpoints**:
@@ -362,9 +322,9 @@ Handoff behavior can be configured in Settings under "Agent Handoff":
 - `AgentService.handoffAgent()` - Core handoff logic
 - `AgentService.spawnSuperMinion()` - Core super minion spawning logic
 
-### Super Minion Spawning (Git Projects Only)
+### Super Minion Spawning
 
-Super minion spawning allows batch creation of workflow-driven agents from an existing agent. Unlike handoff (which continues related work with inherited context), super minions start fresh from main and follow structured workflows. This feature requires a git project since it relies on git worktrees.
+Super minion spawning allows batch creation of workflow-driven agents from an existing agent. Unlike handoff (which continues related work with inherited context), super minions start fresh from main and follow structured workflows.
 
 **How to Trigger:**
 
@@ -625,18 +585,16 @@ CI uses intelligent test selection - only runs tests related to changed files.
 | File | Purpose |
 |------|---------|
 | `gui/src/main/index.ts` | Electron entry point, IPC handlers |
-| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees (git) / direct (non-git), PRs, archiving, handoff |
+| `gui/src/main/services/AgentService.ts` | Agent CRUD, worktrees, PRs, archiving, handoff |
 | `gui/src/main/services/__tests__/AgentService.archive.test.ts` | Archive functionality tests |
 | `gui/src/main/services/__tests__/AgentService.handoff.test.ts` | Handoff functionality tests |
-| `gui/src/main/services/__tests__/AgentService.nonGit.test.ts` | Non-git project agent lifecycle tests |
 | `gui/src/main/services/HandoffApiService.ts` | HTTP server for /handoff and /spawn-super APIs (localhost:19234) |
 | `gui/src/main/services/__tests__/HandoffApiService.test.ts` | Handoff API service tests |
 | `gui/resources/minions/rules/super-handoff.md` | Super handoff skill definition for spawning super minions |
 | `gui/src/main/services/TerminalService.ts` | PTY management, tmux integration, cleanup safety patterns |
 | `gui/src/main/services/__tests__/TerminalService.tmux.test.ts` | Tmux integration tests |
 | `gui/src/main/services/__tests__/TerminalService.handoff.test.ts` | Handoff signal detection tests |
-| `gui/src/main/services/__tests__/TerminalService.nongit.test.ts` | Non-git terminal/worktree path tests |
-| `gui/src/main/services/MinionsConfigService.ts` | Read/write minions.json, migration |
+| `gui/src/main/services/MinionsConfigService.ts` | Read/write minions config |
 | `gui/src/main/services/SetupWizardService.ts` | One-click setup wizard agent |
 | `gui/src/main/services/ClaudeConfigService.ts` | Import plugins from ~/.claude/ as workflow agents |
 | `gui/src/main/services/SkillsLibraryService.ts` | Scan global and project-local commands/agents |

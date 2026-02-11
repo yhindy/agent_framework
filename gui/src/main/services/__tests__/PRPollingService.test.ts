@@ -967,67 +967,6 @@ describe('PRPollingService', () => {
     })
   })
 
-  describe('non-git agent skipping', () => {
-    it('should stop polling for agents without a branch', async () => {
-      const assignmentId = 'test-no-branch'
-
-      // Mock getAssignments to return an agent without a branch
-      ;(mockAgentService as any).getAssignments = vi.fn().mockResolvedValue({
-        assignments: [
-          { id: assignmentId, agentId: 'agent-1', status: 'active' }
-          // Note: no branch field
-        ]
-      })
-
-      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
-        status: 'OPEN'
-      })
-
-      await service.startPolling(assignmentId, 'subscriber-1')
-
-      // checkPullRequestStatus should NOT have been called because the agent has no branch
-      expect(mockAgentService.checkPullRequestStatus).not.toHaveBeenCalled()
-    })
-
-    it('should continue polling for agents with a branch', async () => {
-      const assignmentId = 'test-with-branch'
-
-      // Mock getAssignments to return an agent WITH a branch
-      ;(mockAgentService as any).getAssignments = vi.fn().mockResolvedValue({
-        assignments: [
-          { id: assignmentId, agentId: 'agent-1', branch: 'feature/test', status: 'active' }
-        ]
-      })
-
-      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
-        status: 'OPEN'
-      })
-
-      await service.startPolling(assignmentId, 'subscriber-1')
-
-      // checkPullRequestStatus SHOULD have been called because the agent has a branch
-      expect(mockAgentService.checkPullRequestStatus).toHaveBeenCalled()
-    })
-
-    it('should continue polling gracefully when getAssignments fails', async () => {
-      const assignmentId = 'test-assignments-error'
-
-      // Mock getAssignments to throw an error
-      ;(mockAgentService as any).getAssignments = vi.fn().mockRejectedValue(
-        new Error('Failed to read assignments')
-      )
-
-      ;(mockAgentService.checkPullRequestStatus as any).mockResolvedValue({
-        status: 'OPEN'
-      })
-
-      await service.startPolling(assignmentId, 'subscriber-1')
-
-      // Should fall through and continue with normal polling
-      expect(mockAgentService.checkPullRequestStatus).toHaveBeenCalled()
-    })
-  })
-
   describe('REST API fallback', () => {
     it('should fall back to REST API when gh CLI returns a non-rate-limit error', async () => {
       // Verify the REST fallback method exists on the service

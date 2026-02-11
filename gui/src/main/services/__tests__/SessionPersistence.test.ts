@@ -123,9 +123,7 @@ describe('Session Persistence', () => {
         expect.objectContaining({
           claudeSessionId: sessionId,
           claudeSessionActive: true
-        }),
-        agentId,
-        projectPath
+        })
       )
     })
 
@@ -258,9 +256,7 @@ describe('Session Persistence', () => {
           claudeSessionId: expect.any(String),
           claudeSessionActive: true,
           claudeLastSeen: expect.any(String)
-        }),
-        'agent-1',
-        '/path/to/project'
+        })
       )
     })
 
@@ -302,9 +298,7 @@ describe('Session Persistence', () => {
         expect.objectContaining({
           isWaitingForInput: true,
           claudeLastSeen: expect.any(String)
-        }),
-        'agent-1',
-        '/path/to/project'
+        })
       )
     })
 
@@ -331,9 +325,7 @@ describe('Session Persistence', () => {
         expect.objectContaining({
           isWaitingForInput: false,
           claudeLastSeen: expect.any(String)
-        }),
-        'agent-1',
-        '/path/to/project'
+        })
       )
     })
   })
@@ -418,16 +410,12 @@ describe('Session Persistence', () => {
 
       // Session should be cleared - check the last call which should be the inactive update
       const calls = vi.mocked(agentService.updateAgentInfo).mock.calls
-      const lastCall = calls[calls.length - 1]
-      expect(lastCall[0]).toEqual(expect.stringContaining('worktree-agent-1'))
-      expect(lastCall[1]).toEqual(
+      expect(calls[calls.length - 1]).toEqual([
+        expect.stringContaining('worktree-agent-1'),
         expect.objectContaining({
           claudeSessionActive: false
         })
-      )
-      // agentId and projectPath are passed through from the session
-      expect(lastCall[2]).toBe('agent-1')
-      expect(lastCall[3]).toBe('/path/to/worktree')
+      ])
     })
 
     it('handles "Could not resume" error gracefully', async () => {

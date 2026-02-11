@@ -244,20 +244,6 @@ export class PRPollingService {
 
       job.projectPath = projectPath
 
-      // Skip PR polling for non-git agents (agents without a branch).
-      // Non-git projects don't have branches or PRs to poll.
-      try {
-        const { assignments } = await this.agentService.getAssignments(projectPath)
-        const assignment = assignments.find((a: any) => a.id === job.assignmentId)
-        if (assignment && !assignment.branch) {
-          log.debug(`Skipping PR polling for ${job.assignmentId}: agent has no branch (non-git project)`)
-          this.stopPollingJob(job.assignmentId)
-          return
-        }
-      } catch {
-        // If we can't check, continue with normal polling (will fail gracefully later)
-      }
-
       let result = await this.agentService.checkPullRequestStatus(
         projectPath,
         job.assignmentId,
