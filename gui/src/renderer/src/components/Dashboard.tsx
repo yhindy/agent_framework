@@ -14,7 +14,6 @@ import type {
   WorkflowConfig,
   SubagentType
 } from '../../../main/services/types/WorkflowTypes'
-import { isProjectGitRepo } from '../utils/projectUtils'
 import './Dashboard.css'
 
 interface DashboardProps {
@@ -25,7 +24,7 @@ interface DashboardProps {
 interface Assignment {
   id: string
   agentId: string
-  branch?: string
+  branch: string
   feature: string
   status: string
   tool: string
@@ -44,7 +43,7 @@ const LOADING_MESSAGES = [
   'Teaching minion language basics...',
   'Installing safety goggles...',
   'Calibrating evil-o-meter...',
-  'Preparing the workspace...',
+  'Cloning the Git worktree...',
   'Requesting backup from Kevin, Stuart, and Bob...',
   'Polishing the shrinking ray...',
   'Preparing the fart gun...',
@@ -65,7 +64,7 @@ const TELEPORT_MESSAGES = [
   'Beaming session from the cloud...',
   'Establishing quantum link...',
   'Downloading minion consciousness...',
-  'Materializing in workspace...',
+  'Materializing in worktree...',
   'Syncing bananas from cloud storage...',
   'Calibrating teleporter coordinates...',
   'Reassembling molecular structure...'
@@ -437,7 +436,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
       }
       setShowTypeSelection(true)
 
-      // Wait a moment for agent setup then refresh
+      // Wait a moment for worktree creation then refresh
       setTimeout(() => {
         loadAssignments()
         onRefresh()  // Refresh parent state too
@@ -655,23 +654,6 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
   }
 
   /**
-   * Determine if the currently selected project (or the only project) is a git repo.
-   */
-  const isSelectedProjectGitRepo = (): boolean => {
-    const projectPath = activeProjects.length === 1
-      ? activeProjects[0].path
-      : formData.projectPath
-    return isProjectGitRepo(activeProjects, projectPath)
-  }
-
-  /**
-   * Check if a specific assignment's project is a git repo.
-   */
-  const isAssignmentProjectGitRepo = (assignment: Assignment): boolean => {
-    return isProjectGitRepo(activeProjects, assignment.projectPath)
-  }
-
-  /**
    * Validate branch name against reserved names.
    * Returns error message if invalid, empty string if valid.
    */
@@ -817,12 +799,10 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                           </div>
                         </div>
                         <div className="card-meta">
-                          {assignment.branch && (
-                            <div className="meta-item">
-                              <span className="meta-label">Branch:</span>
-                              <span className="meta-value">{assignment.branch}</span>
-                            </div>
-                          )}
+                          <div className="meta-item">
+                            <span className="meta-label">Branch:</span>
+                            <span className="meta-value">{assignment.branch}</span>
+                          </div>
                           <div className="meta-item">
                             <span className="meta-label">Tool:</span>
                             <span className="meta-value">{assignment.tool}</span>
@@ -836,7 +816,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                         </div>
 
                         {/* Action buttons for Done column cards */}
-                        {columnKey === 'done' && isAssignmentProjectGitRepo(assignment) && (
+                        {columnKey === 'done' && (
                           <div className="card-actions" onClick={(e) => e.stopPropagation()}>
                             {assignment.status === 'completed' && (
                               <>
@@ -961,49 +941,30 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
                     </div>
                   )}
 
-                  {isSelectedProjectGitRepo() ? (
-                    <div className="form-group">
-                      <label>Branch Short Name</label>
-                      <div className="branch-input-wrapper">
-                        <span className="branch-prefix">feature/</span>
-                        <input
-                          type="text"
-                          value={formData.shortName}
-                          onChange={(e) => {
-                            const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
-                            setFormData({ ...formData, shortName: value })
-                            // Clear error when user starts typing again
-                            if (branchError) setBranchError('')
-                          }}
-                          onBlur={(e) => {
-                            const error = validateBranchName(e.target.value)
-                            setBranchError(error)
-                          }}
-                          placeholder="user-auth"
-                          required
-                          style={{ flex: 1 }}
-                        />
-                      </div>
-                      {branchError && <div className="form-error">{branchError}</div>}
-                    </div>
-                  ) : (
-                    <div className="form-group">
-                      <label>Agent Label</label>
+                  <div className="form-group">
+                    <label>Branch Short Name</label>
+                    <div className="branch-input-wrapper">
+                      <span className="branch-prefix">feature/</span>
                       <input
                         type="text"
                         value={formData.shortName}
                         onChange={(e) => {
                           const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
                           setFormData({ ...formData, shortName: value })
+                          // Clear error when user starts typing again
+                          if (branchError) setBranchError('')
                         }}
-                        placeholder="my-task"
-                        style={{ width: '100%' }}
+                        onBlur={(e) => {
+                          const error = validateBranchName(e.target.value)
+                          setBranchError(error)
+                        }}
+                        placeholder="user-auth"
+                        required
+                        style={{ flex: 1 }}
                       />
-                      <div className="form-hint">
-                        Optional label to identify this agent.
-                      </div>
                     </div>
-                  )}
+                    {branchError && <div className="form-error">{branchError}</div>}
+                  </div>
 
                   {formData.tool !== 'cursor' && (
                     <div className="form-group">
@@ -1220,9 +1181,7 @@ function Dashboard({ activeProjects, onRefresh }: DashboardProps): JSX.Element {
             </p>
             <div className="merge-info">
               <div><strong>Minion:</strong> {selectedAssignmentForPR.agentId}</div>
-              {selectedAssignmentForPR.branch && (
-                <div><strong>Branch:</strong> {selectedAssignmentForPR.branch}</div>
-              )}
+              <div><strong>Branch:</strong> {selectedAssignmentForPR.branch}</div>
               <div><strong>Feature:</strong> {selectedAssignmentForPR.feature}</div>
             </div>
             <div className="form-group checkbox-group" style={{ marginTop: '16px' }}>

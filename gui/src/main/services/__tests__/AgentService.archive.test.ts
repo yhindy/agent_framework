@@ -89,10 +89,9 @@ branch refs/heads/main
     vi.clearAllMocks()
     agentService = new AgentService()
 
-    // Default mock for getProjectConfig (must include .git for git-based tests)
+    // Default mock for getProjectConfig
     vi.mocked(fs.existsSync).mockImplementation((path: any) => {
       if (path === `${projectPath}/minions/config.json`) return true
-      if (path === `${projectPath}/.git`) return true
       return false
     })
 
@@ -140,7 +139,6 @@ branch refs/heads/main
       // Setup existsSync to return true for worktree and agent-info
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -195,7 +193,6 @@ branch refs/heads/main
     it('should create archive directory if it does not exist', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -231,7 +228,6 @@ branch refs/heads/main
       // Setup existsSync to make agent not found
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${projectPath}/.minions-base-info`) return false
         // Return false for agent info file
         return false
@@ -281,7 +277,6 @@ branch refs/heads/main
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -331,7 +326,6 @@ branch refs/heads/main
 
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -716,7 +710,6 @@ branch refs/heads/main
     it('should archive agent before teardown (verify archive is called)', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -754,7 +747,6 @@ branch refs/heads/main
     it('should continue teardown even if archive fails', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false
@@ -796,7 +788,6 @@ branch refs/heads/main
     it('should remove agent from sessions map after teardown', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path: any) => {
         if (path === `${projectPath}/minions/config.json`) return true
-        if (path === `${projectPath}/.git`) return true
         if (path === `${worktreePath}/.agent-info`) return true
         if (path === `${worktreePath}/.minions-base-info`) return false
         if (path === `${projectPath}/.minions-base-info`) return false

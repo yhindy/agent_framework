@@ -1,6 +1,6 @@
 import * as http from 'http'
 import { join, dirname } from 'path'
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { createLogger } from './logger'
 import type { AgentService } from './AgentService'
 import type { TerminalService } from './TerminalService'
@@ -274,15 +274,6 @@ export class HandoffApiService {
         return
       }
 
-      // Gate: Handoff requires a git repository for branch-based isolation
-      if (!existsSync(join(projectPath, '.git'))) {
-        this.sendJson(res, 400, {
-          success: false,
-          error: 'Handoff requires a git repository. Non-git projects do not support branch-based handoff.'
-        })
-        return
-      }
-
       // Auto-detect branchMode from plan text if not explicitly provided
       const branchMode = request.branchMode ?? this.detectBranchMode(request.plan)
       log.info(`Handoff branchMode: ${branchMode} (explicit: ${request.branchMode !== undefined})`)
@@ -411,21 +402,6 @@ export class HandoffApiService {
           totalSucceeded: 0,
           totalFailed: request.spawns.length,
           error: `Source agent '${request.sourceAgentId}' not found in any active project`
-        })
-        return
-      }
-
-      // Gate: Super minion spawning requires a git repository for branch-based isolation
-      if (!existsSync(join(projectPath, '.git'))) {
-        this.sendJson(res, 400, {
-          success: false,
-          partialSuccess: false,
-          results: [],
-          batchId,
-          totalRequested: request.spawns.length,
-          totalSucceeded: 0,
-          totalFailed: request.spawns.length,
-          error: 'Super minion spawning requires a git repository.'
         })
         return
       }

@@ -132,13 +132,6 @@ const api = {
     return () => ipcRenderer.removeListener('assignments:updated', subscription)
   },
 
-  // Non-git auto-agent created event
-  onNonGitAutoAgent: (callback: (agentId: string) => void) => {
-    const subscription = (_event: any, agentId: string) => callback(agentId)
-    ipcRenderer.on('agents:nonGitAutoCreated', subscription)
-    return () => ipcRenderer.removeListener('agents:nonGitAutoCreated', subscription)
-  },
-
   // Agent State APIs
   getAgentState: (agentId: string) => ipcRenderer.invoke('agent:getState', agentId),
 

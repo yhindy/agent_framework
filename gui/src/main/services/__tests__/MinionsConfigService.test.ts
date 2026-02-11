@@ -469,10 +469,6 @@ describe('MinionsConfigService', () => {
     })
 
     it('should detect default git branch as main', () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (typeof path === 'string' && path.endsWith('.git')) return true
-        return false
-      })
       vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from('main\n'))
 
       const result = service.getDefaultConfig('/path/to/project')
@@ -481,10 +477,6 @@ describe('MinionsConfigService', () => {
     })
 
     it('should detect default git branch as master', () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (typeof path === 'string' && path.endsWith('.git')) return true
-        return false
-      })
       vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from('master\n'))
 
       const result = service.getDefaultConfig('/path/to/project')
@@ -493,10 +485,6 @@ describe('MinionsConfigService', () => {
     })
 
     it('should fallback to main when git command fails', () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (typeof path === 'string' && path.endsWith('.git')) return true
-        return false
-      })
       vi.mocked(childProcess.execSync).mockImplementation(() => {
         throw new Error('Not a git repository')
       })
@@ -601,11 +589,7 @@ describe('MinionsConfigService', () => {
     })
 
     it('should create .gitignore if it does not exist', () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        // .git directory must exist for updateGitignore to proceed
-        if (typeof path === 'string' && path.endsWith('.git')) return true
-        return false
-      })
+      vi.mocked(fs.existsSync).mockReturnValue(false)
 
       service.updateGitignore('/path/to/project')
 

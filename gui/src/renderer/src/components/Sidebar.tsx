@@ -172,7 +172,7 @@ function Sidebar({ activeProjects, onNavigate, onProjectRemove, onProjectAdd, is
         loadingSnackbarRef.current = showLoading({
           title: 'Loading Projects',
           messages: [
-            'Scanning projects...',
+            'Scanning worktrees...',
             'Reading agent info...',
             'Checking session states...'
           ],

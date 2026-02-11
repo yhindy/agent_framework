@@ -739,9 +739,9 @@ describe('AgentService Reserved Branch Name Validation', () => {
     })
 
     beforeEach(() => {
-      // Mock config file and .git directory exist (git repo with minions.json)
+      // Mock config file exists
       vi.mocked(fs.existsSync).mockImplementation((path) => {
-        return path === join(projectPath, 'minions.json') || path === join(projectPath, '.git')
+        return path === join(projectPath, 'minions.json')
       })
       vi.mocked(fs.readFileSync).mockReturnValue(configContent)
     })

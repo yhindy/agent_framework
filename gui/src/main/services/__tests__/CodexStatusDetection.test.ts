@@ -472,9 +472,7 @@ describe('Codex Status Detection', () => {
         expect.any(String),
         expect.objectContaining({
           isWaitingForInput: true
-        }),
-        'agent-1',
-        '/path/to/project'
+        })
       )
     })
 
