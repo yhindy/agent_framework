@@ -6,7 +6,8 @@
   "private": true,
   "workspaces": [
     "gui",
-    "minions"
+    "minions",
+    "headless"
   ],
   "directories": {
     "doc": "docs"
@@ -24,7 +25,11 @@
     "gui:test": "npm run test -w gui",
     "gui:test:changed": "NODE_OPTIONS='--max-old-space-size=2048' npm run test:changed -w gui",
     "gui:test:e2e": "npm run test:e2e -w gui",
-    "minions:test": "npm run test -w minions"
+    "minions:test": "npm run test -w minions",
+    "headless:build": "npm run build -w headless",
+    "headless:start": "npm run start -w headless",
+    "headless:test": "npm run test -w headless",
+    "headless:dev": "npm run dev -w headless"
   },
   "repository": {
     "type": "git",
